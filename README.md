@@ -47,7 +47,7 @@ CureMenu, Türkiye'de milyonlarca insanın mücadele ettiği diyabet, çölyak, 
   - **Multi-Agent Yapay Zeka Mimarisi:** Sistemin kural tabanlı yapıdan çıkıp, LLM tabanlı "Beslenme Uzmanı" ajanlarına devredilmesi. Sprint 1'de yazılan kurallar, bu ajanlar için katı güvenlik sınırları olarak çalışacaktır. Bu sayede hem yapay zekanın esnekliğini kullanırken hem de sağlık verilerinin güvenliğini garanti altına alacağız.
   - **Geçmiş Hafıza ve Geri Bildirim Sistemi (Memory):** Uygulamanın kullanıcının yediği yemekleri hafızasında tutması ve "Bu yemek bana iyi geldi" veya "Bunu yiyince rahatsız oldum" gibi geri bildirimler alarak gelecekteki menü önerilerini sürekli olarak optimize etmesi. Bu sayede uygulama, her kullanıcı için zamanla daha akıllı ve kişisel hale gelecektir.
   - **Lokasyon Bazlı Restoran Önerisi (Top 10):** Google Maps entegrasyonu eklenerek kullanıcının bulunduğu konuma yakın, hastalığına uygun restoranların gösterilmesi. Sadece menü uygunluğuna değil, mekanın **Google Yıldız Puanlarına (örn: 4.5 ve üzeri)** bakılarak en kaliteli ve en güvenilir Top 10 restoranın filtrelenmesi.
-  - **Kamera ile Menü Tarama (OCR):** Dışarıdaki bir restoranda menünün fotoğrafı çekildiğinde, menüyü yapay zekaya okutarak o restoranda "Ne yemeliyim?" sorusuna anında yanıt veren özelliğin kodlanması.
+  - **Sağlık & Bütçe Optimizasyon Ajanı:** "Sağlıklı beslenmek pahalıdır" algısını kırmak için, kullanıcının günlük alması gereken besinleri internetteki güncel fiyatlarla tarayıp, bütçesine en uygun ve en sağlıklı alternatifleri önüne çıkaran ekonomik AI asistanı.
 
 ### Gelecek Vizyonu (Sprint 3 ve Sonrası)
 
@@ -55,7 +55,7 @@ Projenin tamamen olgunlaştığında ulaşacağı vizyoner hedefler:
 
 - **Giyilebilir Teknoloji (Wearable) Entegrasyonu:** Akıllı saatlerden veya Sürekli Glikoz Ölçüm (CGM) cihazlarından anlık sağlık verisi alarak proaktif yemek tavsiyeleri sunma ("Şu an şekerin düşüş eğiliminde, hemen şu sağlıklı atıştırmalığı tüketmelisin").
 - **Doktor / Diyetisyen Raporlama Modülü:** Hafızada tutulan yemek geçmişinin ve "Nasıl hissettirdi?" geri bildirimlerinin haftalık/aylık olarak analiz edilip, kullanıcının doktoruna veya diyetisyenine detaylı bir tıbbi ilerleme raporu (PDF) olarak sunulması.
-- **Sağlık & Bütçe Optimizasyon Ajanı:** "Sağlıklı beslenmek pahalıdır" algısını kırmak için, kullanıcının günlük alması gereken besinleri (şeker, protein vb.) internetteki güncel fiyatlarla tarayıp, bütçesine en uygun ve en sağlıklı alternatifleri önüne çıkaran ekonomik AI asistanı.
+- **Kamera ile Menü Tarama (OCR):** Dışarıdaki bir restoranda menünün fotoğrafı çekildiğinde, Gemini Vision modeli ile menüyü yapay zekaya okutarak, profil kısıtlamalarına göre o restoranda "Ne yemeliyim?" sorusuna anında yanıt veren özelliğin kodlanması.
 
 ---
 
