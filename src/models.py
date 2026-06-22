@@ -1,4 +1,4 @@
-# Veri Modelleri - buraya birlikte yazacağız
+# Veri Modelleri
 from pydantic import BaseModel, Field   
 from enum import Enum   
 from typing import Optional, List, Dict    
