@@ -1,0 +1,802 @@
+[
+  {
+    "id": "mercimek_corbasi",
+    "ad": "Mercimek Çorbası",
+    "kategori": "corba",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 150,
+      "karbonhidrat": 20,
+      "protein": 8,
+      "sodyum": 300,
+      "lif": 5,
+      "doymus_yag": 1.5,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "ezogelin_corbasi",
+    "ad": "Ezogelin Çorbası",
+    "kategori": "corba",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 170,
+      "karbonhidrat": 25,
+      "protein": 6,
+      "sodyum": 350,
+      "lif": 4,
+      "doymus_yag": 2.0,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "tarhana_corbasi",
+    "ad": "Tarhana Çorbası",
+    "kategori": "corba",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 160,
+      "karbonhidrat": 22,
+      "protein": 5,
+      "sodyum": 400,
+      "lif": 2,
+      "doymus_yag": 1.8,
+      "kolesterol": 5
+    }
+  },
+  {
+    "id": "yayla_corbasi",
+    "ad": "Yayla Çorbası",
+    "kategori": "corba",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 140,
+      "karbonhidrat": 15,
+      "protein": 4,
+      "sodyum": 250,
+      "lif": 1,
+      "doymus_yag": 3.0,
+      "kolesterol": 10
+    }
+  },
+  {
+    "id": "domates_corbasi",
+    "ad": "Domates Çorbası",
+    "kategori": "corba",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 120,
+      "karbonhidrat": 12,
+      "protein": 2,
+      "sodyum": 300,
+      "lif": 2,
+      "doymus_yag": 2.5,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "iskender_kebap",
+    "ad": "İskender Kebap",
+    "kategori": "et_yemekleri",
+    "glisemik_indeks": "yuksek",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 850,
+      "karbonhidrat": 60,
+      "protein": 45,
+      "sodyum": 950,
+      "lif": 3,
+      "doymus_yag": 25.0,
+      "kolesterol": 120
+    }
+  },
+  {
+    "id": "adana_kebap",
+    "ad": "Adana Kebap",
+    "kategori": "et_yemekleri",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 650,
+      "karbonhidrat": 10,
+      "protein": 40,
+      "sodyum": 800,
+      "lif": 2,
+      "doymus_yag": 20.0,
+      "kolesterol": 110
+    }
+  },
+  {
+    "id": "izgara_kofte",
+    "ad": "Izgara Köfte",
+    "kategori": "et_yemekleri",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 400,
+      "karbonhidrat": 15,
+      "protein": 25,
+      "sodyum": 500,
+      "lif": 1,
+      "doymus_yag": 12.0,
+      "kolesterol": 80
+    }
+  },
+  {
+    "id": "et_sote",
+    "ad": "Et Sote",
+    "kategori": "et_yemekleri",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 350,
+      "karbonhidrat": 8,
+      "protein": 30,
+      "sodyum": 400,
+      "lif": 2,
+      "doymus_yag": 8.0,
+      "kolesterol": 75
+    }
+  },
+  {
+    "id": "tavuk_sis",
+    "ad": "Tavuk Şiş",
+    "kategori": "et_yemekleri",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 250,
+      "karbonhidrat": 5,
+      "protein": 35,
+      "sodyum": 350,
+      "lif": 1,
+      "doymus_yag": 4.0,
+      "kolesterol": 85
+    }
+  },
+  {
+    "id": "karniyarik",
+    "ad": "Karnıyarık",
+    "kategori": "et_yemekleri",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 320,
+      "karbonhidrat": 12,
+      "protein": 15,
+      "sodyum": 450,
+      "lif": 4,
+      "doymus_yag": 15.0,
+      "kolesterol": 45
+    }
+  },
+  {
+    "id": "hunkar_begendi",
+    "ad": "Hünkar Beğendi",
+    "kategori": "et_yemekleri",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 480,
+      "karbonhidrat": 20,
+      "protein": 25,
+      "sodyum": 600,
+      "lif": 3,
+      "doymus_yag": 18.0,
+      "kolesterol": 90
+    }
+  },
+  {
+    "id": "tas_kebabi",
+    "ad": "Tas Kebabı",
+    "kategori": "et_yemekleri",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 420,
+      "karbonhidrat": 18,
+      "protein": 30,
+      "sodyum": 480,
+      "lif": 3,
+      "doymus_yag": 10.0,
+      "kolesterol": 65
+    }
+  },
+  {
+    "id": "sulu_kofte",
+    "ad": "Sulu Köfte",
+    "kategori": "et_yemekleri",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 310,
+      "karbonhidrat": 25,
+      "protein": 18,
+      "sodyum": 450,
+      "lif": 3,
+      "doymus_yag": 10.0,
+      "kolesterol": 50
+    }
+  },
+  {
+    "id": "firinda_tavuk",
+    "ad": "Fırında Tavuk Patates",
+    "kategori": "et_yemekleri",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 390,
+      "karbonhidrat": 30,
+      "protein": 28,
+      "sodyum": 400,
+      "lif": 4,
+      "doymus_yag": 9.0,
+      "kolesterol": 70
+    }
+  },
+  {
+    "id": "zeytinyagli_enginar",
+    "ad": "Zeytinyağlı Enginar",
+    "kategori": "sebze_yemekleri",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 120,
+      "karbonhidrat": 15,
+      "protein": 3,
+      "sodyum": 100,
+      "lif": 6,
+      "doymus_yag": 0.5,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "taze_fasulye",
+    "ad": "Zeytinyağlı Taze Fasulye",
+    "kategori": "sebze_yemekleri",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 110,
+      "karbonhidrat": 10,
+      "protein": 3,
+      "sodyum": 150,
+      "lif": 4,
+      "doymus_yag": 1.0,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "bamya",
+    "ad": "Zeytinyağlı Bamya",
+    "kategori": "sebze_yemekleri",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 95,
+      "karbonhidrat": 12,
+      "protein": 2,
+      "sodyum": 120,
+      "lif": 3,
+      "doymus_yag": 0.5,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "ispanak_yemegi",
+    "ad": "Kıymalı Ispanak Yemeği",
+    "kategori": "sebze_yemekleri",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 210,
+      "karbonhidrat": 8,
+      "protein": 12,
+      "sodyum": 280,
+      "lif": 4,
+      "doymus_yag": 7.0,
+      "kolesterol": 30
+    }
+  },
+  {
+    "id": "kabak_yemegi",
+    "ad": "Zeytinyağlı Kabak Yemeği",
+    "kategori": "sebze_yemekleri",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 85,
+      "karbonhidrat": 10,
+      "protein": 2,
+      "sodyum": 100,
+      "lif": 3,
+      "doymus_yag": 0.5,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "pirasa",
+    "ad": "Zeytinyağlı Pırasa",
+    "kategori": "sebze_yemekleri",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 130,
+      "karbonhidrat": 18,
+      "protein": 2,
+      "sodyum": 150,
+      "lif": 4,
+      "doymus_yag": 1.0,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "biber_dolmasi",
+    "ad": "Zeytinyağlı Biber Dolması",
+    "kategori": "sebze_yemekleri",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 210,
+      "karbonhidrat": 35,
+      "protein": 4,
+      "sodyum": 200,
+      "lif": 3,
+      "doymus_yag": 1.5,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "turlu",
+    "ad": "Etli Türlü",
+    "kategori": "sebze_yemekleri",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 260,
+      "karbonhidrat": 20,
+      "protein": 15,
+      "sodyum": 350,
+      "lif": 5,
+      "doymus_yag": 8.0,
+      "kolesterol": 40
+    }
+  },
+  {
+    "id": "firin_patates",
+    "ad": "Fırın Patates",
+    "kategori": "sebze_yemekleri",
+    "glisemik_indeks": "yuksek",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 180,
+      "karbonhidrat": 35,
+      "protein": 3,
+      "sodyum": 250,
+      "lif": 4,
+      "doymus_yag": 1.0,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "menemen",
+    "ad": "Menemen",
+    "kategori": "sebze_yemekleri",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 220,
+      "karbonhidrat": 10,
+      "protein": 12,
+      "sodyum": 350,
+      "lif": 2,
+      "doymus_yag": 4.0,
+      "kolesterol": 210
+    }
+  },
+  {
+    "id": "kuru_fasulye",
+    "ad": "Etli Kuru Fasulye",
+    "kategori": "baklagil",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 340,
+      "karbonhidrat": 35,
+      "protein": 18,
+      "sodyum": 400,
+      "lif": 10,
+      "doymus_yag": 6.0,
+      "kolesterol": 30
+    }
+  },
+  {
+    "id": "nohut_yemegi",
+    "ad": "Etli Nohut Yemeği",
+    "kategori": "baklagil",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 350,
+      "karbonhidrat": 40,
+      "protein": 16,
+      "sodyum": 380,
+      "lif": 9,
+      "doymus_yag": 5.5,
+      "kolesterol": 30
+    }
+  },
+  {
+    "id": "yesil_mercimek",
+    "ad": "Yeşil Mercimek Yemeği",
+    "kategori": "baklagil",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 280,
+      "karbonhidrat": 35,
+      "protein": 14,
+      "sodyum": 250,
+      "lif": 12,
+      "doymus_yag": 2.0,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "yaprak_sarma",
+    "ad": "Zeytinyağlı Yaprak Sarma",
+    "kategori": "baklagil",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 240,
+      "karbonhidrat": 35,
+      "protein": 4,
+      "sodyum": 350,
+      "lif": 3,
+      "doymus_yag": 1.5,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "mercimek_koftesi",
+    "ad": "Mercimek Köftesi",
+    "kategori": "baklagil",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 290,
+      "karbonhidrat": 45,
+      "protein": 10,
+      "sodyum": 400,
+      "lif": 7,
+      "doymus_yag": 1.0,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "pirinc_pilavi",
+    "ad": "Tereyağlı Pirinç Pilavı",
+    "kategori": "pilav_makarna",
+    "glisemik_indeks": "yuksek",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 350,
+      "karbonhidrat": 55,
+      "protein": 4,
+      "sodyum": 350,
+      "lif": 1,
+      "doymus_yag": 8.0,
+      "kolesterol": 20
+    }
+  },
+  {
+    "id": "bulgur_pilavi",
+    "ad": "Domatesli Bulgur Pilavı",
+    "kategori": "pilav_makarna",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 280,
+      "karbonhidrat": 45,
+      "protein": 6,
+      "sodyum": 250,
+      "lif": 6,
+      "doymus_yag": 3.0,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "manti",
+    "ad": "Kayseri Mantısı",
+    "kategori": "pilav_makarna",
+    "glisemik_indeks": "yuksek",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 420,
+      "karbonhidrat": 50,
+      "protein": 15,
+      "sodyum": 550,
+      "lif": 2,
+      "doymus_yag": 9.0,
+      "kolesterol": 40
+    }
+  },
+  {
+    "id": "salcali_makarna",
+    "ad": "Salçalı Makarna",
+    "kategori": "pilav_makarna",
+    "glisemik_indeks": "yuksek",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 380,
+      "karbonhidrat": 70,
+      "protein": 10,
+      "sodyum": 400,
+      "lif": 3,
+      "doymus_yag": 2.0,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "firin_makarna",
+    "ad": "Fırın Makarna",
+    "kategori": "pilav_makarna",
+    "glisemik_indeks": "yuksek",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 520,
+      "karbonhidrat": 55,
+      "protein": 18,
+      "sodyum": 650,
+      "lif": 2,
+      "doymus_yag": 14.0,
+      "kolesterol": 55
+    }
+  },
+  {
+    "id": "coban_salata",
+    "ad": "Çoban Salata",
+    "kategori": "salata",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 80,
+      "karbonhidrat": 8,
+      "protein": 2,
+      "sodyum": 150,
+      "lif": 3,
+      "doymus_yag": 0.5,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "mevsim_salata",
+    "ad": "Mevsim Salata",
+    "kategori": "salata",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 60,
+      "karbonhidrat": 6,
+      "protein": 1,
+      "sodyum": 100,
+      "lif": 2,
+      "doymus_yag": 0.2,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "cacik",
+    "ad": "Cacık",
+    "kategori": "meze",
+    "glisemik_indeks": "dusuk",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 90,
+      "karbonhidrat": 6,
+      "protein": 5,
+      "sodyum": 150,
+      "lif": 1,
+      "doymus_yag": 2.5,
+      "kolesterol": 10
+    }
+  },
+  {
+    "id": "kisir",
+    "ad": "Kısır",
+    "kategori": "meze",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 240,
+      "karbonhidrat": 40,
+      "protein": 6,
+      "sodyum": 350,
+      "lif": 5,
+      "doymus_yag": 1.5,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "cig_kofte",
+    "ad": "Etsiz Çiğ Köfte",
+    "kategori": "meze",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 220,
+      "karbonhidrat": 35,
+      "protein": 5,
+      "sodyum": 500,
+      "lif": 4,
+      "doymus_yag": 1.0,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "su_boregi",
+    "ad": "Su Böreği",
+    "kategori": "borek_hamur",
+    "glisemik_indeks": "yuksek",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 420,
+      "karbonhidrat": 45,
+      "protein": 12,
+      "sodyum": 650,
+      "lif": 2,
+      "doymus_yag": 12.0,
+      "kolesterol": 80
+    }
+  },
+  {
+    "id": "lahmacun",
+    "ad": "Lahmacun",
+    "kategori": "borek_hamur",
+    "glisemik_indeks": "yuksek",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 380,
+      "karbonhidrat": 40,
+      "protein": 15,
+      "sodyum": 700,
+      "lif": 3,
+      "doymus_yag": 8.0,
+      "kolesterol": 30
+    }
+  },
+  {
+    "id": "kiymali_pide",
+    "ad": "Kıymalı Pide",
+    "kategori": "borek_hamur",
+    "glisemik_indeks": "yuksek",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 550,
+      "karbonhidrat": 60,
+      "protein": 20,
+      "sodyum": 850,
+      "lif": 3,
+      "doymus_yag": 14.0,
+      "kolesterol": 45
+    }
+  },
+  {
+    "id": "simit",
+    "ad": "Sokak Simidi",
+    "kategori": "borek_hamur",
+    "glisemik_indeks": "yuksek",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 320,
+      "karbonhidrat": 55,
+      "protein": 8,
+      "sodyum": 500,
+      "lif": 2,
+      "doymus_yag": 2.0,
+      "kolesterol": 0
+    }
+  },
+  {
+    "id": "pogaca",
+    "ad": "Peynirli Poğaça",
+    "kategori": "borek_hamur",
+    "glisemik_indeks": "yuksek",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 280,
+      "karbonhidrat": 30,
+      "protein": 6,
+      "sodyum": 400,
+      "lif": 1,
+      "doymus_yag": 10.0,
+      "kolesterol": 20
+    }
+  },
+  {
+    "id": "baklava",
+    "ad": "Fıstıklı Baklava",
+    "kategori": "tatli",
+    "glisemik_indeks": "yuksek",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 520,
+      "karbonhidrat": 65,
+      "protein": 5,
+      "sodyum": 100,
+      "lif": 2,
+      "doymus_yag": 15.0,
+      "kolesterol": 25
+    }
+  },
+  {
+    "id": "sutlac",
+    "ad": "Fırın Sütlaç",
+    "kategori": "tatli",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 280,
+      "karbonhidrat": 45,
+      "protein": 6,
+      "sodyum": 80,
+      "lif": 1,
+      "doymus_yag": 4.0,
+      "kolesterol": 15
+    }
+  },
+  {
+    "id": "gullac",
+    "ad": "Güllaç",
+    "kategori": "tatli",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 250,
+      "karbonhidrat": 40,
+      "protein": 5,
+      "sodyum": 50,
+      "lif": 1,
+      "doymus_yag": 3.0,
+      "kolesterol": 10
+    }
+  },
+  {
+    "id": "kazandibi",
+    "ad": "Kazandibi",
+    "kategori": "tatli",
+    "glisemik_indeks": "orta",
+    "gluten_icerir": false,
+    "besin_degerleri": {
+      "kalori": 310,
+      "karbonhidrat": 50,
+      "protein": 6,
+      "sodyum": 90,
+      "lif": 1,
+      "doymus_yag": 5.0,
+      "kolesterol": 20
+    }
+  },
+  {
+    "id": "kunefe",
+    "ad": "Künefe",
+    "kategori": "tatli",
+    "glisemik_indeks": "yuksek",
+    "gluten_icerir": true,
+    "besin_degerleri": {
+      "kalori": 580,
+      "karbonhidrat": 70,
+      "protein": 8,
+      "sodyum": 300,
+      "lif": 2,
+      "doymus_yag": 18.0,
+      "kolesterol": 40
+    }
+  }
+]
