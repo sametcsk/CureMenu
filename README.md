@@ -19,31 +19,26 @@ CureMenu, Türkiye'de milyonlarca insanın mücadele ettiği diyabet, çölyak, 
 
 ---
 
-## Proje Yönetimi (Bootcamp Süreci)
+## Kurucu & Geliştirici
 
-### Takım Bilgileri
+- **Samet** (Founder & AI Developer)
 
-- **Takım İsmi:** Solo Innovators
-- **Takım Üyeleri ve Rolleri:**
-  - **Samet** (Product Owner, Scrum Master, Developer)
+---
 
-### Sprint 1 Özeti ve Notları
+## Teknolojik Altyapı ve MVP (Mevcut Durum)
 
-**Sprint Hedefi:** Fikrin olgunlaştırılması, uygulamanın teknik mimarisinin (veri modelleri, veritabanı, kural motoru) kurulması ve Minimum Viable Product (MVP) arayüzünün ayağa kaldırılması.
+Projemiz şu an çalışan ve testleri yapılmış bir MVP (Minimum Viable Product) aşamasındadır.
 
-**Sprint İçinde Yapılanlar (Product Increment):**
+- **Veri Modelleri:** Pydantic kullanılarak oluşturulmuş katı tip (strict typing) destekli sağlık profili modelleri.
+- **Kural Motoru ve Kesişim Algoritması:** Hastalıklara özel kısıtlamaları hesaplayan, aile bireylerinin ortak tüketebileceği yemekleri kesiştiren Python tabanlı Tıbbi Karar Motoru. (Bu kurallar yapay zeka entegrasyonunda ajanların yanlış tavsiye vermesini engelleyecek **"Güvenlik Sınırları - Guardrails"** olarak kullanılmaktadır).
+- **Arayüz (Frontend):** Özel CSS ve "Dark Tema" entegrasyonu ile Streamlit üzerinde geliştirilmiş, kullanıcı dostu web uygulaması.
+- **Kapsamlı Veritabanı:** Makro ve mikro besin değerleriyle detaylandırılmış pilot yemek veritabanı.
 
-- Proje dizin yapısı oluşturuldu. Pydantic ile veri modelleri (`models.py`) kodlandı.
-- 50 adet Türk yemeği detaylı besin analizleriyle JSON formatında sisteme entegre edildi.
-- Hastalıklara özel kısıtlamaları hesaplayan kural tabanlı öneri motoru (`recommendation.py`) yazıldı. _(Bu kurallar ileriki aşamalarda Yapay Zeka ajanlarının sağlığa zararlı tavsiyeler vermesini engelleyecek "Güvenlik Sınırları - Guardrails" olarak kullanılacaktır)._
-- Streamlit kullanılarak özel CSS tasarımlı "Profil", "Aile" ve "Öneriler" sayfaları geliştirildi.
-- Aile modu (Kesişim Algoritması) başarıyla çalışır hale getirildi.
+---
 
-**Sprint Retrospective (Değerlendirme):**
+## Geliştirme Yol Haritası (Roadmap)
 
-- _İyi Gidenler:_ Python ve Streamlit entegrasyonunu başarılı bir şekilde kurdum. Aile Modu mantığı (kesişim algoritması) beklediğimden çok daha performanslı çalışıyor ve UI tasarımım oldukça profesyonel görünüyor.
-- _Geliştirilmesi Gerekenler:_ Projeyi tek başıma yürüttüğüm için her rolde kendim yoğun bir efor sarf etmek zorunda kaldım ve dokümantasyonu sprintin sonuna sıkıştırdım. Bir sonraki sprintte günlük (daily) takibi daha düzenli yapmalıyım. Ayrıca site tasarımı (UI/UX) daha da iyileştirilmeli, kullanıcı deneyimini artıracak yeni tasarım ögeleri eklenmelidir.
-- _Sonraki Sprint (Sprint 2) Odakları:_
+Sistemin kural tabanlı mimariden çıkıp, tamamen yapay zeka destekli bir asistan haline gelmesi için planlanan Ar-Ge aşamaları:
   - **Multi-Agent Yapay Zeka Mimarisi:** Sistemin kural tabanlı yapıdan çıkıp, LLM tabanlı "Beslenme Uzmanı" ajanlarına devredilmesi. Sprint 1'de yazılan kurallar, bu ajanlar için katı güvenlik sınırları olarak çalışacaktır. Bu sayede hem yapay zekanın esnekliğini kullanırken hem de sağlık verilerinin güvenliğini garanti altına alacağız.
   - **Geçmiş Hafıza ve Geri Bildirim Sistemi (Memory):** Uygulamanın kullanıcının yediği yemekleri hafızasında tutması ve "Bu yemek bana iyi geldi" veya "Bunu yiyince rahatsız oldum" gibi geri bildirimler alarak gelecekteki menü önerilerini sürekli olarak optimize etmesi. Bu sayede uygulama, her kullanıcı için zamanla daha akıllı ve kişisel hale gelecektir.
   - **Lokasyon Bazlı Restoran Önerisi (Top 10):** Google Maps entegrasyonu eklenerek kullanıcının bulunduğu konuma yakın, hastalığına uygun restoranların gösterilmesi. Sadece menü uygunluğuna değil, mekanın **Google Yıldız Puanlarına (örn: 4.5 ve üzeri)** bakılarak en kaliteli ve en güvenilir Top 10 restoranın filtrelenmesi.
