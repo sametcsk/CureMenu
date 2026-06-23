@@ -44,7 +44,7 @@ Sistemin kural tabanlı mimariden çıkıp, tamamen yapay zeka destekli bir asis
   - **Lokasyon Bazlı Restoran Önerisi (Top 10):** Google Maps entegrasyonu eklenerek kullanıcının bulunduğu konuma yakın, hastalığına uygun restoranların gösterilmesi. Sadece menü uygunluğuna değil, mekanın **Google Yıldız Puanlarına (örn: 4.5 ve üzeri)** bakılarak en kaliteli ve en güvenilir Top 10 restoranın filtrelenmesi.
   - **Sağlık & Bütçe Optimizasyon Ajanı:** "Sağlıklı beslenmek pahalıdır" algısını kırmak için, kullanıcının günlük alması gereken besinleri internetteki güncel fiyatlarla tarayıp, bütçesine en uygun ve en sağlıklı alternatifleri önüne çıkaran ekonomik AI asistanı.
 
-### Gelecek Vizyonu (Sprint 3 ve Sonrası)
+### Gelecek Vizyonu ve Ar-Ge Planları
 
 Projenin tamamen olgunlaştığında ulaşacağı vizyoner hedefler:
 
