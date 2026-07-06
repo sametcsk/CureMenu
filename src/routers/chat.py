@@ -257,7 +257,8 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
                 bg_tasks.add_task(etkilesim_logla, telefon, "", "Guardrails Blok", req.mesaj, icerik[:500], None)
                 async def guardrail_stream():
                     yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"]})
-                    yield f"event: error\ndata: {json.dumps({'message': f'🛡️ **Sistem Uyarısı (NeMo Guardrails):**\\n\\n{icerik}'})}\n\n"
+                    msg_text = f"🛡️ **Sistem Uyarısı (NeMo Guardrails):**\n\n{icerik}"
+                    yield f"event: error\ndata: {json.dumps({'message': msg_text})}\n\n"
                 return StreamingResponse(guardrail_stream(), media_type="text/event-stream")
         except Exception as e:
             logger.error("NeMo Guardrails hatası: %s", e)
