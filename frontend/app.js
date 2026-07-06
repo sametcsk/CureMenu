@@ -997,30 +997,7 @@ async function uploadHealthRecord(event) {
 
 
 
-    
-    const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utterance.lang = 'tr-TR';
-    utterance.rate = 1.0; // Konuşma hızı (normal)
-    utterance.pitch = 1.0; // Ses tonu (normal)
-    
-    // Türkçe sesi bulmaya çalış
-    const setVoice = () => {
-        const voices = window.speechSynthesis.getVoices();
-        // Tercihen Google Türkçe sesi (daha doğal gelir)
-        const trVoice = voices.find(v => v.lang.includes('tr') && v.name.includes('Google')) || voices.find(v => v.lang.includes('tr'));
-        if (trVoice) {
-            utterance.voice = trVoice;
-        }
-        window.speechSynthesis.speak(utterance);
-    };
 
-    // Sesler henüz yüklenmemişse bekle
-    if (window.speechSynthesis.getVoices().length === 0) {
-        window.speechSynthesis.onvoiceschanged = setVoice;
-    } else {
-        setVoice();
-    }
-}
 
 // -- Geçmiş İşlemlerim (History) --
 function formatPercent(value) {
@@ -1911,14 +1888,7 @@ function renderMedicationOverview(profil) {
     }
 }
 
-// -- Global TTS Cancellation / Ekrana Dokunarak Sesi Susturma --
-// Cancel active speech synthesis upon document click / Sayfaya tıklandığında aktif seslendirmeyi durdur
-document.addEventListener('click', function(e) {
-    // Exclude mic button as it has internal cancellation logic / Mikrofon butonu kendi mantığına sahip olduğu için hariç tutulur
-    if (!e.target.closest('#micBtn') && 'speechSynthesis' in window && window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel();
-    }
-});
+
 
 // -- Haftalık Plan Etkileşim ve Oyunlaştırma Fonksiyonları --
 

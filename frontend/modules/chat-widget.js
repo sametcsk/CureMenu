@@ -160,7 +160,11 @@ window.ChatWidget = {
         if (isHtml) {
             item.innerHTML = window.DOMPurify ? DOMPurify.sanitize(text) : text;
         } else {
-            item.innerHTML = window.escapeHtml ? escapeHtml(text).replace(/\n/g, "<br>") : text;
+            if (window.escapeHtml) {
+                item.innerHTML = escapeHtml(text).replace(/\n/g, "<br>");
+            } else {
+                item.textContent = text;
+            }
         }
         
         body.appendChild(item);
@@ -173,9 +177,13 @@ window.ChatWidget = {
             this.hideTyping();
             this.answerNode = this.addMessage("", "bot", true);
         }
-        this.answerNode.innerHTML = window.formatMarkdownSafe 
-            ? formatMarkdownSafe(token) 
-            : window.escapeHtml ? escapeHtml(token).replace(/\n/g, "<br>") : token;
+        if (window.formatMarkdownSafe) {
+            this.answerNode.innerHTML = formatMarkdownSafe(token);
+        } else if (window.escapeHtml) {
+            this.answerNode.innerHTML = escapeHtml(token).replace(/\n/g, "<br>");
+        } else {
+            this.answerNode.textContent = token;
+        }
         
         const body = this.root.querySelector("[data-cm-assistant-body]");
         body.scrollTop = body.scrollHeight;
