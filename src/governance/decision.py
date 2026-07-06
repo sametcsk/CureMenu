@@ -23,6 +23,13 @@ def extract_citations_from_rag(clinical_evidence: str) -> list[dict[str, Any]]:
 
     citations = []
     seen = set()
+    
+    # Check if the string object has the citations list attached
+    scores_map = {}
+    if hasattr(clinical_evidence, "citations"):
+        for c in clinical_evidence.citations:
+            scores_map[c["source_id"]] = c["similarity_score"]
+
     for match in re.finditer(r"\[([^\]]+)\]:", clinical_evidence):
         source_id = match.group(1).strip()
         if source_id and source_id not in seen:
@@ -30,7 +37,7 @@ def extract_citations_from_rag(clinical_evidence: str) -> list[dict[str, Any]]:
             citations.append(
                 {
                     "source_id": source_id,
-                    "chunk_id": "unknown",
+                    "similarity_score": float(scores_map.get(source_id, 0.0)),
                     "title": source_id,
                     "evidence_span": "",
                 }
@@ -47,7 +54,20 @@ def calculate_confidence(
 ) -> dict[str, Any]:
     medical_risk = 0.95 if deterministic_block else (0.15 if safe else 0.85)
     evidence_strength = 0.75 if evidence_found else 0.35
-    citation_quality = 0.8 if citations else 0.2
+    
+    if citations:
+        from src.quality.citation_validator import CitationValidator
+        validator = CitationValidator()
+        scores = [
+            validator.validate_citation(
+                similarity_score=float(c.get("similarity_score", float('inf'))),
+                evidence_span=c.get("evidence_span", "")
+            )
+            for c in citations
+        ]
+        citation_quality = min(scores) if scores else 0.2
+    else:
+        citation_quality = 0.2
     model_confidence = 0.85 if safe else 0.75
 
     scores = _get_calculator().calculate_final_score(
@@ -76,8 +96,24 @@ def build_decision_record(
     if risk_score is None:
         risk_score = confidence.get("medical_risk", 0.5)
 
+    decision_id = state.get("decision_id")
+    events = list(state.get("governance_events") or [])
+    
+    from src.quality.explainability import ExplainabilityLogger
+    from src.governance.events import make_event
+    
+    log_entry = ExplainabilityLogger().log_decision(
+        decision_id=decision_id or "unknown",
+        user_id=telefon,
+        final_score=float(confidence.get("final_score", 0.0)),
+        rules_applied=[str(rule) for rule in state.get("applied_rules", [])],
+        policies_applied=[],
+        citations=state.get("citations", [])
+    )
+    events.append(make_event("ExplainabilityLogged", "quality.explainability", metadata=log_entry))
+
     return {
-        "decision_id": state.get("decision_id"),
+        "decision_id": decision_id,
         "telefon": telefon,
         "kimin_icin": kimin_icin,
         "request": state.get("istek", ""),
@@ -88,7 +124,7 @@ def build_decision_record(
         "confidence": confidence,
         "citations": state.get("citations") or [],
         "component_versions": state.get("component_versions") or {},
-        "events": state.get("governance_events") or [],
+        "events": events,
         "created_at": state.get("created_at") or utc_now_iso(),
         "completed_at": utc_now_iso(),
     }

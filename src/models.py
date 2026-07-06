@@ -107,6 +107,7 @@ class ChatRequest(BaseModel):
 
 class HaftalikPlanRequest(BaseModel):
     kimin_icin: str = "kendim"
+    is_regeneration: bool = False
 
 class GeriBildirimRequest(BaseModel):
     yemek_adi: str

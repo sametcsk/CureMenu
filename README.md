@@ -112,3 +112,11 @@ pytest tests/ -v
 - [ ] Yapısal Akıllı Sepet (Structured Smart Grocery) Modülü
 - [ ] Lokasyon Bazlı Restoran Önerisi
 - [ ] Giyilebilir Teknoloji (Wearable) Entegrasyonu
+
+---
+
+## Son Güncellemeler (Son Sprint)
+
+- **Frontend Modülerizasyonu**: UI katmanındaki karmaşıklığı yönetmek adına, tüm API ağ istekleri, markdown işlemleri ve token (yetki) yönetimi `frontend/app.js` içerisinden çıkartılarak global, atomik bir `api-client.js` modülüne taşınmıştır.
+- **Dinamik Plan Rejenerasyonu (Cache-Busting)**: Kullanıcı oluşturulan bir planı beğenmeyip "Yeniden Oluştur" dediğinde aynı yemeklerin üretilmesi engellendi. Dinamik "UUID Random Seed" kullanımı, spesifik `CRITICAL REGENERATION REQUEST` talimatı ve esnek temperature değerleriyle yapay zekanın tamamen yepyeni kombinasyonlar ve güvenli yemekler sunması garanti altına alındı.
+- **İngilizce Prompt & Türkçe Çıktı Mimarisi**: Çekirdek ajanlar ve API uç noktalarındaki tüm talimat (prompt) metinleri İngilizceye çevrildi. LLM'lerin kendi anadilinde (İngilizce) daha isabetli sağlık muhakemesi (reasoning) yapması, ancak son çıktıyı kusursuz bir Türkçe formunda döndürmesi sağlandı. Böylece tıp terminolojisi denetimi (Guardrails) ve tutarlılık maksimuma çıkarıldı.

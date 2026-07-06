@@ -2,17 +2,13 @@ class CitationValidator:
     def __init__(self):
         pass
 
-    def validate_citation(self, chunk_id: str, evidence_span: str) -> float:
+    def validate_citation(self, similarity_score: float, evidence_span: str = "") -> float:
         """
-        RAG atıflarını (chunk_id) Vector DB'ye sorgulayıp eşleşme kalitesini döner.
-        Şimdilik mock dönüyoruz, Chroma/Pinecone entegrasyonunda burası asıl sorguyu yapacak.
+        RAG atıflarının (similarity_score) üzerinden eşleşme kalitesini döner.
         0 (Eşleşmiyor) ile 1 (Mükemmel eşleşme) arası.
         """
-        if not chunk_id or chunk_id == "unknown":
+        # Distance'ı (0.0 en iyi) 0-1 aralığında bir kalite skoruna çevir.
+        # Basit bir formül: 1 / (1 + distance) veya lineer dönüşüm.
+        if similarity_score < 0:
             return 0.0
-            
-        # TODO: Gerçek Vector DB bağlantısı ile chunk_id sorgula.
-        # Örn: chunk = vector_db.get(chunk_id)
-        # return semantic_similarity(evidence_span, chunk.text)
-        
-        return 0.85  # Şimdilik 0.85 standart skor dönüyoruz (mock).
+        return max(0.0, min(1.0, 1.0 / (1.0 + similarity_score)))

@@ -432,8 +432,8 @@ def denetleyici_node(state: AgentState) -> dict:
     citations = extract_citations_from_rag(klinik_kanit)
     citation_scores = [
         CitationValidator().validate_citation(
-            citation.get("chunk_id") or citation.get("source_id") or "unknown",
-            citation.get("evidence_span") or "",
+            similarity_score=float(citation.get("similarity_score", float('inf'))),
+            evidence_span=citation.get("evidence_span", ""),
         )
         for citation in citations
     ]
@@ -518,7 +518,7 @@ def denetleyici_node(state: AgentState) -> dict:
         citations=citations,
     )
 
-def haftalik_plan_olustur(profil_ozeti: str, hafiza_metni: str) -> str:
+def haftalik_plan_olustur(profil_ozeti: str, hafiza_metni: str, is_regeneration: bool = False) -> str:
     """
     Tıbbi profil ve hafızadaki negatif geri bildirimleri (sevmediklerini) birleştirip,
     kullanıcıya özel 7 günlük (3 öğün) bir haftalık diyet planı hazırlıyoruz.
@@ -549,8 +549,12 @@ def haftalik_plan_olustur(profil_ozeti: str, hafiza_metni: str) -> str:
     - Provide ONLY the Markdown table, without any conversational text before or after.
     """
     
+    if is_regeneration:
+        import uuid
+        prompt += f"\n\nCRITICAL REGENERATION REQUEST: The user has REJECTED the previous plan. You MUST generate a COMPLETELY DIFFERENT meal plan. Avoid repeating the same meals or structure. Use different protein sources and vegetable combinations. (Random Seed: {uuid.uuid4()})"
+    
     logger.info("Sizin için özenle 7 günlük, sağlıklı ve lezzetli bir beslenme planı hazırlıyoruz...")
-    cevap = invoke_with_model_fallback(prompt)
+    cevap = invoke_with_model_fallback(prompt, temperature=0.9 if is_regeneration else 0.7)
     return parse_llm_response(cevap)
 
 def mutfak_sefi_node(state: AgentState) -> dict:

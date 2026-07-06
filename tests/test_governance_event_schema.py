@@ -91,3 +91,48 @@ def test_kpi_helper_eski_ve_yeni_eventleri_geriye_uyumlu_okur():
 
     assert kpis["blocked_decision_events"] == 1
     assert kpis["review_required_event_count"] == 1
+
+def test_citation_validation_min_is_dynamic():
+    from src.memory import ClinicalEvidence
+    from src.governance.decision import extract_citations_from_rag
+    from src.quality.citation_validator import CitationValidator
+
+    text = "[Makale 1]:\nİçerik..."
+    evidence1 = ClinicalEvidence(text)
+    evidence1.citations = [{"source_id": "Makale 1", "similarity_score": 0.2, "evidence_span": "İçerik..."}]
+
+    citations1 = extract_citations_from_rag(evidence1)
+    assert len(citations1) == 1
+    assert citations1[0]["similarity_score"] == 0.2
+
+    score1 = CitationValidator().validate_citation(similarity_score=citations1[0].get("similarity_score", 1.0))
+
+    evidence2 = ClinicalEvidence(text)
+    evidence2.citations = [{"source_id": "Makale 1", "similarity_score": 0.8, "evidence_span": "İçerik..."}]
+    citations2 = extract_citations_from_rag(evidence2)
+    score2 = CitationValidator().validate_citation(similarity_score=citations2[0].get("similarity_score", 1.0))
+
+    assert score1 != 0.0
+    assert score1 > score2
+
+def test_explainability_logger_integration():
+    from src.governance.decision import build_decision_record
+    
+    state = {
+        "decision_id": "dec_test_expl",
+        "guvenli_mi": True,
+        "istek": "Test query",
+        "governance_events": [],
+    }
+    
+    record = build_decision_record(state, telefon="555", kimin_icin="self", final_answer="OK")
+    
+    events = record.get("events", [])
+    expl_events = [e for e in events if e.get("event_type") == "ExplainabilityLogged"]
+    
+    assert len(expl_events) == 1
+    event = expl_events[0]
+    assert event["component"] == "quality.explainability"
+    assert event["metadata"]["decision_id"] == "dec_test_expl"
+    assert event["metadata"]["user_id"] == "555"
+    assert "explainability" in event["metadata"]

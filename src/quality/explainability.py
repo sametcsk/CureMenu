@@ -26,5 +26,5 @@ class ExplainabilityLogger:
             }
         }
         
-        # TODO: Log_entry'i bir DB'ye veya SIEM sistemine gönder.
+        # The log_entry is captured as a Governance Event and saved to decision_events.
         return log_entry

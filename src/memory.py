@@ -66,6 +66,12 @@ def hafizadakini_getir(kullanici_id: str, mesaj: str, k_adet: int = 3) -> list[s
         
     return [doc.page_content for doc in sonuclar]
 
+class ClinicalEvidence(str):
+    def __new__(cls, content):
+        obj = super().__new__(cls, content)
+        obj.citations = []
+        return obj
+
 def klinik_bilgi_getir(sorgu: str, k_adet: int = 3) -> str:
     global _klinik_db
     try:
@@ -76,17 +82,26 @@ def klinik_bilgi_getir(sorgu: str, k_adet: int = 3) -> str:
                 persist_directory=CHROMA_DIR,
             )
         
-        sonuclar = _klinik_db.similarity_search(query=sorgu, k=k_adet)
+        # similarity_search_with_score returns (Document, score) tuples
+        sonuclar = _klinik_db.similarity_search_with_score(query=sorgu, k=k_adet)
         if not sonuclar:
-            return ""
+            return ClinicalEvidence("")
             
         birlestirilmis_metin = "\n\n--- KLİNİK KAYNAK ---\n"
-        for i, doc in enumerate(sonuclar):
+        citations = []
+        for i, (doc, score) in enumerate(sonuclar):
             kaynak = doc.metadata.get("source", "Bilinmeyen Kaynak")
             kaynak_adi = os.path.basename(kaynak)
             birlestirilmis_metin += f"[{kaynak_adi}]:\n{doc.page_content}\n\n"
+            citations.append({
+                "source_id": kaynak_adi,
+                "similarity_score": score,
+                "evidence_span": doc.page_content[:200]
+            })
             
-        return birlestirilmis_metin
+        result = ClinicalEvidence(birlestirilmis_metin)
+        result.citations = citations
+        return result
     except Exception as e:
         logger.warning("Klinik kütüphanede arama yapılırken hata oluştu: %s", e)
-        return ""
+        return ClinicalEvidence("")

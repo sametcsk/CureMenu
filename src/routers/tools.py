@@ -65,7 +65,7 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
     hafiza_metni = " ".join(gecmis) if gecmis else "Kayıtlı geri bildirim yok."
     
     try:
-        plan = await run_in_threadpool(haftalik_plan_olustur, profil_ozeti, hafiza_metni)
+        plan = await run_in_threadpool(haftalik_plan_olustur, profil_ozeti, hafiza_metni, req.is_regeneration)
         
         # Governance
         initial_state = create_initial_state(istek="Haftalık plan oluştur", profil_ozeti=profil_ozeti, hafiza=gecmis)
@@ -200,13 +200,14 @@ async def upload_health_record(
         if not text.strip():
             return JSONResponse(status_code=422, content={"success": False, "detail": "PDF içindeki metin okunamadı. Daha net veya metin içeren bir PDF yükleyin."})
         
-        prompt_template = """Aşağıdaki tahlil/sağlık raporunu okuyup beslenme açısından dikkat edilmesi gerekenleri (eksikler, fazlalıklar) en fazla 4-5 cümlelik ÇOK KISA bir özet halinde yaz. Uzun uzun listeleme yapma.
-Ayrıca tahlildeki KANTİTATİF (sayısal) biyo-işaretçileri (biyomarker) çıkararak metnin en sonuna kesinlikle şu formatta bir JSON bloğu ekle:
+        prompt_template = """Read the following health/lab report and write a VERY SHORT summary (max 4-5 sentences) of the dietary considerations (deficiencies, excesses). Do not make long lists.
+Also, extract the QUANTITATIVE (numerical) biomarkers from the report and MUST append a JSON block at the very end of your text in exactly this format:
 ```json
-{"biomarkers": [{"name": "Glukoz", "value": 95.0, "unit": "mg/dL"}]}
+{"biomarkers": [{"name": "Glucose", "value": 95.0, "unit": "mg/dL"}]}
 ```
-Sadece beslenme açısından önemli olanlara odaklan. Tahlil:
+Focus only on biomarkers relevant to nutrition. Write the summary text entirely in Turkish.
 
+Health Report:
 %s"""
         prompt = prompt_template % (text[:5000])
         cevap = invoke_with_model_fallback(prompt)
@@ -269,10 +270,12 @@ async def plan_action(request: Request, req: PlanActionRequest, bg_tasks: Backgr
     profil_ozeti = row[0]
     
     if req.action_type == "recipe":
-        prompt = f"""Kullanıcı şu yemeğin tarifini istiyor: "{req.meal_text}"
-Kullanıcı Profili: {profil_ozeti}
+        prompt = f"""The user is requesting a detailed recipe for the following meal: "{req.meal_text}"
+Patient Profile: {profil_ozeti}
 
-Bu kullanıcı için bu yemeğin sağlıklı, lezzetli ve makro değerleri (tahmini) hesaplanmış detaylı tarifini Markdown formatında yaz. Başlık, Malzemeler ve Yapılışı olsun."""
+Write a healthy, delicious, and detailed recipe for this meal, calculated specifically for this user's profile. Include estimated macronutrient values.
+Format the output in Markdown. Include sections for Title, Ingredients, and Instructions.
+Write the final response entirely in Turkish."""
         
         try:
             tarif_cevap_obj = await run_in_threadpool(invoke_with_model_fallback, prompt)
@@ -283,31 +286,22 @@ Bu kullanıcı için bu yemeğin sağlıklı, lezzetli ve makro değerleri (tahm
             return JSONResponse(status_code=503, content={"success": False, "detail": "Tarif şu anda hazırlanamadı. Lütfen birazdan tekrar deneyin."})
 
     elif req.action_type == "alternative":
-        prompt = f"""Kullanıcı haftalık planındaki şu yemeği yiyemeyeceğini belirtti: "{req.meal_text}"
-Kullanıcı Profili: {profil_ozeti}
-Mevcut Haftalık Planın İlgili Kısmı: {req.plan_text}
+        prompt = f"""The user stated they cannot eat the following meal from their weekly plan: "{req.meal_text}"
+Patient Profile: {profil_ozeti}
+Relevant Section of Current Weekly Plan: {req.plan_text}
 
-GÖREV:
-1. KESİNLİKLE "{req.meal_text}" yemeğinden TAMAMEN FARKLI bir alternatif öğün bul. Kullanıcı bunu yiyemediği için değiştirmek istiyor, aynı yemeği önerme!
-2. Bu yeni yemeğin kalorisi veya makrosu (Protein, Karbonhidrat, Yağ) eski yemekten farklıysa, O GÜNKÜ diğer öğünleri (Sabah, Öğle, Akşam vb.) incele. Günlük toplam makro ve kalori dengesini korumak için gerekirse o günkü diğer öğünlerin porsiyonlarını veya içeriklerini de ayarla. (Örn: Sabah az protein aldıysa, akşam yemeğine tavuk ekle).
-3. Hem yiyemediği asıl yemeği, hem de dengelemek için değiştirdiğin diğer öğünleri JSON formatında `degisen_ogunler` listesine ekle. Eğer başka öğünü değiştirmeye gerek yoksa listeye sadece asıl yemeği ekle.
-4. "eski" alanına Mevcut Plan metnindeki öğünün TAM metnini (kalori değerleriyle beraber) birebir aynı yaz ki sistem bulup değiştirebilsin. "yeni" alanına da aynı formatta senin önerdiğin yeni yemeği yaz.
+TASK:
+1. Find a COMPLETELY DIFFERENT alternative meal instead of "{req.meal_text}". The user explicitly wants a change, do not suggest the same meal.
+2. If the calories or macros (Protein, Carbs, Fats) of this new meal differ from the old one, analyze the OTHER meals for THAT SAME DAY (Breakfast, Lunch, Dinner, etc.). Adjust the portions or ingredients of those other meals to maintain the daily macro and calorie balance. (e.g., if breakfast has less protein now, add chicken to dinner).
+3. Add both the originally replaced meal AND any other meals you modified for balance to the `degisen_ogunler` JSON array. If no other meals needed changing, just add the replaced meal.
+4. For the "eski" (old) field, write the EXACT string of the meal from the Current Weekly Plan text (including calorie values) so the system can find and replace it. For the "yeni" (new) field, write your new suggested meal in the exact same format.
 
-DİKKAT: Yanıtını SADECE aşağıdaki gibi JSON formatında ver, markdown kod bloğu (` ```json `) kullanma:
+WARNING: Provide your response ONLY in the following JSON format. Do not use markdown code blocks (` ```json `). All meal names and text inside the JSON must be in Turkish:
 {{
   "degisen_ogunler": [
-      {{
-         "eski": "Zeytinyağlı taze fasulye, bulgur pilavı (400 kcal, 10g P, 65g K, 10g Y)",
-         "yeni": "Fırın somon, bol salata (450 kcal, 30g P, 15g K, 25g Y)"
-      }},
-      {{
-         "eski": "Akşamki bir diğer yemek...",
-         "yeni": "Dengelenmiş akşam yemeği..."
-      }}
-  ],
-  "aciklama": "Neden bu alternatifler verildi ve günlük makrolar nasıl dengelendi? (Örn: Somon ile artan proteini dengelemek için akşamki et porsiyonunu azalttım...)"
-}}
-"""
+    {{"eski": "Mercimek Çorbası (300 kcal...)", "yeni": "Ezogelin Çorbası (300 kcal...)"}}
+  ]
+}}"""
         try:
             cevap_obj = await run_in_threadpool(invoke_with_model_fallback, prompt)
             cevap = parse_llm_response(cevap_obj)
@@ -332,23 +326,25 @@ DİKKAT: Yanıtını SADECE aşağıdaki gibi JSON formatında ver, markdown kod
         gunler = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
         bugun = gunler[datetime.datetime.now().weekday()]
         
-        prompt = f"""Kullanıcı şu an canının atıştırmalık/tatlı/ara öğün çektiğini belirtti.
-DİKKAT SİSTEM ZAMANI: Bugün günlerden {bugun}. Lütfen {bugun} gününün menüsünü baz al.
+        prompt = f"""The user stated they are currently craving a snack/dessert.
+CURRENT SYSTEM DAY: Today is {bugun}. Please use the menu for {bugun} as your reference point.
 
-Mevcut Haftalık Planı:
+Current Weekly Plan:
 {req.plan_text}
 
-Kullanıcı Profili:
+Patient Profile:
 {profil_ozeti}
 
-GÖREV:
-Bu kullanıcı için sağlık profiline ve özellikle {bugun} menüsünün makro dengesine TAMAMEN UYGUN, klinik olarak güvenli ve kalorisi aşırıya kaçmayan mantıklı 2-3 alternatif atıştırmalık/ara öğün öner. Tariflerini ve nedenlerini Markdown formatında kısaca belirt. Kesinlikle yanlış günü referans alma!
+TASK:
+Suggest 2-3 logical, clinically safe, and portion-controlled alternative snacks/desserts that are COMPLETELY APPROPRIATE for this user's health profile and perfectly balance the macros of their {bugun} menu. 
+Briefly explain the recipes and your clinical reasoning in Markdown format.
+Do NOT reference the wrong day!
+Write the final response entirely in Turkish.
 
-DİKKAT: Yanıtını SADECE aşağıdaki gibi JSON formatında ver, markdown kod bloğu (` ```json `) kullanma:
+WARNING: Provide your response ONLY in the following JSON format. Do not use markdown code blocks (` ```json `):
 {{
   "snack_onerileri": "Buraya Markdown formatında 2-3 atıştırmalık önerisi ve tariflerini, ayrıca bugünkü menüyle nasıl dengelendiğinin açıklamasını yaz."
-}}
-"""
+}}"""
         try:
             snack_cevap_obj = await run_in_threadpool(invoke_with_model_fallback, prompt)
             snack_metni = parse_llm_response(snack_cevap_obj)
