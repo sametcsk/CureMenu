@@ -22,3 +22,6 @@ httpx
 PyJWT>=2.8.0
 PyYAML>=6.0.0
 alembic>=1.13.0
+
+PyMuPDF
+python-multipart
