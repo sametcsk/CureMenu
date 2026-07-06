@@ -1,0 +1,51 @@
+version: medication_food_rules:v1
+description: Deterministic high-risk medication-food safety rules.
+rules:
+  - medication: metformin
+    aliases:
+      - glifor
+      - glucophage
+    risk_terms:
+      - alkol
+      - bira
+      - sarap
+      - raki
+      - viski
+    warning: Metformin kullaniminda alkol laktik asidoz riskini artirabilir.
+    severity: high
+
+  - medication: atorvastatin
+    aliases:
+      - statin
+      - lipitor
+    risk_terms:
+      - greyfurt
+      - grapefruit
+    warning: Atorvastatin/statin kullaniminda greyfurt ilac duzeyini artirabilir.
+    severity: high
+
+  - medication: warfarin
+    aliases:
+      - coumadin
+      - kumadin
+    risk_terms:
+      - ispanak
+      - brokoli
+      - karalahana
+      - lahana
+      - maydanoz
+    warning: Warfarin kullaniminda K vitamini yuksek besinler INR dengesini etkileyebilir.
+    severity: high
+
+  - medication: levotiroksin
+    aliases:
+      - euthyrox
+      - tefor
+    risk_terms:
+      - soya
+      - kalsiyum
+      - demir
+      - sut
+    warning: Levotiroksin emilimi soya, kalsiyum/demir ve bazi sut urunleriyle azalabilir.
+    severity: medium
+

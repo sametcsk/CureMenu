@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CureMenu - Giriş Yap</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet" />
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#005c55",
+                        ink: "#102033",
+                        muted: "#596673",
+                        line: "#dce5e8",
+                        canvas: "#f7fbfc",
+                        surface: "#ffffff",
+                        soft: "#e4f6f2",
+                        danger: "#b3261e",
+                        dangerSoft: "#ffe7e3",
+                    },
+                    fontFamily: {
+                        display: ["Outfit", "sans-serif"],
+                        body: ["Inter", "sans-serif"],
+                    },
+                    boxShadow: {
+                        soft: "0 22px 58px rgba(16,32,51,0.10)",
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        body { font-family: Inter, sans-serif; }
+        .input-field {
+            width: 100%;
+            border: 1px solid #dce5e8;
+            border-radius: 8px;
+            background: white;
+            padding: 12px 14px;
+            color: #102033;
+            outline: none;
+            transition: 160ms ease;
+        }
+        .input-field:focus {
+            border-color: #005c55;
+            box-shadow: 0 0 0 4px rgba(0, 92, 85, 0.10);
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-canvas text-ink font-body antialiased flex flex-col justify-center items-center p-5">
+    
+    <div class="w-full max-w-md">
+        <div class="mb-8 flex justify-center">
+            <a href="/" class="flex items-center gap-3 text-primary">
+                <span class="grid h-11 w-11 place-items-center rounded-lg bg-primary text-white shadow-soft">
+                    <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">medical_services</span>
+                </span>
+                <span class="font-display text-2xl font-bold leading-none">CureMenu</span>
+            </a>
+        </div>
+
+        <div class="rounded-lg border border-line bg-white p-6 shadow-soft sm:p-8">
+            <div class="mb-7 text-center">
+                <h1 class="font-display text-2xl font-bold">Tekrar Hoş Geldin</h1>
+                <p class="mt-2 text-sm text-muted">Devam etmek için telefon numaran ve şifrenle giriş yap.</p>
+            </div>
+
+            <form id="loginForm" class="space-y-5">
+                <label class="block">
+                    <span class="mb-1 block text-sm font-bold">Telefon Numarası</span>
+                    <input id="phoneNumber" class="input-field" required maxlength="11" inputmode="numeric" pattern="^(05[0-9]{9}|5[0-9]{9})$" placeholder="5XX XXX XX XX" />
+                </label>
+                <label class="block">
+                    <span class="mb-1 flex items-center justify-between text-sm font-bold">
+                        Şifre
+                    </span>
+                    <input id="password" type="password" class="input-field" required minlength="6" placeholder="••••••" />
+                </label>
+
+                <div id="loginError" class="hidden rounded-lg border border-danger/20 bg-dangerSoft p-3 text-sm font-semibold text-danger"></div>
+
+                <button id="submitBtn" type="submit" class="w-full h-11 rounded-lg bg-primary px-6 font-bold text-white transition hover:bg-[#007168] mt-2">
+                    Giriş Yap
+                </button>
+            </form>
+
+            <div class="mt-6 text-center text-sm text-muted border-t border-line pt-6">
+                Hesabın yok mu? <a href="/kayit" class="font-bold text-primary hover:underline">Hemen kayıt ol</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('loginForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const errorBox = document.getElementById('loginError');
+
+        function showError(message) {
+            errorBox.textContent = message;
+            errorBox.classList.remove('hidden');
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            errorBox.classList.add('hidden');
+            
+            const telefon = document.getElementById('phoneNumber').value.trim().replace(/\s/g, '');
+            const sifre = document.getElementById('password').value;
+            const submitText = submitBtn.textContent;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Giriş yapılıyor...';
+
+            try {
+                const loginRes = await fetch('/api/login', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telefon, sifre }),
+                });
+                
+                const loginData = await loginRes.json();
+                
+                if (!loginRes.ok || !loginData.success) {
+                    throw new Error(loginData.detail || 'Giriş yapılamadı.');
+                }
+
+                localStorage.setItem('cm_telefon', telefon);
+                localStorage.setItem('cm_kullanici_adi', loginData.kullanici_adi || '');
+                localStorage.setItem('cm_has_profile', loginData.has_profile ? 'true' : 'false');
+                localStorage.setItem('cm_disclaimer_ok', 'true');
+                
+                window.location.href = '/dashboard';
+                
+            } catch (error) {
+                showError(error.message || 'Bir şey ters gitti. Lütfen tekrar deneyin.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = submitText;
+            }
+        });
+    </script>
+</body>
+</html>

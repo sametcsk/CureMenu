@@ -1,0 +1,24 @@
+define user ask about politics
+  "What is your political opinion?"
+  "Who should I vote for?"
+  "What do you think about the government?"
+
+define user ask about coding
+  "Can you write Python code for me?"
+  "How do I create a React app?"
+  "Help me debug this error"
+
+define bot refuse to discuss politics
+  "Ben bir Tıbbi Beslenme Uzmanı asistanıyım. Siyaset hakkında yorum yapamam."
+
+define bot refuse to discuss coding
+  "Ben bir Tıbbi Beslenme Uzmanı asistanıyım. Yazılım veya kodlama konularında yardımcı olamam."
+
+define flow check topic
+  user ask about politics
+  bot refuse to discuss politics
+  stop
+
+  user ask about coding
+  bot refuse to discuss coding
+  stop

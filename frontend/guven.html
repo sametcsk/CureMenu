@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html class="light" lang="tr">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>CureMenu - Güven</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet"/>
+    <style>
+        body{font-family:Inter,sans-serif;background:#f6faf8;color:#102033}
+        .font-display{font-family:Outfit,sans-serif}
+        .soft-card{background:#fff;border:1px solid rgba(16,32,51,.08);border-radius:8px;box-shadow:0 10px 30px rgba(16,32,51,.06)}
+        .warm-band{background:#fff8f5;border:1px solid rgba(182,86,54,.14);border-radius:8px}
+        .brand-mark{border-radius:8px;background:#005c55;color:white}
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+</head>
+<body class="min-h-screen antialiased">
+
+<header class="sticky top-0 z-20 border-b border-[#dce5e8] bg-white/88 backdrop-blur-xl">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+        <a href="/" class="flex items-center gap-3 text-[#005c55]">
+            <span class="brand-mark material-symbols-outlined grid h-10 w-10 place-items-center" style="font-variation-settings:'FILL' 1">medical_services</span>
+            <span class="font-display text-xl font-bold">CureMenu</span>
+        </a>
+        <a href="/dashboard" class="rounded-full border border-[#005c55]/25 px-4 py-2 text-sm font-bold text-[#005c55] hover:bg-[#eef8f5]">Panele dön</a>
+    </div>
+</header>
+
+<main class="mx-auto max-w-5xl px-6 py-12">
+    <section class="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+        <div>
+            <p class="mb-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm font-bold text-[#005c55] shadow-sm">
+                <span class="material-symbols-outlined text-[18px]">health_and_safety</span>
+                Güvenli seçim için sakin bir yardımcı
+            </p>
+            <h1 class="font-display text-4xl font-bold leading-tight md:text-5xl">CureMenu kararını senin yerine vermez; daha güvenli düşünmene yardım eder.</h1>
+            <p id="tagline" class="mt-5 max-w-2xl text-lg leading-8 text-[#3e4947]">Yükleniyor...</p>
+        </div>
+        <div class="warm-band p-6">
+            <h2 class="font-display text-2xl font-semibold">Net sınırımız</h2>
+            <p id="feragat" class="mt-4 leading-7 text-[#3e4947]"></p>
+        </div>
+    </section>
+
+    <section class="mt-12 grid gap-5 md:grid-cols-2">
+        <article class="soft-card p-6">
+            <span class="material-symbols-outlined text-3xl text-[#005c55]">done_all</span>
+            <h2 class="font-display mt-4 text-2xl font-semibold">Ne yapar?</h2>
+            <p class="mt-3 leading-7 text-[#3e4947]">Profilindeki alerji, hastalık, ilaç ve tahlil notlarını dikkate alarak yemek seçimini daha dikkatli hale getirir. Belirsizlik gördüğünde daha güvenli tarafa çeker.</p>
+        </article>
+        <article class="soft-card p-6">
+            <span class="material-symbols-outlined text-3xl text-[#005c55]">front_hand</span>
+            <h2 class="font-display mt-4 text-2xl font-semibold">Ne yapmaz?</h2>
+            <p class="mt-3 leading-7 text-[#3e4947]">Teşhis koymaz, ilaç önermez, tedavi planı yazmaz. Doktorunun veya diyetisyeninin verdiği planı değiştirmek için tek başına kullanılmaz.</p>
+        </article>
+    </section>
+
+    <section class="mt-10 soft-card p-6">
+        <h2 class="font-display text-2xl font-semibold">Her öneriden önce baktığımız şeyler</h2>
+        <div class="mt-6 grid gap-4 md:grid-cols-4">
+            <div class="rounded-lg bg-[#eef8f5] p-4">
+                <span class="material-symbols-outlined text-[#005c55]">person_check</span>
+                <p class="mt-2 font-bold">Profil</p>
+                <p class="mt-1 text-sm text-[#3e4947]">Kime göre öneri istendiği kontrol edilir.</p>
+            </div>
+            <div class="rounded-lg bg-[#eef8f5] p-4">
+                <span class="material-symbols-outlined text-[#005c55]">warning</span>
+                <p class="mt-2 font-bold">Alerji ve risk</p>
+                <p class="mt-1 text-sm text-[#3e4947]">Bariz risklerde öneri durdurulur.</p>
+            </div>
+            <div class="rounded-lg bg-[#eef8f5] p-4">
+                <span class="material-symbols-outlined text-[#005c55]">medication</span>
+                <p class="mt-2 font-bold">İlaç uyumu</p>
+                <p class="mt-1 text-sm text-[#3e4947]">Bilinen yüksek riskli eşleşmeler dikkate alınır.</p>
+            </div>
+            <div class="rounded-lg bg-[#eef8f5] p-4">
+                <span class="material-symbols-outlined text-[#005c55]">support_agent</span>
+                <p class="mt-2 font-bold">Yönlendirme</p>
+                <p class="mt-1 text-sm text-[#3e4947]">Tıbbi karar gerekiyorsa doktora yönlendirir.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="mt-10 grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+        <div class="soft-card p-6">
+            <h2 class="font-display text-2xl font-semibold">Ne zaman doktora?</h2>
+            <p class="mt-3 leading-7 text-[#3e4947]">Yeni belirti, çok yüksek veya çok düşük tahlil değeri, ilaç değişikliği, hamilelik, böbrek/kalp hastalığı gibi durumlarda CureMenu yalnızca uyarır; karar için sağlık profesyoneline yönlendirir.</p>
+        </div>
+        <div class="soft-card p-6">
+            <h2 class="font-display text-2xl font-semibold">Kayıt ve izlenebilirlik</h2>
+            <p class="mt-3 leading-7 text-[#3e4947]">Her önemli yanıt için hangi profilin kullanıldığı, tahmini risk kaydı, operasyonel güven kaydı ve kontrol adımları saklanır. Bu kayıtlar, sistemi sonradan inceleyebilmek ve hataları düzeltmek için tutulur.</p>
+        </div>
+    </section>
+</main>
+
+<script>
+const fallbackMetinler = {
+    tagline: "Hastalık, alerji, ilaç ve tahlil notlarını dikkate alarak daha güvenli yemek seçimleri yapmana yardım eder.",
+    tibbi_feragat: "CureMenu teşhis koymaz, tedavi planı yazmaz ve doktorun yerini almaz. Acil durumda 112'yi arayın."
+};
+
+fetch('/api/public/metinler')
+    .then((r) => {
+        if (!r.ok) throw new Error('metinler alınamadı');
+        return r.json();
+    })
+    .then((data) => {
+        document.getElementById('tagline').textContent = data.tagline || fallbackMetinler.tagline;
+        document.getElementById('feragat').textContent = data.tibbi_feragat || fallbackMetinler.tibbi_feragat;
+    })
+    .catch(() => {
+        document.getElementById('tagline').textContent = fallbackMetinler.tagline;
+        document.getElementById('feragat').textContent = fallbackMetinler.tibbi_feragat;
+    });
+</script>
+<script src="/static/floating-assistant.js?v=2"></script>
+</body>
+</html>

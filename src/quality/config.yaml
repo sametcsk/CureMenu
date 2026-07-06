@@ -1,0 +1,15 @@
+# AI Quality Assurance Config
+
+confidence_weights:
+  model_confidence: 0.20
+  evidence_strength: 0.35
+  medical_risk: 0.30
+  citation_quality: 0.15
+
+thresholds:
+  reject_below: 0.40
+  human_review_below: 0.70
+  
+policy:
+  allow_emergency_referral: true
+  require_doctor_approval_for_children: true

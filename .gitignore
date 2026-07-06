@@ -2,3 +2,17 @@
 .idea/
 __pycache__/
 *.pyc
+.pytest_cache/
+.env
+.env.*
+!.env.example
+healmenu.db
+healmenu_backup.db
+chroma_db/
+debug-*.log
+scratch/output.txt
+
+database.db
+*.sqlite3
+scratch/
+tmphealmenu-pytest/

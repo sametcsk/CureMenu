@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CureMenu - Kayıt Ol ve Profil</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet" />
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#005c55",
+                        ink: "#102033",
+                        muted: "#596673",
+                        line: "#dce5e8",
+                        canvas: "#f7fbfc",
+                        surface: "#ffffff",
+                        soft: "#e4f6f2",
+                        danger: "#b3261e",
+                        dangerSoft: "#ffe7e3",
+                    },
+                    fontFamily: {
+                        display: ["Outfit", "sans-serif"],
+                        body: ["Inter", "sans-serif"],
+                    },
+                    boxShadow: {
+                        soft: "0 22px 58px rgba(16,32,51,0.10)",
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        body { font-family: Inter, sans-serif; }
+        .step-panel { display: none; }
+        .step-panel.active { display: block; }
+        .step-dot.active { background: #005c55; color: white; border-color: #005c55; }
+        .step-dot.done { background: #e4f6f2; color: #005c55; border-color: #8fd8cd; }
+        .input-field {
+            width: 100%;
+            border: 1px solid #dce5e8;
+            border-radius: 8px;
+            background: white;
+            padding: 12px 14px;
+            color: #102033;
+            outline: none;
+            transition: 160ms ease;
+        }
+        .input-field:focus {
+            border-color: #005c55;
+            box-shadow: 0 0 0 4px rgba(0, 92, 85, 0.10);
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+</head>
+<body class="min-h-screen bg-canvas text-ink font-body antialiased">
+    <main class="grid min-h-screen lg:grid-cols-[0.9fr_1.1fr]">
+        <section class="hidden bg-[#0b1c30] p-10 text-white lg:flex lg:flex-col lg:justify-between">
+            <a href="/" class="flex items-center gap-3 text-white">
+                <span class="grid h-11 w-11 place-items-center rounded-lg bg-primary">
+                    <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">medical_services</span>
+                </span>
+                <span>
+                    <span class="block font-display text-2xl font-bold leading-none">CureMenu</span>
+                    <span class="block text-xs font-semibold text-white/65">Güvenli sofralar için yanında</span>
+                </span>
+            </a>
+
+            <div class="max-w-xl">
+                <p class="mb-4 text-sm font-bold text-white/65">Kısa bir tanışma yapalım</p>
+                <h1 class="font-display text-5xl font-bold">
+                    Seni yormadan, güven veren bir başlangıç yapalım.
+                </h1>
+                <p class="mt-6 text-lg leading-8 text-white/72">
+                    Birkaç temel bilgi, CureMenu’nün sana daha dikkatli ve kişisel öneriler hazırlamasına yardım eder.
+                    Aile üyelerini daha sonra konsoldan ekleyebilirsin.
+                </p>
+            </div>
+
+            <div class="grid gap-3 text-sm text-white/75">
+                <div class="flex items-center gap-3">
+                    <span class="material-symbols-outlined text-soft">verified</span>
+                    Ana profilin bu adımla hazır olur.
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="material-symbols-outlined text-soft">health_and_safety</span>
+                    Doktorun yerine geçmez; güvenli seçim yapmana destek olur.
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="material-symbols-outlined text-soft">family_restroom</span>
+                    Aileni sonradan kolayca ekleyebilirsin.
+                </div>
+            </div>
+        </section>
+
+        <section class="flex items-center justify-center px-5 py-8 md:px-8">
+            <div class="w-full max-w-3xl">
+                <div class="mb-8 flex items-center justify-between gap-4">
+                    <a href="/" class="inline-flex items-center gap-2 text-sm font-bold text-primary">
+                        <span class="material-symbols-outlined text-[18px]">arrow_back</span>
+                        Ana sayfa
+                    </a>
+                    <a href="/giris" class="text-sm font-bold text-muted hover:text-primary">Güven & Hakkında</a>
+                </div>
+
+                <div class="rounded-lg border border-line bg-white p-5 shadow-soft md:p-7">
+                    <div class="mb-7 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-bold text-primary">Hoş geldin</p>
+                            <h2 class="mt-2 font-display text-4xl font-bold">Birkaç bilgiyle başlayalım.</h2>
+                            <p class="mt-3 max-w-2xl text-sm leading-6 text-muted">
+                                İlk girişte verdiğin ad soyad ana profilin olur. Sonrasında eş, çocuk veya aile büyükleri için ayrı profiller ekleyebilirsin.
+                            </p>
+                        </div>
+                        <a href="/giris" class="text-sm font-bold text-primary underline">Zaten hesabınız var mı? Giriş yap</a>
+                    </div>
+
+                    <div class="mb-8 grid grid-cols-3 gap-3">
+                        <div class="flex items-center gap-3">
+                            <span class="step-dot active grid h-9 w-9 place-items-center rounded-lg border border-line text-sm font-bold" data-step-dot="0">1</span>
+                            <span class="hidden text-sm font-bold md:block">Seni tanıyalım</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="step-dot grid h-9 w-9 place-items-center rounded-lg border border-line text-sm font-bold" data-step-dot="1">2</span>
+                            <span class="hidden text-sm font-bold md:block">Sağlık bilgileri</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="step-dot grid h-9 w-9 place-items-center rounded-lg border border-line text-sm font-bold" data-step-dot="2">3</span>
+                            <span class="hidden text-sm font-bold md:block">Onay ve başlangıç</span>
+                        </div>
+                    </div>
+
+                    <form id="profileWizard" class="space-y-6">
+                        <section class="step-panel active" data-step-panel="0">
+                            <div class="grid gap-4 md:grid-cols-2">
+                                <label class="block">
+                                    <span class="mb-1 block text-sm font-bold">Ad soyad</span>
+                                    <input id="fullName" class="input-field" required maxlength="40" pattern="^[A-Za-zÇçĞğİıÖöŞşÜü\s]+$" placeholder="Örn. Ayşe Yılmaz" />
+                                </label>
+                                <label class="block">
+                                    <span class="mb-1 block text-sm font-bold">Telefon</span>
+                                    <input id="phoneNumber" class="input-field" required maxlength="11" inputmode="numeric" pattern="^(05[0-9]{9}|5[0-9]{9})$" placeholder="5XX XXX XX XX" />
+                                </label>
+                                <label class="block md:col-span-2">
+                                    <span class="mb-1 block text-sm font-bold">Şifre</span>
+                                    <input id="password" type="password" class="input-field" required minlength="6" placeholder="En az 6 karakter" />
+                                </label>
+                                <label class="block">
+                                    <span class="mb-1 block text-sm font-bold">Yaş</span>
+                                    <input id="age" class="input-field" required type="number" min="1" max="100" value="35" />
+                                </label>
+                                <label class="block">
+                                    <span class="mb-1 block text-sm font-bold">Cinsiyet</span>
+                                    <select id="gender" class="input-field" required>
+                                        <option value="kadın">Kadın</option>
+                                        <option value="erkek">Erkek</option>
+                                    </select>
+                                </label>
+                                <label class="block">
+                                    <span class="mb-1 block text-sm font-bold">Boy (cm)</span>
+                                    <input id="height" class="input-field" required type="number" min="1" max="250" value="170" />
+                                </label>
+                                <label class="block">
+                                    <span class="mb-1 block text-sm font-bold">Kilo (kg)</span>
+                                    <input id="weight" class="input-field" required type="number" min="1" max="200" step="0.1" value="70" />
+                                </label>
+                                <label class="block md:col-span-2">
+                                    <span class="mb-1 block text-sm font-bold">Beslenme hedefi</span>
+                                    <select id="goal" class="input-field" required>
+                                        <option value="Sağlıklı Yaşam (Genel)">Sağlıklı Yaşam (Genel)</option>
+                                        <option value="Kilo Verme / Yağ Yakımı">Kilo Verme / Yağ Yakımı</option>
+                                        <option value="Kas Kazanımı / Sporcu Beslenmesi">Kas Kazanımı / Sporcu Beslenmesi</option>
+                                        <option value="Diyabet Dostu Beslenme">Diyabet Dostu Beslenme</option>
+                                        <option value="Kalp Dostu Beslenme">Kalp Dostu Beslenme</option>
+                                        <option value="Sindirim / Bağırsak Sağlığı">Sindirim / Bağırsak Sağlığı</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </section>
+
+                        <section class="step-panel" data-step-panel="1">
+                            <div class="grid gap-4">
+                                <label class="block">
+                                    <span class="mb-1 block text-sm font-bold">Hastalıklar</span>
+                                    <input id="conditions" class="input-field" placeholder="Örn. diyabet, hipertansiyon, kolesterol" />
+                                    <span class="mt-1 block text-xs text-muted">Virgülle ayırabilirsin.</span>
+                                </label>
+                                <label class="block">
+                                    <span class="mb-1 block text-sm font-bold">Alerjiler</span>
+                                    <input id="allergies" class="input-field" placeholder="Örn. fıstık, gluten, laktoz" />
+                                </label>
+                                <label class="block">
+                                    <span class="mb-1 block text-sm font-bold">Kullandığın ilaçlar</span>
+                                    <input id="medications" class="input-field" placeholder="Örn. metformin, warfarin, atorvastatin" />
+                                    <span class="mt-1 block text-xs text-muted">Varsa yazman yeterli; riskli eşleşmelerde daha dikkatli davranırız.</span>
+                                </label>
+                                <label class="block">
+                                    <span class="mb-1 block text-sm font-bold">Aile / genetik hastalık geçmişi</span>
+                                    <input id="familyHistory" class="input-field" placeholder="Örn. ailede kalp hastalığı, diyabet" />
+                                </label>
+                                <label class="block">
+                                    <span class="mb-1 block text-sm font-bold">Tıbbi operasyon geçmişi</span>
+                                    <textarea id="medicalHistory" class="input-field min-h-[96px]" placeholder="Geçirdiğin operasyonlar, önemli sağlık notları veya özellikle dikkat etmek istediğin konular"></textarea>
+                                </label>
+                            </div>
+                        </section>
+
+                        <section class="step-panel" data-step-panel="2">
+                            <div class="rounded-lg border border-line bg-canvas p-4">
+                                <h3 class="font-bold">Profil özeti</h3>
+                                <div id="profileSummary" class="mt-3 grid gap-2 text-sm text-muted"></div>
+                            </div>
+                            <label class="mt-5 flex cursor-pointer gap-3 rounded-lg border border-line p-4">
+                                <input id="disclaimerCheck" class="mt-1 rounded border-line text-primary focus:ring-primary" type="checkbox" required />
+                                <span class="text-sm leading-6 text-muted">
+                                    CureMenu’nün doktorumun yerine geçmediğini biliyorum. Önerileri güvenli beslenme desteği olarak kullanacağım;
+                                    emin olmadığım konularda doktoruma veya diyetisyenime danışacağım.
+                                </span>
+                            </label>
+                        </section>
+
+                        <div id="wizardError" class="hidden rounded-lg border border-danger/20 bg-dangerSoft p-3 text-sm font-semibold text-danger"></div>
+
+                        <div class="flex flex-col-reverse gap-3 border-t border-line pt-5 sm:flex-row sm:justify-between">
+                            <button id="prevBtn" type="button" class="hidden h-11 items-center justify-center rounded-lg border border-line bg-white px-5 font-bold text-primary hover:border-primary">
+                                Geri
+                            </button>
+                            <div class="flex flex-1 justify-end gap-3">
+                                <button id="nextBtn" type="button" class="h-11 rounded-lg bg-primary px-6 font-bold text-white transition hover:bg-[#007168]">
+                                    Devam et
+                                </button>
+                                <button id="submitBtn" type="submit" class="hidden h-11 rounded-lg bg-primary px-6 font-bold text-white transition hover:bg-[#007168]">
+                                    Profilimi oluştur ve başla
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const form = document.getElementById('profileWizard');
+        const panels = Array.from(document.querySelectorAll('[data-step-panel]'));
+        const dots = Array.from(document.querySelectorAll('[data-step-dot]'));
+        const nextBtn = document.getElementById('nextBtn');
+        const prevBtn = document.getElementById('prevBtn');
+        const submitBtn = document.getElementById('submitBtn');
+        const errorBox = document.getElementById('wizardError');
+        let currentStep = 0;
+
+        function parseList(value) {
+            return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
+        }
+
+        function showError(message) {
+            errorBox.textContent = message;
+            errorBox.classList.remove('hidden');
+        }
+
+        function clearError() {
+            errorBox.textContent = '';
+            errorBox.classList.add('hidden');
+        }
+
+        function updateStep() {
+            panels.forEach((panel, index) => panel.classList.toggle('active', index === currentStep));
+            dots.forEach((dot, index) => {
+                dot.classList.toggle('active', index === currentStep);
+                dot.classList.toggle('done', index < currentStep);
+            });
+            prevBtn.classList.toggle('hidden', currentStep === 0);
+            prevBtn.classList.toggle('inline-flex', currentStep !== 0);
+            nextBtn.classList.toggle('hidden', currentStep === panels.length - 1);
+            submitBtn.classList.toggle('hidden', currentStep !== panels.length - 1);
+            if (currentStep === 2) renderSummary();
+            clearError();
+        }
+
+        function validateCurrentStep() {
+            const inputs = Array.from(panels[currentStep].querySelectorAll('input, select, textarea'));
+            for (const input of inputs) {
+                if (!input.checkValidity()) {
+                    input.reportValidity();
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function renderSummary() {
+            const rows = [
+                ['Ad soyad', document.getElementById('fullName').value],
+                ['Yaş / boy / kilo', `${document.getElementById('age').value} yaş · ${document.getElementById('height').value} cm · ${document.getElementById('weight').value} kg`],
+                ['Hedef', document.getElementById('goal').value],
+                ['Hastalıklar', parseList(document.getElementById('conditions').value).join(', ') || 'Bildirilmedi'],
+                ['Alerjiler', parseList(document.getElementById('allergies').value).join(', ') || 'Bildirilmedi'],
+                ['İlaçlar', parseList(document.getElementById('medications').value).join(', ') || 'Bildirilmedi'],
+            ];
+            document.getElementById('profileSummary').innerHTML = rows.map(([label, value]) => `
+                <div class="flex items-start justify-between gap-4 border-b border-line/70 pb-2 last:border-b-0">
+                    <span>${label}</span>
+                    <strong class="text-right text-ink">${value}</strong>
+                </div>
+            `).join('');
+        }
+
+        nextBtn.addEventListener('click', () => {
+            if (!validateCurrentStep()) return;
+            currentStep = Math.min(currentStep + 1, panels.length - 1);
+            updateStep();
+        });
+
+        prevBtn.addEventListener('click', () => {
+            currentStep = Math.max(currentStep - 1, 0);
+            updateStep();
+        });
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            if (!validateCurrentStep()) return;
+            clearError();
+
+            const kullanici_adi = document.getElementById('fullName').value.trim();
+            const telefon = document.getElementById('phoneNumber').value.trim().replace(/\s/g, '');
+            const sifre = document.getElementById('password').value;
+            const submitText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Profilin hazırlanıyor...';
+
+            try {
+                const registerRes = await fetch('/api/register', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telefon, kullanici_adi, sifre }),
+                });
+                const registerData = await registerRes.json();
+                if (!registerRes.ok || !registerData.success) {
+                    throw new Error(registerData.detail || 'Kayıt yapılamadı.');
+                }
+
+                const profileBody = {
+                    kullanici_adi,
+                    ad: kullanici_adi,
+                    yas: Number(document.getElementById('age').value),
+                    cinsiyet: document.getElementById('gender').value,
+                    boy: Number(document.getElementById('height').value),
+                    kilo: Number(document.getElementById('weight').value),
+                    hedef: document.getElementById('goal').value,
+                    hastaliklar: parseList(document.getElementById('conditions').value),
+                    alerjiler: parseList(document.getElementById('allergies').value),
+                    ilaclar: parseList(document.getElementById('medications').value),
+                    genetik_hastaliklar: parseList(document.getElementById('familyHistory').value),
+                    tibbi_gecmis: document.getElementById('medicalHistory').value.trim() || null,
+                };
+
+                const profileRes = await fetch('/api/profile/save', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(profileBody),
+                });
+                const profileData = await profileRes.json();
+                if (!profileRes.ok || !profileData.success) {
+                    throw new Error(profileData.detail || 'Profil kaydedilemedi.');
+                }
+
+                localStorage.setItem('cm_telefon', telefon);
+                localStorage.setItem('cm_kullanici_adi', kullanici_adi);
+                localStorage.setItem('cm_has_profile', 'true');
+                localStorage.setItem('cm_onboarding_done', 'true');
+                localStorage.setItem('cm_disclaimer_ok', 'true');
+
+                submitBtn.textContent = 'Hazır, konsola geçiyoruz...';
+                window.setTimeout(() => {
+                    window.location.href = '/dashboard';
+                }, 500);
+            } catch (error) {
+                showError(error.message || 'Bir şey ters gitti. Lütfen tekrar deneyin.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = submitText;
+            }
+        });
+
+        updateStep();
+    </script>
+    <script src="/static/floating-assistant.js?v=2"></script>
+</body>
+</html>

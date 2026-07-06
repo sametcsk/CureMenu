@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CureMenu - Güvenli Beslenme Asistanı</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries,typography"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet" />
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#005c55",
+                        "primary-soft": "#e4f6f2",
+                        ink: "#102033",
+                        muted: "#596673",
+                        line: "#dce5e8",
+                        canvas: "#f7fbfc",
+                        surface: "#ffffff",
+                        warning: "#b77712",
+                    },
+                    fontFamily: {
+                        display: ["Outfit", "sans-serif"],
+                        body: ["Inter", "sans-serif"],
+                    },
+                    boxShadow: {
+                        soft: "0 22px 58px rgba(16,32,51,0.10)",
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        body { font-family: Inter, sans-serif; }
+        .product-visual {
+            background:
+                radial-gradient(circle at 75% 15%, rgba(228,246,242,0.95), transparent 30%),
+                linear-gradient(135deg, #005c55 0%, #102033 100%);
+        }
+        .soft-grid {
+            background-image:
+                linear-gradient(rgba(255,255,255,0.10) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.10) 1px, transparent 1px);
+            background-size: 34px 34px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+</head>
+<body class="min-h-screen bg-canvas text-ink font-body antialiased">
+    <header class="sticky top-0 z-40 border-b border-line/70 bg-white/85 backdrop-blur-xl">
+        <div class="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 md:px-8">
+            <a href="/" class="flex items-center gap-3 text-primary">
+                <span class="grid h-11 w-11 place-items-center rounded-lg bg-primary text-white shadow-soft">
+                    <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">medical_services</span>
+                </span>
+                <span>
+                    <span class="block font-display text-2xl font-bold leading-none">CureMenu</span>
+                    <span class="block text-xs font-semibold text-muted">Güvenli beslenme asistanı</span>
+                </span>
+            </a>
+            <nav class="hidden items-center gap-8 text-sm font-semibold text-muted md:flex">
+                <a class="hover:text-primary" href="#nasil">Nasıl çalışır?</a>
+                <a class="hover:text-primary" href="#guven">Güven</a>
+                <a class="hover:text-primary" href="/guven">Hakkında</a>
+            </nav>
+            <div class="flex items-center gap-3">
+                <a href="/giris" class="inline-flex h-11 items-center justify-center rounded-lg border border-line bg-white px-5 text-sm font-bold text-primary shadow-sm transition hover:border-primary">
+                    Giriş Yap
+                </a>
+                <a href="/kayit" class="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-5 text-sm font-bold text-white shadow-soft transition hover:bg-[#007168]">
+                    Kayıt Ol
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section class="relative overflow-hidden">
+            <div class="mx-auto grid min-h-[calc(100vh-80px)] max-w-7xl items-center gap-10 px-5 py-10 md:px-8 lg:grid-cols-[1fr_0.92fr]">
+                <div class="max-w-3xl">
+                    <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-line bg-white px-4 py-2 text-sm font-bold text-primary">
+                        <span class="h-2 w-2 rounded-full bg-primary"></span>
+                        Teşhis koymaz, güvenli seçim yapmana yardım eder
+                    </div>
+                    <h1 class="font-display text-5xl font-bold text-ink md:text-7xl">
+                        Sağlığını düşünerek hazırlanmış sofralar.
+                    </h1>
+                    <p class="mt-7 max-w-2xl text-lg leading-8 text-muted">
+                        CureMenu; ilaçlarını, alerjilerini, hastalık geçmişini ve hedeflerini dikkate alarak daha güvenli
+                        beslenme önerileri sunar. Riskli bir durumda seni açıkça uyarır ve doktoruna danışman gerektiğini söyler.
+                    </p>
+                    <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+                        <a href="/kayit" class="inline-flex h-12 items-center justify-center rounded-lg bg-primary px-6 font-bold text-white transition hover:bg-[#007168]">
+                            Profilimi oluştur
+                        </a>
+                        <a href="/giris" class="inline-flex h-12 items-center justify-center rounded-lg border border-line bg-white px-6 font-bold text-primary transition hover:border-primary">
+                            Zaten hesabım var
+                        </a>
+                    </div>
+                    <div class="mt-9 grid max-w-2xl gap-3 sm:grid-cols-3">
+                        <div class="rounded-lg border border-line bg-white p-4">
+                            <strong class="block text-2xl text-primary">%92</strong>
+                            <span class="text-sm text-muted">Güvenli seçim kontrolü</span>
+                        </div>
+                        <div class="rounded-lg border border-line bg-white p-4">
+                            <strong class="block text-2xl text-primary">4 adım</strong>
+                            <span class="text-sm text-muted">Profil, risk, öneri, açıklama</span>
+                        </div>
+                        <div class="rounded-lg border border-line bg-white p-4">
+                            <strong class="block text-2xl text-primary">Aile</strong>
+                            <span class="text-sm text-muted">Sonradan üye ekleme</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="product-visual soft-grid rounded-lg p-5 text-white shadow-soft">
+                    <div class="rounded-lg border border-white bg-white p-4 text-ink shadow-soft">
+                        <div class="flex items-center justify-between gap-4">
+                            <div>
+                                <p class="text-sm text-muted">Bugünün özeti</p>
+                                <h2 class="mt-1 font-display text-3xl font-bold">Ali için güvenli akşam</h2>
+                            </div>
+                            <span class="rounded-full bg-primary px-3 py-1 text-sm font-bold text-white">İyi</span>
+                        </div>
+                        <div class="mt-6 grid gap-3">
+                            <div class="rounded-lg bg-white p-4 text-ink">
+                                <div class="flex items-center justify-between">
+                                    <strong>İlaç uyumu</strong>
+                                    <span class="text-sm font-bold text-warning">Dikkat</span>
+                                </div>
+                                <p class="mt-2 text-sm text-muted">Warfarin için K vitamini yüksek besinlerde porsiyon uyarısı.</p>
+                            </div>
+                            <div class="rounded-lg bg-white p-4 text-ink">
+                                <div class="flex items-center justify-between">
+                                    <strong>Daha güvenli seçenek</strong>
+                                    <span class="text-sm font-bold text-primary">Hazır</span>
+                                </div>
+                                <p class="mt-2 text-sm text-muted">Mercimek çorbası, yoğurtlu kabak ve ızgara tavuklu salata.</p>
+                            </div>
+                            <div class="rounded-lg bg-white/95 p-4 text-ink">
+                                <div class="mb-3 flex items-center gap-2 text-sm font-bold text-primary">
+                                    <span class="material-symbols-outlined text-[18px]">support_agent</span>
+                                    CureBot
+                                </div>
+                                <p class="text-sm leading-6 text-muted">
+                                    “Sana uygun öneriyi hazırlarken ilaçlarını ve alerjilerini de kontrol ettim.”
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="nasil" class="border-y border-line bg-white py-16">
+            <div class="mx-auto max-w-7xl px-5 md:px-8">
+                <div class="max-w-2xl">
+                    <p class="text-sm font-bold text-primary">Yormayan akış</p>
+                    <h2 class="mt-3 font-display text-4xl font-bold">Önce seni tanır, sonra güvenli öneri hazırlar.</h2>
+                </div>
+                <div class="mt-8 grid gap-4 md:grid-cols-4">
+                    <article class="rounded-lg border border-line p-5">
+                        <span class="material-symbols-outlined text-primary">person</span>
+                        <h3 class="mt-4 font-bold">Profil</h3>
+                        <p class="mt-2 text-sm leading-6 text-muted">Yaş, boy, kilo, hedef ve sağlık geçmişini adım adım alır.</p>
+                    </article>
+                    <article class="rounded-lg border border-line p-5">
+                        <span class="material-symbols-outlined text-primary">medication</span>
+                        <h3 class="mt-4 font-bold">İlaç ve alerji</h3>
+                        <p class="mt-2 text-sm leading-6 text-muted">Öneri vermeden önce kritik besin risklerini kontrol eder.</p>
+                    </article>
+                    <article class="rounded-lg border border-line p-5">
+                        <span class="material-symbols-outlined text-primary">restaurant</span>
+                        <h3 class="mt-4 font-bold">Öneri</h3>
+                        <p class="mt-2 text-sm leading-6 text-muted">Sana ve ailene uygun seçenekleri sade dille sunar.</p>
+                    </article>
+                    <article class="rounded-lg border border-line p-5">
+                        <span class="material-symbols-outlined text-primary">health_and_safety</span>
+                        <h3 class="mt-4 font-bold">Uyarı</h3>
+                        <p class="mt-2 text-sm leading-6 text-muted">Belirsizlik veya yüksek riskte doktora danışmanı hatırlatır.</p>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section id="guven" class="py-16">
+            <div class="mx-auto grid max-w-7xl gap-8 px-5 md:px-8 lg:grid-cols-[0.9fr_1.1fr]">
+                <div>
+                    <p class="text-sm font-bold text-primary">Güven sınırı net</p>
+                    <h2 class="mt-3 font-display text-4xl font-bold">Doktorun yerine geçmez. Daha iyi soru sormana yardım eder.</h2>
+                </div>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="rounded-lg border border-line bg-white p-5">
+                        <strong>Teşhis yok</strong>
+                        <p class="mt-2 text-sm leading-6 text-muted">CureMenu tanı koymaz ve tedavi planı değiştirmez.</p>
+                    </div>
+                    <div class="rounded-lg border border-line bg-white p-5">
+                        <strong>Güvenli yönlendirme</strong>
+                        <p class="mt-2 text-sm leading-6 text-muted">Riskli durumlarda “doktoruna danış” çizgisini açık tutar.</p>
+                    </div>
+                    <div class="rounded-lg border border-line bg-white p-5">
+                        <strong>Aile modu</strong>
+                        <p class="mt-2 text-sm leading-6 text-muted">Ana profil oluşturulduktan sonra aile üyeleri eklenebilir.</p>
+                    </div>
+                    <div class="rounded-lg border border-line bg-white p-5">
+                        <strong>Her yerde CureBot</strong>
+                        <p class="mt-2 text-sm leading-6 text-muted">Sağ alttaki yardımcı tüm özelliklerde sana yol gösterir.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-line bg-white py-8">
+        <div class="mx-auto flex max-w-7xl flex-col gap-4 px-5 text-sm text-muted md:flex-row md:items-center md:justify-between md:px-8">
+            <span>CureMenu karar destek ürünüdür; tıbbi teşhis veya tedavi sunmaz.</span>
+            <div class="flex gap-5">
+                <a class="hover:text-primary" href="/guven">Güven & Hakkında</a>
+                <a class="hover:text-primary" href="/giris">Giriş / Kayıt</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/static/floating-assistant.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+define user ask for diagnosis
+  "I have a headache and fever, what disease do I have?"
+  "Can you diagnose my stomach pain?"
+  "Do I have diabetes?"
+
+define user ask for unauthorized treatment
+  "How can I cure cancer at home?"
+  "What is the best alternative medicine for heart attack?"
+  "Suggest a herbal remedy instead of my chemotherapy."
+
+define bot refuse diagnosis
+  "Ben bir doktor değilim, tıbbi bir tanı koyamam. Lütfen teşhis ve tedavi için uzman bir hekime veya hastaneye başvurun."
+
+define bot refuse unauthorized treatment
+  "Tıbbi güvenliğiniz (Therapeutic Hallucination Guardrail) gereği, bilimsel olarak kanıtlanmamış alternatif tedaviler veya ev yapımı kürler öneremem. Beslenme önerilerimiz yalnızca doktorunuzun çizdiği sınırlar içindedir."
+
+define flow check medical safety
+  user ask for diagnosis
+  bot refuse diagnosis
+  stop
+
+  user ask for unauthorized treatment
+  bot refuse unauthorized treatment
+  stop

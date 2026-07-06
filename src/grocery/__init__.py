@@ -1,0 +1,2 @@
+"""Smart Grocery capability modules."""
+

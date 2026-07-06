@@ -1,0 +1,9 @@
+[project]
+name = "curemenu"
+version = "1.0.0"
+description = "Kişiselleştirilmiş beslenme ve karar motoru"
+requires-python = ">=3.11,<3.14"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

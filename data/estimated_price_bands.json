@@ -1,0 +1,47 @@
+{
+  "version": "estimated_price_bands:v1",
+  "channel_name": "Kategori tahmini",
+  "disclaimer": "Stok ve fiyat bilgisi dogrulanmadi; markete gore degisebilir.",
+  "default": {
+    "min_price": 25.0,
+    "max_price": 70.0,
+    "quantity": "1 paket/adet"
+  },
+  "categories": {
+    "protein": {
+      "min_price": 80.0,
+      "max_price": 190.0,
+      "quantity": "haftalik plana gore tahmini"
+    },
+    "sebze_meyve": {
+      "min_price": 25.0,
+      "max_price": 80.0,
+      "quantity": "haftalik plana gore tahmini"
+    },
+    "sut_urunleri": {
+      "min_price": 35.0,
+      "max_price": 100.0,
+      "quantity": "haftalik plana gore tahmini"
+    },
+    "bakliyat": {
+      "min_price": 35.0,
+      "max_price": 90.0,
+      "quantity": "haftalik plana gore tahmini"
+    },
+    "tahil": {
+      "min_price": 25.0,
+      "max_price": 95.0,
+      "quantity": "haftalik plana gore tahmini"
+    },
+    "yag": {
+      "min_price": 90.0,
+      "max_price": 260.0,
+      "quantity": "haftalik plana gore tahmini"
+    },
+    "temel_gida": {
+      "min_price": 20.0,
+      "max_price": 85.0,
+      "quantity": "haftalik plana gore tahmini"
+    }
+  }
+}

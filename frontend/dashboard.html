@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html class="light" lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CureMenu - Klinik Beslenme Konsolu</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries,typography"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet"/>
+<script>
+tailwind.config={darkMode:"class",theme:{extend:{
+colors:{primary:"#005f57","on-primary":"#ffffff","primary-container":"#e6f5f2","on-primary-container":"#003d39",secondary:"#2f6f9f","on-secondary":"#ffffff","secondary-container":"#eef6fb","on-secondary-container":"#1d4e70",background:"#f6faf9","on-background":"#102033",surface:"#ffffff","on-surface":"#102033","surface-container-low":"#f6faf9","surface-container-lowest":"#ffffff","surface-container":"#edf5f3","surface-container-high":"#e2ece9","on-surface-variant":"#607470","outline":"#6d7f7b","outline-variant":"#d9e6e3",error:"#ba1a1a","on-error":"#ffffff","error-container":"#ffdad6","on-error-container":"#93000a",warning:"#9b7418","warning-container":"#fff5d8"},
+fontFamily:{display:["Outfit"],body:["Inter"]},
+fontSize:{}
+}}}
+</script>
+<style>
+html{scroll-behavior:smooth}
+body{
+  font-family:Inter,system-ui,sans-serif;
+  color:#102033;
+  background-color: #f6faf9;
+  background-image: radial-gradient(circle at top right, rgba(0, 95, 87, 0.05), transparent 40%),
+                    radial-gradient(circle at bottom left, rgba(47, 111, 159, 0.05), transparent 40%);
+  background-attachment: fixed;
+}
+.app-shell{display:block;min-height:100vh}
+.app-sidebar{
+  background:rgba(255,255,255,.80);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right:1px solid rgba(255,255,255,0.5);
+  box-shadow: 4px 0 24px rgba(16,32,51,.02);
+}
+.brand-mark{border-radius:10px;background:linear-gradient(135deg, #005f57 0%, #004b45 100%);color:white;box-shadow:0 4px 12px rgba(0,95,87,0.3);}
+.tab-btn{transition:all .3s cubic-bezier(0.16, 1, 0.3, 1);border-left:4px solid transparent;border-radius:0 12px 12px 0;}
+.tab-btn:hover{background:rgba(238,248,245,0.7);color:#005f57;transform:translateX(4px)}
+.tab-btn.active{background:rgba(230,245,242,0.9);color:#005f57;border-left-color:#005f57;font-weight:800;box-shadow:inset 2px 0 10px rgba(0,95,87,0.03);}
+.tab-content{display:none; animation: fadeIn 0.4s ease-out forwards;}
+.tab-content.active{display:block}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.card{
+  background:rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border:1px solid rgba(255, 255, 255, 0.6);
+  border-radius:16px;
+  box-shadow:0 12px 40px rgba(16,32,51,.04);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
+}
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 48px rgba(16,32,51,.08);
+}
+.quiet-card{background:rgba(249, 252, 251, 0.7);backdrop-filter: blur(10px);border:1px solid rgba(255,255,255,0.4);border-radius:12px}
+.soft-band{background:linear-gradient(135deg,#fff 0%,#f0faf7 60%,#fff8f5 100%);border:1px solid rgba(0,95,87,.12);border-radius:12px}
+.btn-primary{
+  background:linear-gradient(135deg, #005f57 0%, #004b45 100%);
+  color:#fff;
+  border-radius:999px;
+  transition:all .3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow:0 8px 20px rgba(0,95,87,.2);
+}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,95,87,.35)}
+.btn-secondary{
+  background:rgba(255,255,255,0.9);
+  backdrop-filter: blur(8px);
+  color:#005f57;
+  border:1px solid rgba(0,95,87,.22);
+  border-radius:999px;
+  transition:all .3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-secondary:hover{background:#f1fbf8;border-color:rgba(0,95,87,.4);transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,95,87,.1);}
+.btn-icon{width:40px;height:40px;border-radius:10px;border:1px solid rgba(217,230,227,0.8);background:rgba(255,255,255,0.8);backdrop-filter:blur(4px);color:#005f57;display:grid;place-items:center;transition:all .3s ease;}
+.btn-icon:hover {background:#f1fbf8; transform:translateY(-2px) rotate(3deg); box-shadow:0 4px 12px rgba(0,95,87,.1);}
+.btn-primary:active,.btn-secondary:active,.btn-icon:active,.action-card:active{transform:scale(.96)}
+.action-card{background:rgba(255,255,255,0.9);backdrop-filter:blur(8px);border:1px solid #d9e6e3;border-radius:12px;transition:all .3s cubic-bezier(0.16, 1, 0.3, 1)}
+.action-card:hover{transform:translateY(-3px);box-shadow:0 12px 24px rgba(16,32,51,.06);border-color:rgba(0,95,87,.28)}
+.metric-label{font-size:11px;font-weight:800;text-transform:uppercase;color:#607470;letter-spacing:.05em}
+.status-pill{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 12px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.02em;backdrop-filter:blur(4px);}
+.status-ok{background:rgba(230,245,242,0.8);color:#005f57;border:1px solid rgba(0,95,87,.1)}
+.status-warn{background:rgba(255,245,216,0.8);color:#9b7418;border:1px solid rgba(155,116,24,.1)}
+.status-risk{background:rgba(255,218,214,0.8);color:#93000a;border:1px solid rgba(147,0,10,.1)}
+.status-info{background:rgba(238,246,251,0.8);color:#1d4e70;border:1px solid rgba(29,78,112,.1)}
+.chat-scroll::-webkit-scrollbar{width:6px}.chat-scroll::-webkit-scrollbar-thumb{background:rgba(189,201,198,0.6);border-radius:20px}
+.chat-scroll::-webkit-scrollbar-thumb:hover{background:rgba(189,201,198,0.9)}
+.loading-dots span{animation:blink 1.4s infinite both}.loading-dots span:nth-child(2){animation-delay:.2s}.loading-dots span:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.25;transform:scale(0.8)}40%{opacity:1;transform:scale(1.1)}}
+@media(max-width:900px){.app-shell{display:block}.app-sidebar{display:none}.mobile-nav{display:grid}.desktop-title{display:none}}
+.app-sidebar, main { transition: all 0.3s ease; }
+.is-collapsed .app-sidebar { width: 88px !important; padding-left: 12px; padding-right: 12px; }
+.is-collapsed main { margin-left: 88px !important; }
+.is-collapsed .sidebar-text, .is-collapsed .brand-text, .is-collapsed .user-info { display: none !important; }
+.is-collapsed .tab-btn { justify-content: center; padding: 0; border-radius: 12px; }
+.is-collapsed .tab-btn .material-symbols-outlined { margin: 0; font-size: 28px; }
+.is-collapsed .sidebar-bottom-link { justify-content: center; padding: 0; }
+header button[onclick="openCureBotWidget()"]{display:none!important}
+</style>
+</head>
+<body>
+<div class="app-shell">
+<aside class="app-sidebar fixed left-0 top-0 hidden h-screen w-[280px] flex-col p-5 md:flex z-50">
+  <div class="flex items-center gap-3 border-b border-outline-variant pb-5 overflow-hidden">
+    <span class="brand-mark material-symbols-outlined grid h-11 w-11 min-w-[44px] place-items-center text-3xl" style="font-variation-settings:'FILL' 1">medical_services</span>
+    <div class="brand-text">
+      <h1 class="font-display text-3xl font-extrabold text-primary">CureMenu</h1>
+      <p class="text-xs font-bold uppercase tracking-wide text-on-surface-variant">Clinical Nutrition AI</p>
+    </div>
+  </div>
+  <nav class="mt-6 flex flex-1 flex-col gap-1 overflow-x-hidden" id="sideNav">
+    <button type="button" data-tab="dashboard" onclick="switchTab('dashboard')" class="tab-btn active flex min-h-12 items-center gap-3 rounded-r-lg px-4 text-left"><span class="material-symbols-outlined">home</span><span class="sidebar-text">Ana Sayfa</span></button>
+    <button type="button" data-tab="profile" onclick="switchTab('profile')" class="tab-btn flex min-h-12 items-center gap-3 rounded-r-lg px-4 text-left text-on-surface-variant"><span class="material-symbols-outlined">person</span><span class="sidebar-text">Sağlık Profilim</span></button>
+    <button type="button" data-tab="tahlil" onclick="switchTab('tahlil')" class="tab-btn flex min-h-12 items-center gap-3 rounded-r-lg px-4 text-left text-on-surface-variant"><span class="material-symbols-outlined">vaccines</span><span class="sidebar-text">Tahlillerim</span></button>
+    <button type="button" data-tab="plan" onclick="switchTab('plan')" class="tab-btn flex min-h-12 items-center gap-3 rounded-r-lg px-4 text-left text-on-surface-variant"><span class="material-symbols-outlined">restaurant_menu</span><span class="sidebar-text">Haftalık Plan</span></button>
+    <button type="button" data-tab="tarayici" onclick="switchTab('tarayici')" class="tab-btn flex min-h-12 items-center gap-3 rounded-r-lg px-4 text-left text-on-surface-variant"><span class="material-symbols-outlined">document_scanner</span><span class="sidebar-text">Menü Analizi</span></button>
+    <button type="button" data-tab="buzdolabi" onclick="switchTab('buzdolabi')" class="tab-btn flex min-h-12 items-center gap-3 rounded-r-lg px-4 text-left text-on-surface-variant"><span class="material-symbols-outlined">kitchen</span><span class="sidebar-text">Buzdolabı</span></button>
+    <button type="button" data-tab="governance" onclick="switchTab('governance')" class="hidden tab-btn mt-3 flex min-h-12 items-center gap-3 rounded-r-lg px-4 text-left text-on-surface-variant" id="navGovernanceBtn"><span class="material-symbols-outlined">monitoring</span><span class="sidebar-text">İzlenebilirlik</span></button>
+    <button type="button" data-tab="gecmis" onclick="switchTab('gecmis')" class="hidden tab-btn flex min-h-12 items-center gap-3 rounded-r-lg px-4 text-left text-on-surface-variant"><span class="material-symbols-outlined">history</span><span class="sidebar-text">Geçmiş</span></button>
+  </nav>
+  <a href="/guven" class="sidebar-bottom-link mb-4 flex min-h-12 items-center gap-3 rounded-lg px-4 font-bold text-on-surface-variant transition hover:bg-primary-container hover:text-primary"><span class="material-symbols-outlined">health_and_safety</span><span class="sidebar-text">Güven ve Hakkında</span></a>
+  <div class="quiet-card flex items-center gap-3 p-3 overflow-hidden">
+    <div class="grid h-10 w-10 min-w-[40px] place-items-center rounded-lg bg-primary-container text-primary"><span class="material-symbols-outlined">person</span></div>
+    <div class="user-info min-w-0"><p class="truncate font-bold" id="sidebarUser">Kullanıcı</p><p class="truncate text-xs text-on-surface-variant" id="sidebarPhone">-</p></div>
+  </div>
+</aside>
+
+<main class="min-h-screen pb-24 md:ml-[280px] md:pb-0">
+<header class="sticky top-0 z-40 border-b border-outline-variant bg-white/90 backdrop-blur-xl">
+  <div class="flex h-16 items-center justify-between gap-4 px-4 md:px-10">
+    <div class="flex items-center gap-3">
+      <button onclick="toggleSidebar()" class="btn-icon hidden md:grid border-none shadow-none"><span class="material-symbols-outlined">menu_open</span></button>
+      <span class="brand-mark material-symbols-outlined grid h-9 w-9 place-items-center text-2xl md:hidden">medical_services</span>
+      <div>
+        <h2 class="desktop-title font-display text-2xl font-extrabold" id="pageTitle">Ana Sayfa</h2>
+        <p class="hidden text-sm text-on-surface-variant md:block" id="pageSubtitle">Kanıta dayalı öneri, güvenlik kontrolü ve izlenebilir karar kaydı.</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="button" onclick="logout()" class="btn-secondary px-4 py-2 font-bold">Çıkış</button>
+    </div>
+  </div>
+</header>
+
+<div class="mx-auto w-full max-w-[1500px] px-4 py-6 md:px-10 md:py-8">
+<div id="tab-dashboard" class="tab-content active">
+  <section class="soft-band mb-6 p-6 md:p-10">
+    <div class="max-w-4xl">
+      <span class="status-pill status-ok"><span class="material-symbols-outlined text-[16px]">verified_user</span>Profil bilgilerine göre kontrol edilir</span>
+      <h2 class="mt-5 font-display text-4xl font-extrabold leading-tight md:text-5xl lg:text-6xl text-primary">Bugün neye ihtiyacın var?</h2>
+      <p class="mt-4 text-lg leading-8 text-on-surface-variant">CureMenu beslenme önerilerini profil, tahlil, alerji ve ilaç bilgilerinle birlikte değerlendirir. Tanı koymaz; gerektiğinde sağlık profesyoneline yönlendirir.</p>
+      <div class="mt-8 flex flex-wrap gap-4">
+        <button type="button" onclick="switchTab('curebot')" class="btn-primary px-6 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">chat</span>CureBot'a sor</button>
+        <button type="button" onclick="switchTab('plan')" class="btn-secondary px-6 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">calendar_month</span>Haftalık plan</button>
+        <button type="button" onclick="switchTab('profile')" class="btn-secondary px-6 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">person</span>Profilimi gör</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-[0.8fr_1.2fr] hidden">
+    <aside class="card p-6">
+      <p class="metric-label mb-3">Son klinik karar</p>
+      <div id="dashboardLastDecision" class="text-on-surface-variant font-medium">Henüz karar kaydı yok.</div>
+    </aside>
+    <div class="card p-6" id="dashboardMetricGrid">
+      <p class="metric-label mb-3">İzlenebilirlik özeti</p>
+      <div class="text-on-surface-variant font-medium">Yükleniyor...</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card p-6">
+      <div class="mb-5 flex items-center justify-between gap-3"><div><h3 class="font-display text-2xl font-extrabold">Günlük sağlık özeti</h3><p class="text-sm text-on-surface-variant">Profil ve son işlemlerden derlenen görünüm.</p></div><button class="btn-icon" onclick="loadDashboardOverview(true)" title="Yenile"><span class="material-symbols-outlined">refresh</span></button></div>
+      <div id="dailySummaryGrid" class="grid gap-4 md:grid-cols-2 lg:grid-cols-4"></div>
+    </div>
+  </section>
+</div>
+
+<div id="tab-curebot" class="tab-content">
+  <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">CureBot</h2><p class="mt-2 max-w-3xl text-on-surface-variant">Beslenme, menü, tahlil ve ilaç-besin uyumu hakkında destek al. Yanıtlar tedavi yerine geçmez.</p></div>
+  <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
+    <section class="card flex min-h-[640px] flex-col overflow-hidden">
+      <div class="border-b border-outline-variant p-4 flex flex-wrap items-center justify-between gap-3">
+        <select id="chatTarget" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-2 text-sm"></select>
+        <button onclick="stopGeneration()" class="btn-secondary px-4 py-2 text-sm font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">stop_circle</span>Durdur</button>
+      </div>
+      <div id="chatMessages" class="chat-scroll flex-1 space-y-4 overflow-y-auto bg-surface-container-low p-4">
+        <div class="max-w-2xl rounded-lg border border-outline-variant bg-white p-4 text-on-surface-variant">
+          Merhaba, ben CureBot. Bugün ne yesem, menüden ne seçsem ya da tahlilimde nelere dikkat etsem diye birlikte bakabiliriz.
+        </div>
+      </div>
+      <div class="border-t border-outline-variant bg-white p-4">
+        <p id="chatDisclaimer" class="mb-2 text-xs text-on-surface-variant">Tedavi yerine geçmez; doktorunuza danışın.</p>
+        <div class="flex gap-2">
+          <input id="chatInput" class="min-w-0 flex-1 rounded-full border-outline-variant bg-surface-container-low px-4 py-3" placeholder="CureBot'a bir şey sor..." onkeydown="if(event.key==='Enter') sendChat()"/>
+          <button onclick="sendChat()" class="btn-primary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">send</span>Gönder</button>
+          <button id="micBtn" onclick="toggleVoiceRecognition()" class="btn-icon" title="Sesle yaz"><span id="micIcon" class="material-symbols-outlined">mic</span></button>
+        </div>
+      </div>
+    </section>
+    <aside class="space-y-4">
+      <section class="card p-5 hidden" id="governanceSection">
+        <h3 class="font-display text-2xl font-bold">Bu öneri neden verildi?</h3>
+        <div id="chatGovernancePanel" class="mt-4 text-sm text-on-surface-variant">
+          Bir yanıt oluşturulduğunda karar kaydı, operasyonel güven ve tahmini risk özeti burada görünür.
+        </div>
+      </section>
+      <section class="card p-5">
+        <h3 class="font-display text-xl font-bold">Hızlı başlangıç</h3>
+        <div class="mt-3 grid gap-2">
+          <button class="action-card p-3 text-left font-bold" onclick="document.getElementById('chatInput').value='Bugün profilime uygun ne yiyebilirim?';sendChat()">Bugün ne yiyebilirim?</button>
+          <button class="action-card p-3 text-left font-bold" onclick="document.getElementById('chatInput').value='Kullandığım ilaçlara göre hangi yiyeceklere dikkat etmeliyim?';sendChat()">İlaç uyumuna bak</button>
+          <button class="action-card p-3 text-left font-bold" onclick="document.getElementById('chatInput').value='Tahlillerimi dikkate alarak beslenmede nelere dikkat etmeliyim?';sendChat()">Tahlilime göre sor</button>
+        </div>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<div id="tab-profile" class="tab-content">
+  <div class="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div><h2 class="font-display text-4xl font-extrabold">Sağlık Profilim</h2><p class="mt-2 text-on-surface-variant">Hastalık, alerji, ilaç ve hedef bilgilerini burada yönet.</p></div>
+    <div class="flex gap-2">
+      <button onclick="showOnboarding()" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">edit</span>Bilgilerimi Güncelle</button>
+      <button onclick="document.getElementById('addModal').classList.remove('hidden')" class="btn-primary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">person_add</span>Aile profili ekle</button>
+    </div>
+  </div>
+  <div id="healthProfileSummary" class="mb-6 grid gap-4 xl:grid-cols-4"></div>
+  
+  <div class="grid gap-6 xl:grid-cols-[1fr_1fr] mb-6">
+    <div class="card p-5"><h3 class="mb-4 font-display text-2xl font-bold">Ben ve ailem</h3><div id="familyGrid" class="grid gap-4 md:grid-cols-1"></div></div>
+    <div class="card p-5"><h3 class="font-display text-2xl font-bold">İlaçlarım & Etkileşimler</h3><div id="medicationRiskPanel" class="mt-4 space-y-3"></div><div id="medicationList" class="mt-4 space-y-3 hidden"></div></div>
+  </div>
+</div>
+
+<div id="tab-tahlil" class="tab-content">
+  <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">Tahlillerim</h2><p class="mt-2 max-w-3xl text-on-surface-variant">Kan testi raporlarını yükle, biyomarker değişimini takip et ve beslenme analizi al.</p></div>
+  <section class="card p-5 mb-6">
+    <h3 class="font-display text-2xl font-bold">Biyomarker Değişim Grafiği</h3>
+    <p class="mt-2 text-sm text-on-surface-variant mb-4">Aynı biyomarker için geçmiş testleriniz arasındaki değişimi gösterir. (Sadece kantitatif veriler içeren yeni tahliller grafiğe yansır.)</p>
+    <div class="relative w-full h-72">
+      <canvas id="tahlilChart"></canvas>
+    </div>
+  </section>
+  <div class="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+    <section class="card p-5">
+      <h3 class="font-display text-2xl font-bold">PDF yükle</h3>
+      <p class="mt-2 text-sm text-on-surface-variant">Biyomarker listesi AI tarafından otomatik çıkarılır ve grafiğe eklenir.</p>
+      <select id="tahlilTarget" class="mt-4 w-full rounded-lg border-outline-variant bg-surface-container-low px-4 py-3"></select>
+      <label class="mt-4 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-primary/30 bg-primary-container/30 px-6 py-10 text-center text-primary transition hover:bg-primary-container">
+        <span class="material-symbols-outlined text-5xl">upload_file</span><span class="font-bold">Tahlil PDF'i seç</span>
+        <input type="file" id="healthRecordInput" accept=".pdf" class="hidden" onchange="uploadHealthRecord(event)"/>
+      </label>
+      <div id="healthRecordResult" class="mt-4"></div>
+    </section>
+    <section class="card p-5"><h3 class="font-display text-2xl font-bold">Yüklenen tahliller</h3><div id="labHistoryList" class="mt-4 space-y-3"></div></section>
+  </div>
+</div>
+
+<div id="tab-plan" class="tab-content">
+  <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">Haftalık Plan</h2><p class="mt-2 text-on-surface-variant">Profil ve aile bilgilerine göre kontrollü öğün planı oluştur.</p></div>
+  <div class="mb-5 flex flex-wrap gap-3"><select id="planTarget" class="rounded-lg border-outline-variant bg-white px-4 py-3"></select><button onclick="generatePlan()" class="btn-primary px-6 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">auto_awesome</span>Planı oluştur</button><button onclick="requestSnack()" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">nutrition</span>Atıştırmalık Öner</button></div>
+  <div id="planResult" class="card min-h-[220px] p-6"><div class="py-12 text-center text-on-surface-variant"><span class="material-symbols-outlined mb-3 block text-5xl opacity-40">calendar_month</span>Plan oluşturmak için yukarıdaki butonu kullan.</div></div>
+</div>
+
+<div id="tab-tarayici" class="tab-content">
+  <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">Menü Analizi</h2><p class="mt-2 text-on-surface-variant">Restoran menüsünü bağlantı, QR veya fotoğrafla profil bilgilerine göre değerlendir.</p></div>
+  <section class="card p-5">
+    <div class="grid gap-3 md:grid-cols-[1fr_180px_auto]"><input id="menuUrlInput" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3" placeholder="https://ornekrestoran.com/menu" type="url"/><select id="menuTarget" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3"></select><button onclick="scanMenu()" class="btn-primary px-6 py-3 font-bold">Linki tara</button></div>
+    <div class="mt-5 flex flex-wrap gap-3"><label class="btn-secondary cursor-pointer px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">photo_camera</span>Menü fotoğrafı<input type="file" id="menuImageInput" accept="image/*" class="hidden" onchange="scanMenuImage(this)"/></label><button onclick="startQRScanner()" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">qr_code_scanner</span>QR oku</button></div>
+    <div id="qr-reader" style="width:100%;max-width:420px;display:none" class="mt-4 overflow-hidden rounded-lg border border-outline-variant bg-white"></div>
+  </section>
+  <div id="menuScanResult" class="mt-6"></div>
+</div>
+
+<div id="tab-buzdolabi" class="tab-content">
+  <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">Buzdolabı</h2><p class="mt-2 text-on-surface-variant">Evdeki malzemeleri yükle, profil bilgilerine uygun tarif fikri al.</p></div>
+  <section class="card p-5"><select id="fridgeTarget" class="w-full rounded-lg border-outline-variant bg-surface-container-low px-4 py-3"></select><label class="mt-4 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-primary/30 bg-primary-container/30 px-6 py-10 text-center text-primary transition hover:bg-primary-container"><span class="material-symbols-outlined text-5xl">add_a_photo</span><span class="font-bold">Fotoğraf yükle</span><input type="file" id="fridgeImageInput" accept="image/*" class="hidden" onchange="handleFridgeImage(event)"/></label></section>
+  <div id="fridgeScanResult" class="mt-6"></div>
+</div>
+
+<div id="tab-governance" class="tab-content">
+  <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">İzlenebilirlik / Governance</h2><p class="mt-2 max-w-3xl text-on-surface-variant">Teknik inceleme ve denetim için karar kayıtları, operasyonel skorlar ve olay zinciri. Bu metrikler klinik doğruluk kanıtı değildir.</p></div>
+  <div id="kpiSummaryGrid" class="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4"></div>
+  <div class="grid gap-6 xl:grid-cols-[1fr_390px]"><section class="card p-5"><h3 class="mb-4 font-display text-2xl font-bold">Son karar kayıtları</h3><div id="clinicalDecisionList" class="space-y-3"></div></section><section class="card p-5"><h3 class="mb-4 font-display text-2xl font-bold">Kontrol olayları</h3><div id="kpiEventBreakdown" class="space-y-3"></div></section></div>
+</div>
+
+<div id="tab-gecmis" class="tab-content">
+  <div class="mb-6 flex items-center justify-between gap-4"><div><h2 class="font-display text-4xl font-extrabold">Geçmiş</h2><p class="mt-2 text-on-surface-variant">Menü, tahlil, plan ve CureBot işlemleri.</p></div><button onclick="loadHistory(true)" class="btn-icon" title="Yenile"><span class="material-symbols-outlined">refresh</span></button></div>
+  <div id="historyGrid" class="space-y-4"></div><div class="mt-6 hidden justify-center" id="historyPagination"><button onclick="loadMoreHistory()" class="btn-secondary px-6 py-2 font-bold">Daha fazla göster</button></div>
+</div>
+</div>
+</main>
+</div>
+
+<div class="hidden fixed inset-0 z-[100] items-center justify-center p-4" id="addModal">
+<div class="absolute inset-0 bg-on-background/50 backdrop-blur-sm" onclick="document.getElementById('addModal').classList.add('hidden')"></div>
+<div class="card relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden">
+<div class="flex items-center justify-between border-b border-outline-variant p-5"><h3 class="font-display text-2xl font-bold">Yeni kişi ekle</h3><button onclick="document.getElementById('addModal').classList.add('hidden')" class="btn-icon"><span class="material-symbols-outlined">close</span></button></div>
+<div class="space-y-4 overflow-y-auto p-5">
+<div><label class="mb-1 block font-bold">Ad soyad</label><input id="m_ad" class="w-full rounded-lg border-outline-variant p-3" placeholder="Örn. Ayşe Yılmaz" type="text"/></div>
+<div class="grid grid-cols-3 gap-3"><div><label class="mb-1 block font-bold">Yaş</label><input id="m_yas" class="w-full rounded-lg border-outline-variant p-3" type="number"/></div><div><label class="mb-1 block font-bold">Boy</label><input id="m_boy" value="170" class="w-full rounded-lg border-outline-variant p-3" type="number"/></div><div><label class="mb-1 block font-bold">Kilo</label><input id="m_kilo" value="70" class="w-full rounded-lg border-outline-variant p-3" type="number"/></div></div>
+<div><label class="mb-1 block font-bold">Cinsiyet</label><select id="m_cinsiyet" class="w-full rounded-lg border-outline-variant p-3"><option value="erkek">Erkek</option><option value="kadın">Kadın</option></select></div>
+<div><label class="mb-1 block font-bold">Beslenme hedefi</label><select id="m_hedef" class="w-full rounded-lg border-outline-variant p-3"><option value="Sağlıklı Yaşam (Genel)">Sağlıklı Yaşam (Genel)</option><option value="Kilo Verme / Yağ Yakımı">Kilo Verme / Yağ Yakımı</option><option value="Kas Kazanımı / Sporcu Beslenmesi">Kas Kazanımı / Sporcu Beslenmesi</option><option value="Hamilelik / Emzirme Beslenmesi">Hamilelik / Emzirme Beslenmesi</option><option value="Sindirim / Bağırsak Sağlığı">Sindirim / Bağırsak Sağlığı</option><option value="Çocuk Gelişimi">Çocuk Gelişimi</option></select></div>
+<div><label class="mb-1 block font-bold">Hastalıklar</label><input id="m_hastaliklar" class="w-full rounded-lg border-outline-variant p-3" placeholder="diyabet, hipertansiyon" type="text"/></div>
+<div><label class="mb-1 block font-bold">Alerjiler</label><input id="m_alerjiler" class="w-full rounded-lg border-outline-variant p-3" placeholder="fıstık, gluten" type="text"/></div>
+<div><label class="mb-1 block font-bold">Kullandığı ilaçlar</label><input id="m_ilaclar" class="w-full rounded-lg border-outline-variant p-3" placeholder="metformin, lisinopril" type="text"/></div>
+<div><label class="mb-1 block font-bold">Genetik geçmiş</label><textarea id="m_genetik" class="w-full rounded-lg border-outline-variant p-3" rows="2"></textarea></div>
+<div><label class="mb-1 block font-bold">Tıbbi geçmiş</label><textarea id="m_tibbi" class="w-full rounded-lg border-outline-variant p-3" rows="2"></textarea></div>
+</div>
+<div class="flex justify-end gap-3 border-t border-outline-variant p-5"><button onclick="document.getElementById('addModal').classList.add('hidden')" class="btn-secondary px-5 py-2 font-bold">Vazgeç</button><button onclick="addMember()" class="btn-primary px-5 py-2 font-bold">Kaydet</button></div>
+</div>
+</div>
+
+<div class="hidden fixed inset-0 z-[110] items-center justify-center p-4" id="onboardingModal">
+<div class="absolute inset-0 bg-on-background/60 backdrop-blur-sm"></div>
+<div class="card relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden">
+<div class="flex items-start justify-between gap-4 border-b border-outline-variant bg-primary-container p-5"><div><h3 class="font-display text-2xl font-bold text-primary">CureMenu'ye hoş geldin</h3><p class="mt-1 text-sm text-on-surface-variant">Birkaç bilgiyle önerileri daha dikkatli hale getirebiliriz.</p></div><button onclick="document.getElementById('onboardingModal').classList.add('hidden')" class="btn-icon text-primary"><span class="material-symbols-outlined">close</span></button></div>
+<div class="space-y-4 overflow-y-auto p-5">
+<div><label class="mb-1 block font-bold">Adınız</label><input id="ob_ad" class="w-full rounded-lg border-outline-variant p-3" type="text"/></div>
+<div class="grid grid-cols-2 gap-3"><div><label class="mb-1 block font-bold">Yaş</label><input id="ob_yas" class="w-full rounded-lg border-outline-variant p-3" type="number" value="35"/></div><div><label class="mb-1 block font-bold">Cinsiyet</label><select id="ob_cinsiyet" class="w-full rounded-lg border-outline-variant p-3"><option value="kadın">Kadın</option><option value="erkek">Erkek</option></select></div></div>
+<div><label class="mb-1 block font-bold">Beslenme hedefi</label><select id="ob_hedef" class="w-full rounded-lg border-outline-variant p-3"><option value="Sağlıklı Yaşam (Genel)">Sağlıklı Yaşam (Genel)</option><option value="Kilo Verme / Yağ Yakımı">Kilo Verme / Yağ Yakımı</option><option value="Kas Kazanımı / Sporcu Beslenmesi">Kas Kazanımı / Sporcu Beslenmesi</option><option value="Hamilelik / Emzirme Beslenmesi">Hamilelik / Emzirme Beslenmesi</option><option value="Sindirim / Bağırsak Sağlığı">Sindirim / Bağırsak Sağlığı</option></select></div>
+<div><label class="mb-2 block font-bold">Hastalıklar</label><div id="ob_hastalik_chips" class="mb-2 flex flex-wrap gap-2"></div><input id="ob_hastaliklar" class="w-full rounded-lg border-outline-variant p-3" placeholder="diyabet, hipertansiyon..." type="text"/></div>
+<div><label class="mb-1 block font-bold">Alerjiler</label><input id="ob_alerjiler" class="w-full rounded-lg border-outline-variant p-3" type="text"/></div>
+<div><label class="mb-2 block font-bold">Kullandığı ilaçlar</label><div id="ob_ilac_chips" class="mb-2 flex flex-wrap gap-2"></div><input id="ob_ilaclar" class="w-full rounded-lg border-outline-variant p-3" type="text"/></div>
+<div class="rounded-lg border border-warning/20 bg-warning-container p-3 text-sm text-on-surface-variant" id="ob_feragat"></div>
+<div><p class="mb-2 font-bold">CureBot'a sorabileceğiniz örnekler:</p><div id="ob_ornek_sorular" class="flex flex-wrap gap-2"></div></div>
+</div>
+<div class="flex justify-end gap-3 border-t border-outline-variant p-5"><button onclick="document.getElementById('onboardingModal').classList.add('hidden')" class="btn-secondary px-6 py-2.5 font-bold">Vazgeç</button><button onclick="completeOnboarding()" class="btn-primary px-6 py-2.5 font-bold">Profilimi oluştur ve başla</button></div>
+</div>
+</div>
+
+<div class="hidden fixed inset-0 z-[120] items-center justify-center p-4" id="decisionTimelineModal">
+<div class="absolute inset-0 bg-on-background/60 backdrop-blur-sm" onclick="closeDecisionTimeline()"></div>
+<div class="card relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden">
+<div class="flex items-start justify-between gap-4 border-b border-outline-variant p-5"><div><h3 class="font-display text-2xl font-bold">Klinik karar adımları</h3><p class="mt-1 text-sm text-on-surface-variant">Yanıtın hangi kontrollerden geçtiğini gösterir.</p></div><button type="button" onclick="closeDecisionTimeline()" class="btn-icon"><span class="material-symbols-outlined">close</span></button></div>
+<div class="overflow-y-auto bg-surface-container-low p-5" id="decisionTimelineContent"><p class="text-on-surface-variant">Karar adımları yükleniyor...</p></div>
+</div>
+</div>
+
+<!-- Plan Aksiyon (Tarif ve Alternatif) Modalı -->
+<div class="hidden fixed inset-0 z-[120] items-center justify-center p-4" id="actionModal">
+<div class="absolute inset-0 bg-on-background/60 backdrop-blur-sm" onclick="closeActionModal()"></div>
+<div class="card relative flex h-[90vh] w-[95vw] max-w-none flex-col overflow-hidden">
+<div class="flex items-start justify-between gap-4 border-b border-outline-variant p-5">
+    <div>
+        <h3 class="font-display text-2xl font-bold text-primary" id="actionModalTitle">İşlem Yapılıyor...</h3>
+        <p class="mt-1 text-sm text-on-surface-variant" id="actionModalSubtitle">Lütfen bekleyin, CureBot isteğinizi işliyor.</p>
+    </div>
+    <button type="button" onclick="closeActionModal()" class="btn-icon"><span class="material-symbols-outlined">close</span></button>
+</div>
+<div class="overflow-y-auto bg-surface-container-lowest p-6" id="actionModalContent">
+    <div class="py-12 text-center">
+        <div class="loading-dots flex gap-2 justify-center mb-4">
+            <span class="w-3 h-3 rounded-full bg-primary inline-block"></span>
+            <span class="w-3 h-3 rounded-full bg-primary inline-block"></span>
+            <span class="w-3 h-3 rounded-full bg-primary inline-block"></span>
+        </div>
+        <p class="text-on-surface-variant font-body-md">CureBot tabağınızı hazırlıyor...</p>
+    </div>
+</div>
+<div class="flex justify-end gap-3 border-t border-outline-variant p-5 bg-surface">
+    <button onclick="closeActionModal()" class="btn-secondary px-6 py-2.5 font-bold">Kapat</button>
+</div>
+</div>
+</div>
+
+
+<nav class="mobile-nav fixed bottom-0 inset-x-0 z-50 hidden grid-cols-5 border-t border-outline-variant bg-white/95 px-1 py-2 backdrop-blur">
+<button type="button" data-tab="dashboard" onclick="switchTab('dashboard')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-primary text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">home</span>Ana Sayfa</button>
+
+<button type="button" data-tab="profile" onclick="switchTab('profile')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-on-surface-variant text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">person</span>Profil</button>
+<button type="button" data-tab="tahlil" onclick="switchTab('tahlil')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-on-surface-variant text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">vaccines</span>Tahlil</button>
+<button type="button" data-tab="governance" onclick="switchTab('governance')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-on-surface-variant text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">monitoring</span>KPI</button>
+</nav>
+
+<script src="/static/app.js?v=10"></script>
+<script src="/static/floating-assistant.js?v=3"></script>
+<script>
+function toggleSidebar() {
+    document.body.classList.toggle('is-collapsed');
+}
+document.addEventListener('DOMContentLoaded', initApp);
+</script>
+</body>
+</html>

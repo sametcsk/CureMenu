@@ -1,0 +1,47 @@
+{
+  "version": "high_risk_medications:v1",
+  "rules": [
+    {
+      "medication": "warfarin",
+      "aliases": ["coumadin", "jantoven", "kumadin"],
+      "risk_terms": ["k vitamini", "vitamin k", "ispanak", "lahana", "karalahana", "brokoli", "maydanoz"],
+      "severity": "caution",
+      "explanation": "Warfarin kullanırken K vitamini yüksek besinler INR dengesini etkileyebilir."
+    },
+    {
+      "medication": "atorvastatin",
+      "aliases": ["statin", "lipitor"],
+      "risk_terms": ["greyfurt", "grapefruit"],
+      "severity": "avoid",
+      "explanation": "Statin grubu ilaçlarda greyfurt ilaç düzeyini artırabilir."
+    },
+    {
+      "medication": "metformin",
+      "aliases": ["glucophage", "glifor"],
+      "risk_terms": ["alkol", "bira", "sarap", "şarap", "raki", "rakı", "viski"],
+      "severity": "caution",
+      "explanation": "Metformin kullanırken alkol laktik asidoz riskini artırabilir."
+    },
+    {
+      "medication": "levothyroxine",
+      "aliases": ["levotiroksin", "euthyrox", "tefor"],
+      "risk_terms": ["kalsiyum", "demir", "süt", "sut", "yoğurt", "yogurt", "peynir", "ayran"],
+      "severity": "caution",
+      "explanation": "Levothyroxine emilimi kalsiyum, demir ve bazı süt ürünleriyle azalabilir; zamanlama önemlidir."
+    },
+    {
+      "medication": "ciprofloxacin",
+      "aliases": ["cipro", "siprofloksasin"],
+      "risk_terms": ["süt", "sut", "yoğurt", "yogurt", "peynir", "ayran", "kalsiyum"],
+      "severity": "caution",
+      "explanation": "Ciprofloxacin kalsiyum ve süt ürünleriyle birlikte alındığında emilimi azalabilir."
+    },
+    {
+      "medication": "linezolid",
+      "aliases": ["zyvox", "maoi", "mao inhibitor", "mao inhibitörü", "monoamin oksidaz inhibitörü", "monoamine oxidase inhibitor"],
+      "risk_terms": ["tiramin", "eski peynir", "fermente", "sucuk", "salam", "soya sosu", "şarap", "sarap", "bira"],
+      "severity": "avoid",
+      "explanation": "Linezolid/MAOI ile tiramin yüksek gıdalar ciddi tansiyon yükselmesi riski oluşturabilir."
+    }
+  ]
+}
