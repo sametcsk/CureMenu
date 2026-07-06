@@ -95,7 +95,7 @@ def menu_danismani(ham_metin: str, profil_ozeti: str) -> str:
         denetim_sonucu = {"is_safe": False, "issues": ["Format hatası veya genel risk."], "corrected_analysis": ""}
 
     # --- 3. ADIM: KARAR VE DOKTOR MÜDAHALESİ ---
-    # Handle boolean/string type variations from LLM output
+    # Handle boolean/string type variations from LLM output / LLM çıktısındaki boolean/string tip farklılıklarını yönet
     is_safe = denetim_sonucu.get("is_safe")
     if is_safe is True or (isinstance(is_safe, str) and is_safe.lower() == "true"):
         logger.info("Mufettis onayladi! Ilk analiz guvenli.")
@@ -103,7 +103,7 @@ def menu_danismani(ham_metin: str, profil_ozeti: str) -> str:
     else:
         logger.warning("Mufettis hata buldu! Sorunlar: %s", denetim_sonucu.get("issues"))
         
-        # Prefer corrected analysis from guardrail if available
+        # Prefer corrected analysis from guardrail if available / Varsa guardrail'den gelen düzeltilmiş analizi tercih et
         corrected = denetim_sonucu.get("corrected_analysis", "")
         if corrected and len(corrected) > 20:
             logger.info("Mufettis duzeltmeyi kendisi sagladi.")

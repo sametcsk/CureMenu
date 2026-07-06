@@ -216,7 +216,7 @@ Sadece beslenme açısından önemli olanlara odaklan. Tahlil:
         import re, json
         metadata_json = None
         
-        # Locate potential JSON blocks
+        # Locate potential JSON blocks / Olası JSON bloklarını tespit et
         json_start_match = re.search(r'```json\s*\{|\{\s*"biomarkers"', ozet)
         
         if json_start_match:
@@ -224,18 +224,18 @@ Sadece beslenme açısından önemli olanlara odaklan. Tahlil:
             json_text = ozet[json_start_index:]
             ozet = ozet[:json_start_index].strip()
             
-            # Clean trailing markdown ticks
+            # Clean trailing markdown ticks / Sondaki markdown kalıntılarını temizle
             if ozet.endswith('```json'):
                 ozet = ozet[:-7].strip()
             elif ozet.endswith('```'):
                 ozet = ozet[:-3].strip()
                 
-            # Strip markdown formatting
+            # Strip markdown formatting / Markdown formatlamasını temizle
             clean_json_text = json_text.replace('```json', '').split('```')[0].strip()
             
-            # Parse JSON block
+            # Parse JSON block / JSON bloğunu ayrıştır
             try:
-                # Ensure object notation starts correctly
+                # Ensure object notation starts correctly / Obje gösteriminin doğru başladığından emin ol
                 if not clean_json_text.startswith('{'):
                     clean_json_text = '{' + clean_json_text
                     
@@ -311,7 +311,7 @@ DİKKAT: Yanıtını SADECE aşağıdaki gibi JSON formatında ver, markdown kod
         try:
             cevap_obj = await run_in_threadpool(invoke_with_model_fallback, prompt)
             cevap = parse_llm_response(cevap_obj)
-            # Extract JSON block using regex
+            # Extract JSON block using regex / Regex kullanarak JSON bloğunu çıkar
             json_match = re.search(r'\{.*\}', cevap, re.DOTALL)
             if json_match:
                 json_text = json_match.group(0)
@@ -322,7 +322,7 @@ DİKKAT: Yanıtını SADECE aşağıdaki gibi JSON formatında ver, markdown kod
                 except:
                     pass
             
-            # Fallback to raw text on parse error
+            # Fallback to raw text on parse error / Ayrıştırma hatasında ham metne dön
             return {"success": True, "result": {"yeni_ogun": "CureBot Özel Alternatifi", "aciklama": cevap}}
         except Exception:
             return JSONResponse(status_code=503, content={"success": False, "detail": "Alternatif öğün şu anda hazırlanamadı. Lütfen birazdan tekrar deneyin."})

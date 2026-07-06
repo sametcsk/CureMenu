@@ -1328,7 +1328,7 @@ function toggleVoiceRecognition() {
         return;
     }
     
-    // Mute active speech synthesis when microphone is activated
+    // Mute active speech synthesis when microphone is activated / Mikrofon açıldığında aktif seslendirmeyi durdur
     if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
     }
@@ -2303,10 +2303,10 @@ function renderMedicationOverview(profil) {
     }
 }
 
-// -- Global TTS Cancellation --
-// Cancel active speech synthesis upon document click
+// -- Global TTS Cancellation / Ekrana Dokunarak Sesi Susturma --
+// Cancel active speech synthesis upon document click / Sayfaya tıklandığında aktif seslendirmeyi durdur
 document.addEventListener('click', function(e) {
-    // Exclude mic button as it has internal cancellation logic
+    // Exclude mic button as it has internal cancellation logic / Mikrofon butonu kendi mantığına sahip olduğu için hariç tutulur
     if (!e.target.closest('#micBtn') && 'speechSynthesis' in window && window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
     }

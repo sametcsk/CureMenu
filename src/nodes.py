@@ -293,7 +293,7 @@ def denetleyici_node(state: AgentState) -> dict:
             confidence=confidence,
         )
     
-    # Pass-through numeric selections directly to historical resolver to prevent guardrail blocking
+    # Pass-through numeric selections directly to historical resolver to prevent guardrail blocking / Sayısal seçimleri tarihi çözümleyiciye aktararak guardrail engellemelerini önle
     if onerilen_yemek.strip().isdigit():
         resolved_meal = _resolve_numeric_meal_selection(onerilen_yemek, state)
         if resolved_meal:

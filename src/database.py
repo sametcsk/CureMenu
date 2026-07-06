@@ -166,7 +166,7 @@ def profil_getir_db(telefon: str, conn: sqlite3.Connection = None) -> KullaniciP
     """Telefon numarasına göre kullanıcının profilini çekip Pydantic objesine çeviriyoruz."""
     _ensure_db()
     
-    # Manage DB connection via context manager if not injected
+    # Manage DB connection via context manager if not injected / DI desteği için veritabanı bağlantısı yönetimi
     with get_connection(conn) as _conn:
         cursor = _conn.cursor()
         cursor.execute("SELECT profil_data FROM profiles WHERE telefon = ?", (telefon,))

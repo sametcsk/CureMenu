@@ -58,7 +58,7 @@ def scrape_menu_from_url(url: str) -> str:
     SSRF, Timeout ve OOM (Boyut) korumaları içerir.
     """
     try:
-        # Bypass basic anti-bot mechanisms using browser User-Agent
+        # Bypass basic anti-bot mechanisms using browser User-Agent / Anti-bot korumalarını aşmak için User-Agent kullanımı
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
@@ -80,26 +80,26 @@ def scrape_menu_from_url(url: str) -> str:
             raise ValueError("Menü linkinde çok fazla yönlendirme var.")
         response.raise_for_status()
         
-        # Limit download size to 5MB to prevent OOM
+        # Limit download size to 5MB to prevent OOM / RAM şişmesini önlemek için 5MB indirme limiti
         if len(response.content) > 5 * 1024 * 1024:
             raise ValueError("Güvenlik İhlali: Hedef sayfa boyutu çok büyük (Maksimum 5MB).")
             
-        # Parse HTML content
+        # Parse HTML content / HTML içeriğini ayrıştır
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Remove non-content tags before text extraction
+        # Remove non-content tags before text extraction / Metin çıkarımı öncesi gereksiz etiketleri temizle
         for element in soup(["script", "style", "nav", "footer", "header", "noscript"]):
             element.extract()
             
-        # Extract raw text content
+        # Extract raw text content / Ham metin içeriğini çıkar
         text = soup.get_text(separator="\n")
         
-        # Normalize whitespace to optimize token usage
+        # Normalize whitespace to optimize token usage / Token optimizasyonu için boşlukları düzenle
         lines = (line.strip() for line in text.splitlines())
         chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
         text_clean = "\n".join(chunk for chunk in chunks if chunk)
         
-        # Truncate content to 5000 characters to stay within context limits
+        # Truncate content to 5000 characters to stay within context limits / Context sınırını korumak için 5000 karaktere kırp
         return text_clean[:5000]
         
     except requests.exceptions.Timeout:
