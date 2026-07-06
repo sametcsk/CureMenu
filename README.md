@@ -7,9 +7,9 @@
 
 ## Ürün Fikri ve Açıklaması
 
-**CureMenu**, diyabet, çölyak, hipertansiyon gibi kronik hastalıklarla mücadele eden bireyler ve aileleri için geliştirilmiş yapay zeka destekli, klinik standartları rehber edinen bir beslenme asistanıdır. Geleneksel "herkese uyan" diyet listeleri yerine, kullanıcının tahlil geçmişini, güncel hastalıklarını, alerjilerini ve ilaç kullanımlarını dikkate alan algoritmik bir altyapı sunar.
+**CureMenu**, her türlü kronik hastalık, alerji, tıbbi hassasiyet veya spesifik beslenme hedefi olan bireyler ve aileleri için geliştirilmiş yapay zeka destekli, klinik standartları rehber edinen kapsamlı bir beslenme asistanıdır. Geleneksel "herkese uyan" diyet listeleri yerine, kullanıcının tahlil geçmişini, güncel rahatsızlıklarını, tüm alerjilerini ve ilaç kullanımlarını dikkate alan gelişmiş algoritmik bir altyapı sunar. Sadece hasta bireyleri değil, sağlıklı beslenmek isteyen herkesi kapsar.
 
-Evde veya dışarıda yaşanan "Ne yiyebilirim?" sorununu çözmek amacıyla, çoklu ajan (Multi-Agent) mimarisinden güç alarak sadece yemek önerisi vermekle kalmaz; bu önerileri tıbbi güvenlik kurallarına (Guardrail) tabi tutar.
+Evde veya dışarıda yaşanan "Ne yiyebilirim?" sorununu çözmek amacıyla, çoklu ajan (Multi-Agent) mimarisinden güç alarak sadece yemek önerisi vermekle kalmaz; bu önerileri tıbbi güvenlik kurallarına tabi tutarak güvenilir bir karar destek mekanizması sunar.
 
 ## Öne Çıkan Özellikler
 
