@@ -1,184 +1,134 @@
-# CureMenu 🍽️
+<div align="center">
+  <h1>🍽️ CureMenu</h1>
+  <p><strong>Kronik Hastalıklara Özel Kişiselleştirilmiş Beslenme ve Karar Motoru</strong></p>
+  <p>
+    <i>🚀 <b>Proje Durumu:</b> Bu proje, <strong>TÜBİTAK BİGG (Bireysel Genç Girişim)</strong> programı kapsamında Ar-Ge niteliğiyle geliştirilmektedir.</i>
+  </p>
+</div>
 
-## Ürün Fikri ve Açıklaması
+---
 
-CureMenu, Türkiye'de milyonlarca insanın mücadele ettiği diyabet, çölyak, hipertansiyon gibi kronik hastalıklara özel olarak geliştirilmiş **Kişiselleştirilmiş Beslenme ve Karar Motorudur**. Türk mutfağının yapısını analiz eder ve kullanıcının (veya tüm ailenin) sağlık profiline uygun menüler sunar. Evde her gün yaşanan "Ne pişirsem?" ve "Bana uygun mu?" stresini ortadan kaldırmayı hedefler.
+## 💡 Ürün Fikri ve Açıklaması
 
-## Ürün Özellikleri
+**CureMenu**, Türkiye'de milyonlarca insanın mücadele ettiği diyabet, çölyak, hipertansiyon gibi kronik hastalıklara özel olarak geliştirilmiş yapay zeka destekli bir platformdur. Türk mutfağının yapısını analiz eder ve kullanıcının (veya tüm ailenin) sağlık profiline uygun güvenli menüler sunar. Evde her gün yaşanan *"Ne pişirsem?"* ve *"Bana uygun mu?"* stresini tamamen ortadan kaldırmayı hedefler.
 
-- **Kişiselleştirilmiş Sağlık Profili:** Hastalıklar, alerjiler ve demografik bilgilere göre detaylı profil oluşturma.
-- **Aile Modu:** Farklı bireylerin sağlık durumlarını aynı anda analiz ederek **herkesin ortak yiyebileceği** yemekleri bulan kesişim algoritması.
-- **CureBot AI:** LangGraph tabanlı çoklu ajan sistemi — öneri üretir, tıbbi guardrail ile denetler, tarif ve alışveriş listesi sunar.
-- **Haftalık Plan:** 7 günlük kişiselleştirilmiş beslenme programı.
-- **Menü Tarayıcı:** Restoran menüsünü URL veya QR kod ile okuyup profiline göre filtreler.
-- **Ekonomist Ajan:** Haftalık plana göre güncel market fiyatlarıyla bütçe hesabı.
+## ✨ Öne Çıkan Özellikler
 
-## Hedef Kitle
+- 🛡️ **Kişiselleştirilmiş Sağlık Profili:** Hastalıklar, alerjiler ve demografik bilgilere göre detaylı profil yönetimi.
+- 👨‍👩‍👧‍👦 **Aile Modu:** Farklı bireylerin sağlık durumlarını aynı anda analiz ederek **herkesin ortak yiyebileceği** yemekleri bulan akıllı kesişim algoritması.
+- 🤖 **CureBot AI (LangGraph):** Çoklu ajan sistemi (Multi-Agent). Öneri üretir, tıbbi güvenlik bariyeri (Guardrail) ile denetler, tarif ve alışveriş listesi sunar.
+- 📅 **Haftalık Plan:** Profil sınırlarına %100 uyumlu, 7 günlük kişiselleştirilmiş beslenme programı.
+- 📱 **Menü Tarayıcı:** Restoran menüsünü URL veya QR kod ile okuyup tıbbi profilinize göre anında filtreler.
+- 💰 **Akıllı Bütçe (Ekonomist Ajan):** Haftalık plana göre tahmini fiyat bantları üzerinden market bütçesini çıkarır.
+
+---
+
+## 🎯 Hedef Kitle
 
 - Kendisinde veya ailesinde kronik sağlık sorunları olan bireyler.
-- "Aileme sağlıklı ve uygun ne pişirebilirim?" diye düşünen ev hanımları ve çalışan ebeveynler.
+- "Aileme sağlıklı ve uygun ne pişirebilirim?" diye düşünen çalışan ebeveynler.
 - Dışarıda yemek yerken menüde kaybolan, hastalığına uygun güvenilir yemek arayan herkes.
 
 ---
 
-## Kurucu & Geliştirici
-
-- **Samet** (Founder & AI Developer)
-
----
-
-## Teknolojik Altyapı
+## 🛠️ Teknolojik Altyapı
 
 | Katman | Teknoloji |
 |--------|-----------|
-| **Web Arayüzü** | HTML / Tailwind CSS / JavaScript (`frontend/`) |
-| **Backend API** | FastAPI (`api.py`) |
-| **AI Motoru** | LangGraph + Google Gemini |
-| **Hafıza** | ChromaDB (kullanıcı geri bildirimleri) |
-| **Veritabanı** | SQLite (`healmenu.db`) |
-| **Güvenlik** | Tıbbi guardrail döngüsü, rate limiting, SSRF koruması |
+| **Web Arayüzü** | Vanilla JS, HTML, Tailwind CSS (`frontend/`) |
+| **Backend API** | FastAPI, Python 3.12 (`api.py`) |
+| **AI Motoru** | LangGraph, Google Gemini, Tavily |
+| **Hafıza & RAG** | ChromaDB (Geri bildirimler ve tahlil hafızası) |
+| **Veritabanı** | SQLite (Profiller, loglar) + Alembic Migration |
+| **Güvenlik** | Tıbbi Guardrail, Rate Limiting, Pydantic Structured Outputs |
 
-### Mimari
+<details>
+<summary><b>Mimarinin Çalışma Şeması (Tıklayıp Açabilirsiniz)</b></summary>
 
+```text
+Kullanıcı (Tarayıcı / Arayüz)
+    │
+    ▼
+FastAPI ──→ SQLite (Profiller, Karar/Audit Logları)
+    │
+    ▼
+LangGraph Pipeline (Multi-Agent)
+    ├── 1. Yönlendirici (Niyet analizi)
+    ├── 2. Beslenme Uzmanı (Öneri üretimi)
+    ├── 3. Denetmen (Tıbbi Guardrail / Governance)
+    └── 4. Şef (Tarif & Web Arama)
+    │
+    ▼
+ChromaDB (Kişisel tercihler ve geri bildirimler)
 ```
-Kullanıcı (Tarayıcı)
-    ↓
-FastAPI (api.py) ──→ SQLite (profiller, loglar)
-    ↓
-LangGraph Pipeline
-    ├── Yönlendirici (niyet analizi)
-    ├── Beslenme Uzmanı (yemek önerisi)
-    ├── Denetmen (tıbbi guardrail)
-    └── Şef (tarif + Tavily arama)
-    ↓
-ChromaDB (geçmiş geri bildirimler)
-```
-
-> **Not:** `app.py` ve `pages/` altındaki Streamlit arayüzü erken prototip içindir. Üretim ve demo giriş noktası **FastAPI + web arayüzüdür**.
+</details>
 
 ---
 
-## Kurulum ve Çalıştırma
+## 🚀 Kurulum ve Çalıştırma
 
 ### Gereksinimler
+- **Python 3.11 veya 3.12** (Not: 3.14 henüz desteklenmez)
+- Google Gemini API Anahtarı
+- Tavily API Anahtarı (Tarif aramaları için)
 
-- **Python 3.11 veya 3.12** (3.14 desteklenmez — `pyproject.toml` bakın)
-- Google Gemini API anahtarı
-- Tavily API anahtarı (tarif arama ve ekonomist ajan için)
-
-### Adımlar
+### Başlangıç Adımları
 
 ```bash
-git clone <repo-linkiniz>
-cd healmenu
+# 1. Repoyu klonlayın
+git clone https://github.com/sametcsk/CureMenu.git
+cd CureMenu
 
+# 2. Sanal ortamı kurun ve aktif edin
 python -m venv .venv
 .venv\Scripts\activate        # Windows
 # source .venv/bin/activate   # macOS / Linux
 
+# 3. Bağımlılıkları yükleyin
 pip install -r requirements.txt
 
-# Ortam değişkenlerini ayarla
-copy .env.example .env          # Windows
+# 4. Çevre değişkenlerini ayarlayın
+copy .env.example .env        # Windows
 # cp .env.example .env        # macOS / Linux
-# .env dosyasına API anahtarlarını yaz
+# .env dosyasını açıp API anahtarlarınızı girin.
 
-# Uygulamayı başlat (tek giriş noktası)
+# 5. Uygulamayı başlatın
 python run.py
 ```
 
-Tarayıcıda aç: **http://localhost:8000**
-
-- Giriş: `/`
-- Dashboard: `/dashboard`
-
-Alternatif başlatma:
-
-```bash
-uvicorn api:app --reload --host 0.0.0.0 --port 8000
-```
-
-### Ortam Değişkenleri (`.env`)
-
-| Değişken | Açıklama |
-|----------|----------|
-| `GOOGLE_API_KEY` | Google Gemini API anahtarı |
-| `TAVILY_API_KEY` | Tavily web arama API anahtarı |
+Tarayıcınızda açın: **http://localhost:8000**
+- Ana Sayfa / Giriş: `/`
+- Uygulama Arayüzü: `/dashboard`
 
 ---
 
-## Testler
+## 🧪 Testler ve CI/CD
 
+Proje geniş kapsamlı bir test altyapısına sahiptir:
 ```bash
 pytest tests/ -v
 ```
-
-Test kapsamı:
-- Profil kayıt / okuma (SQLite)
-- Guardrail karar mantığı (LangGraph)
-- API smoke testleri (login, profil, chat mock)
-
-CI: GitHub Actions üzerinde Python 3.11 ve 3.12 ile otomatik çalışır (`.github/workflows/ci.yml`).
+**Kapsanan Senaryolar:** Profil kayıt/okuma, Guardrail karar mantığı, API smoke testleri (login, profil, chat mock), Tahlil (PDF) validasyonları ve Data Privacy Redaction testleri.  
+*Testler GitHub Actions üzerinden CI/CD pipeline'ı ile her commit'te otomatik çalıştırılır.*
 
 ---
 
-## Veritabanı Migration Notu
+## 🔐 Veri Gizliliği ve İzlenebilirlik (Governance)
 
-Bu projede mevcut SQLite şeması uzun süre `src/database.py` içindeki raw SQL `CREATE TABLE` akışıyla yönetildi. Alembic altyapısı bu mevcut şemayı manuel baseline olarak tanıtmak için eklendi; autogenerate kullanılmamalıdır.
-
-Temel komutlar:
-
-```bash
-alembic upgrade head
-alembic current
-alembic revision -m "kisa_aciklama"
-```
-
-Notlar:
-- İlk migration manuel baseline'dır ve destructive işlem içermez.
-- Runtime uyumluluğu için `src/database.py` içindeki startup tablo oluşturma akışı bu fazda korunur.
-- Bundan sonraki production şema değişiklikleri Alembic migration dosyalarıyla yapılmalıdır.
+CureMenu, klinik standartlarda bir yapı hedeflenerek tasarlanmıştır:
+- Kullanıcı profilleri, loglar (**SQLite**) ve vektör geri bildirimler (**ChromaDB**) tamamen yerel tutulur.
+- Kritik numaralar, IBAN veya özel API anahtarları `Data Redaction` katmanından geçer.
+- Sistem tarafından alınan her tıbbi karar, sistemde bir **Event** (örn: `InputGuardrailBlocked`) olarak loglanır. Bunlar Dashboard üzerindeki *İzlenebilirlik (Governance)* ekranından şeffaf bir şekilde incelenebilir.
 
 ---
 
-## Governance Event Schema
+## 🗺️ Yol Haritası (Roadmap)
 
-Yeni audit event metadata alanları geriye uyumlu şekilde `schema_version=governance_event.v1` ile normalize edilir.
-
-- `event_name`: Event'in kanonik adı.
-- `category`: Event sınıfı (`routing`, `policy`, `rule`, `medication_safety`, `grocery`, `retrieval`, `generation`, `privacy`, `system`).
-- `severity`: Operasyonel önem seviyesi (`info`, `low`, `medium`, `high`, `critical`).
-- `decision_effect`: Karara etkisi (`none`, `allow`, `caution`, `block`, `review_required`).
-- `blocking` / `review_required`: KPI ve audit timeline için boolean karar bayrakları.
-- `source_component`: Event'i üreten bileşen.
-
-Eski metadata alanları silinmez; yeni alanlar yalnızca yorumlamayı standartlaştırmak için eklenir.
-
----
-
-## Geliştirme Yol Haritası (Roadmap)
-
-- **Multi-Agent Yapay Zeka Mimarisi** ✅ (MVP tamamlandı)
-- **Geçmiş Hafıza ve Geri Bildirim Sistemi** ✅ (ChromaDB aktif)
-- **Kamera ile Menü Tarama (OCR)** ✅ (Gemini Vision)
-- **Sağlık & Bütçe Optimizasyon Ajanı** ✅ (Ekonomist Ajan)
-- **Lokasyon Bazlı Restoran Önerisi (Top 10)** — planlanıyor
-- **Giyilebilir Teknoloji (Wearable) Entegrasyonu** — planlanıyor
-- **Doktor / Diyetisyen Raporlama Modülü (PDF)** — planlanıyor
-
----
-
-## Veri Gizliliği
-
-- Kullanıcı profilleri ve etkileşim logları **yerel SQLite** veritabanında tutulur.
-- Geri bildirim vektörleri **yerel ChromaDB** klasöründe saklanır.
-- `.env` dosyası ve veritabanı dosyaları `.gitignore` ile korunur; commit edilmemelidir.
-- MVP'de sağlık ve audit kayıtları izlenebilirlik için tutulur.
-- Audit/log kayıtlarına yazılan serbest metin ve metadata alanlarında e-posta, telefon, TC kimlik benzeri numara, IBAN ve token/API anahtarı gibi doğrudan tanımlayıcılar redaction'dan geçirilir.
-- Production öncesinde veri saklama süresi, kullanıcı silme talebi, veri export süreci ve redaction kapsamı resmi politika olarak netleştirilmelidir.
-
----
-
-## Lisans
-
-TÜBİTAK BIGG kapsamında geliştirilmektedir.
+- [x] Multi-Agent Yapay Zeka Mimarisi
+- [x] Geçmiş Hafıza ve Geri Bildirim Sistemi
+- [x] Kamera ile Menü Tarama (OCR)
+- [x] Ekonomi & Bütçe Ajanı Entegrasyonu
+- [x] Klinik Guardrail ve Operasyonel Güvenlik Eventleri
+- [ ] Yapısal Akıllı Sepet (Structured Smart Grocery) Modülü *(Devam Ediyor)*
+- [ ] Lokasyon Bazlı Restoran Önerisi (Top 10)
+- [ ] Giyilebilir Teknoloji (Wearable) Entegrasyonu
