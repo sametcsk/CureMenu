@@ -1,4 +1,3 @@
-# LangGraph (Yapay Zeka) Akış Şemamızı burada kuruyoruz
 
 from langgraph.graph import StateGraph, START, END
 from src.agent_state import AgentState

@@ -216,8 +216,7 @@ Sadece beslenme açısından önemli olanlara odaklan. Tahlil:
         import re, json
         metadata_json = None
         
-        # Olası bir JSON bloğunun başlangıcını daha esnek bir regex ile bul
-        # (Örn: "```json\n{\n  \"biomarkers\"" veya sadece "{\n\"biomarkers\"")
+        # Locate potential JSON blocks
         json_start_match = re.search(r'```json\s*\{|\{\s*"biomarkers"', ozet)
         
         if json_start_match:
@@ -225,19 +224,18 @@ Sadece beslenme açısından önemli olanlara odaklan. Tahlil:
             json_text = ozet[json_start_index:]
             ozet = ozet[:json_start_index].strip()
             
-            # Eğer regex ```json'u eşleştirmediyse ama özetin sonunda kalmışsa temizle
+            # Clean trailing markdown ticks
             if ozet.endswith('```json'):
                 ozet = ozet[:-7].strip()
             elif ozet.endswith('```'):
                 ozet = ozet[:-3].strip()
                 
-            # JSON bloğundan (eğer varsa) markdown etiketlerini temizle
+            # Strip markdown formatting
             clean_json_text = json_text.replace('```json', '').split('```')[0].strip()
             
-            # Parse etmeyi dene (yapay zeka yarıda kesmediyse başarılı olur)
+            # Parse JSON block
             try:
-                # Eger json "{'biomarkers'" ile baslamiyorsa onune { koy, falan filan ugrasmamak icin regex'in kopardigi yere bakalim
-                # Eger "biomarkers" ile basladiysa, temiz json'da ilk karakter { olmalidir
+                # Ensure object notation starts correctly
                 if not clean_json_text.startswith('{'):
                     clean_json_text = '{' + clean_json_text
                     
@@ -313,7 +311,7 @@ DİKKAT: Yanıtını SADECE aşağıdaki gibi JSON formatında ver, markdown kod
         try:
             cevap_obj = await run_in_threadpool(invoke_with_model_fallback, prompt)
             cevap = parse_llm_response(cevap_obj)
-            # Regex ile json bloğunu yakala
+            # Extract JSON block using regex
             json_match = re.search(r'\{.*\}', cevap, re.DOTALL)
             if json_match:
                 json_text = json_match.group(0)
@@ -324,7 +322,7 @@ DİKKAT: Yanıtını SADECE aşağıdaki gibi JSON formatında ver, markdown kod
                 except:
                     pass
             
-            # JSON Parse hatası olursa düz metin dön
+            # Fallback to raw text on parse error
             return {"success": True, "result": {"yeni_ogun": "CureBot Özel Alternatifi", "aciklama": cevap}}
         except Exception:
             return JSONResponse(status_code=503, content={"success": False, "detail": "Alternatif öğün şu anda hazırlanamadı. Lütfen birazdan tekrar deneyin."})

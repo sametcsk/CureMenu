@@ -1328,7 +1328,7 @@ function toggleVoiceRecognition() {
         return;
     }
     
-    // Zaten seslendirme yapıyorsa sustur (kullanıcı konuşmaya başlayınca yapay zeka sussun)
+    // Mute active speech synthesis when microphone is activated
     if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
     }
@@ -2303,10 +2303,10 @@ function renderMedicationOverview(profil) {
     }
 }
 
-// -- Ekrana Dokunarak Sesi Susturma --
-// Kullanıcı sayfanın herhangi bir yerine tıkladığında, eğer yapay zeka konuşuyorsa anında susar.
+// -- Global TTS Cancellation --
+// Cancel active speech synthesis upon document click
 document.addEventListener('click', function(e) {
-    // Mikrofon butonuna tıklandığında zaten kendi içinde susturma mantığı var, onu hariç tutuyoruz
+    // Exclude mic button as it has internal cancellation logic
     if (!e.target.closest('#micBtn') && 'speechSynthesis' in window && window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
     }

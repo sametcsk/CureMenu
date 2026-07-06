@@ -293,9 +293,7 @@ def denetleyici_node(state: AgentState) -> dict:
             confidence=confidence,
         )
     
-    # Yönlendirici ajan bazen yemek ismini çekemeyip doğrudan kullanıcının girdiği sayıyı ("3") yollayabiliyor.
-    # Bu durumda tıbbi denetim "3 bir yemek değildir" deyip reddediyor ve sistem başa sarıyordu.
-    # Şef ajanımız sayıları algılayıp geçmişten yemeği bulabildiği için, kısa/sayısal girdileri otomatik onaylıyoruz.
+    # Pass-through numeric selections directly to historical resolver to prevent guardrail blocking
     if onerilen_yemek.strip().isdigit():
         resolved_meal = _resolve_numeric_meal_selection(onerilen_yemek, state)
         if resolved_meal:
