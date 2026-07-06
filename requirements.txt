@@ -12,7 +12,7 @@ langgraph
 python-dotenv
 requests
 beautifulsoup4
-opencv-python
+opencv-python-headless
 numpy
 tavily-python
 fastapi
