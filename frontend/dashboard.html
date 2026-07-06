@@ -182,47 +182,6 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
   </section>
 </div>
 
-<div id="tab-curebot" class="tab-content">
-  <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">CureBot</h2><p class="mt-2 max-w-3xl text-on-surface-variant">Beslenme, menü, tahlil ve ilaç-besin uyumu hakkında destek al. Yanıtlar tedavi yerine geçmez.</p></div>
-  <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
-    <section class="card flex min-h-[640px] flex-col overflow-hidden">
-      <div class="border-b border-outline-variant p-4 flex flex-wrap items-center justify-between gap-3">
-        <select id="chatTarget" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-2 text-sm"></select>
-        <button onclick="stopGeneration()" class="btn-secondary px-4 py-2 text-sm font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">stop_circle</span>Durdur</button>
-      </div>
-      <div id="chatMessages" class="chat-scroll flex-1 space-y-4 overflow-y-auto bg-surface-container-low p-4">
-        <div class="max-w-2xl rounded-lg border border-outline-variant bg-white p-4 text-on-surface-variant">
-          Merhaba, ben CureBot. Bugün ne yesem, menüden ne seçsem ya da tahlilimde nelere dikkat etsem diye birlikte bakabiliriz.
-        </div>
-      </div>
-      <div class="border-t border-outline-variant bg-white p-4">
-        <p id="chatDisclaimer" class="mb-2 text-xs text-on-surface-variant">Tedavi yerine geçmez; doktorunuza danışın.</p>
-        <div class="flex gap-2">
-          <input id="chatInput" class="min-w-0 flex-1 rounded-full border-outline-variant bg-surface-container-low px-4 py-3" placeholder="CureBot'a bir şey sor..." onkeydown="if(event.key==='Enter') sendChat()"/>
-          <button onclick="sendChat()" class="btn-primary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">send</span>Gönder</button>
-          <button id="micBtn" onclick="toggleVoiceRecognition()" class="btn-icon" title="Sesle yaz"><span id="micIcon" class="material-symbols-outlined">mic</span></button>
-        </div>
-      </div>
-    </section>
-    <aside class="space-y-4">
-      <section class="card p-5 hidden" id="governanceSection">
-        <h3 class="font-display text-2xl font-bold">Bu öneri neden verildi?</h3>
-        <div id="chatGovernancePanel" class="mt-4 text-sm text-on-surface-variant">
-          Bir yanıt oluşturulduğunda karar kaydı, operasyonel güven ve tahmini risk özeti burada görünür.
-        </div>
-      </section>
-      <section class="card p-5">
-        <h3 class="font-display text-xl font-bold">Hızlı başlangıç</h3>
-        <div class="mt-3 grid gap-2">
-          <button class="action-card p-3 text-left font-bold" onclick="document.getElementById('chatInput').value='Bugün profilime uygun ne yiyebilirim?';sendChat()">Bugün ne yiyebilirim?</button>
-          <button class="action-card p-3 text-left font-bold" onclick="document.getElementById('chatInput').value='Kullandığım ilaçlara göre hangi yiyeceklere dikkat etmeliyim?';sendChat()">İlaç uyumuna bak</button>
-          <button class="action-card p-3 text-left font-bold" onclick="document.getElementById('chatInput').value='Tahlillerimi dikkate alarak beslenmede nelere dikkat etmeliyim?';sendChat()">Tahlilime göre sor</button>
-        </div>
-      </section>
-    </aside>
-  </div>
-</div>
-
 <div id="tab-profile" class="tab-content">
   <div class="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
     <div><h2 class="font-display text-4xl font-extrabold">Sağlık Profilim</h2><p class="mt-2 text-on-surface-variant">Hastalık, alerji, ilaç ve hedef bilgilerini burada yönet.</p></div>
@@ -381,8 +340,9 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 </nav>
 
 <script src="/static/modules/api-client.js"></script>
-    <script src="/static/app.js?v=10"></script>
-<script src="/static/floating-assistant.js?v=3"></script>
+<script src="/static/modules/auth-manager.js"></script>
+<script src="/static/modules/chat-widget.js"></script>
+<script src="/static/app.js?v=10"></script>
 <script>
 function toggleSidebar() {
     document.body.classList.toggle('is-collapsed');

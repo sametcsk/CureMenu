@@ -244,6 +244,7 @@
         </section>
     </main>
 
+    <script src="/static/modules/auth-manager.js"></script>
     <script>
         const form = document.getElementById('profileWizard');
         const panels = Array.from(document.querySelectorAll('[data-step-panel]'));
@@ -334,16 +335,7 @@
             submitBtn.textContent = 'Profilin hazırlanıyor...';
 
             try {
-                const registerRes = await fetch('/api/register', {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ telefon, kullanici_adi, sifre }),
-                });
-                const registerData = await registerRes.json();
-                if (!registerRes.ok || !registerData.success) {
-                    throw new Error(registerData.detail || 'Kayıt yapılamadı.');
-                }
+                await window.AuthManager.register(telefon, kullanici_adi, sifre);
 
                 const profileBody = {
                     kullanici_adi,
@@ -390,6 +382,6 @@
 
         updateStep();
     </script>
-    <script src="/static/floating-assistant.js?v=2"></script>
+    <script src="/static/modules/chat-widget.js"></script>
 </body>
 </html>

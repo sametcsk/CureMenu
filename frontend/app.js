@@ -112,17 +112,10 @@ async function loadPublicMetinler() {
     return publicMetinler;
 }
 
-function getUser() {
-    return {
-        telefon: localStorage.getItem('cm_telefon') || '',
-        kullanici_adi: localStorage.getItem('cm_kullanici_adi') || ''
-    };
-}
-
 function initApp() {
-    const user = getUser();
-    if (!user.telefon) { window.location.href = '/giris'; return; }
-    if (localStorage.getItem('cm_disclaimer_ok') !== 'true') { window.location.href = '/giris'; return; }
+    const user = window.AuthManager.requireAuth();
+    if (!user) return; // requireAuth handles the redirect
+
     document.getElementById('sidebarUser').textContent = user.kullanici_adi;
     document.getElementById('sidebarPhone').textContent = user.telefon;
     loadPublicMetinler();
@@ -136,14 +129,6 @@ function initApp() {
             renderSavedPlan(savedPlan);
         }
     });
-}
-
-async function logout() {
-    try {
-        await fetch(API + '/api/logout', { method: 'POST', credentials: 'include' });
-    } catch(e) {}
-    ['cm_telefon', 'cm_kullanici_adi', 'cm_has_profile', 'cm_onboarding_done', 'cm_disclaimer_ok'].forEach(k => localStorage.removeItem(k));
-    window.location.href = '/';
 }
 
 // switchTab is defined once in the dashboard section below.
@@ -422,178 +407,7 @@ async function deleteMember(uyeId) {
     } catch (e) { alert(baglantiHatasi(e)); }
 }
 
-let chatAbortController = null;
 
-function stopGeneration() {
-    if (chatAbortController) {
-        chatAbortController.abort();
-        chatAbortController = null;
-    }
-}
-
-// -- CureBot Chat --
-async function sendChat() {
-    const input = document.getElementById('chatInput');
-    const container = document.getElementById('chatMessages');
-    if (!input || !container) {
-        openCureBotWidget();
-        return;
-    }
-    const msg = input.value.trim();
-    if (!msg) return;
-    input.value = '';
-
-    const kimin_icin = document.getElementById('chatTarget')?.value || 'kendim';
-
-    // Kullanıcı mesajını ekle
-    container.innerHTML += `<div class="flex flex-col items-end gap-1"><div class="bg-[#005c55] text-white p-3.5 rounded-[20px] rounded-br-[4px] max-w-[85%] shadow-sm"><p class="font-body-md text-body-md">${escapeHtml(msg)}</p></div></div>`;
-
-    // Loading indicator ve Stop butonu
-    const loadingId = 'loading-' + Date.now();
-    const chatBubbleId = 'bubble-' + Date.now();
-    const statusTextId = 'status-' + Date.now();
-    
-    // Geçici Agent mesaj balonu
-    container.innerHTML += `
-    <div id="${loadingId}" class="flex items-end gap-2 w-full">
-        <div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container flex-shrink-0"><span class="material-symbols-outlined text-[18px]" style="font-variation-settings:'FILL' 1">smart_toy</span></div>
-        <div class="flex flex-col gap-2 max-w-[85%] w-full">
-            <div class="bg-surface-container-lowest text-on-surface p-4 rounded-[20px] rounded-bl-[4px] border border-outline-variant/20 shadow-sm w-full">
-                <p id="${statusTextId}" class="text-xs text-on-surface-variant mb-2 animate-pulse">Sistem hazırlanıyor...</p>
-                <div id="${chatBubbleId}" class="font-body-md text-body-md prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0"></div>
-                <div class="loading-dots flex gap-1 mt-2" id="${loadingId}-dots">
-                    <span class="w-2 h-2 rounded-full bg-outline-variant inline-block"></span>
-                    <span class="w-2 h-2 rounded-full bg-outline-variant inline-block"></span>
-                    <span class="w-2 h-2 rounded-full bg-outline-variant inline-block"></span>
-                </div>
-            </div>
-            <button onclick="stopGeneration()" id="${loadingId}-stop" class="self-start text-xs text-error border border-error/50 rounded-full px-3 py-1 hover:bg-error/10 transition-colors flex items-center gap-1">
-                <span class="material-symbols-outlined text-[14px]">stop_circle</span> Durdur
-            </button>
-        </div>
-    </div>`;
-    container.scrollTop = container.scrollHeight;
-
-    chatAbortController = new AbortController();
-    const bubbleEl = document.getElementById(chatBubbleId);
-    const statusEl = document.getElementById(statusTextId);
-    let fullCevap = '';
-    updateChatGovernancePanel(null);
-
-    try {
-        const res = await safeFetchStream(API + '/api/chat', {
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mesaj: msg, kimin_icin }),
-            signal: chatAbortController.signal
-        });
-        
-        if (!res.ok) {
-            let hataMesaji = 'Yanıt hazırlanamadı.';
-            try {
-                const errData = await res.json();
-                hataMesaji = apiHataMesaji(errData, hataMesaji);
-            } catch(e){}
-            statusEl.textContent = "Hata";
-            statusEl.classList.remove("animate-pulse");
-            statusEl.classList.add("text-error");
-            bubbleEl.innerHTML = `<span class="text-error">${hataMesaji}</span>`;
-            document.getElementById(`${loadingId}-dots`)?.remove();
-            document.getElementById(`${loadingId}-stop`)?.remove();
-            return;
-        }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let buffer = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            
-            buffer += decoder.decode(value, { stream: true });
-            let lines = buffer.split('\\n\\n');
-            buffer = lines.pop(); // Son eleman yarım kalmış olabilir, buffer'da tut
-            
-            for (let line of lines) {
-                if (line.startsWith('event: ')) {
-                    const eventName = line.split('\\n')[0].replace('event: ', '').trim();
-                    const dataLine = line.split('\\n')[1];
-                    let data = {};
-                    if (dataLine && dataLine.startsWith('data: ')) {
-                        try {
-                            data = JSON.parse(dataLine.replace('data: ', '').trim());
-                        } catch(e) {}
-                    }
-                    
-                    if (eventName === 'status') {
-                        statusEl.textContent = `${data.agent || 'CureMenu'} ${data.status || 'çalışıyor'}...`;
-                    } else if (eventName === 'message') {
-                        statusEl.textContent = "CureBot yazıyor...";
-                        fullCevap += data.chunk || '';
-                        bubbleEl.innerHTML = formatMarkdownSafe(fullCevap);
-                        container.scrollTop = container.scrollHeight;
-                    } else if (eventName === 'error') {
-                        statusEl.textContent = "Uyarı";
-                        statusEl.classList.remove("animate-pulse");
-                        statusEl.classList.add("text-error");
-                        fullCevap = data.message || 'Sistem uyarısı.';
-                        bubbleEl.innerHTML = formatMarkdownSafe(fullCevap);
-                    } else if (eventName === 'governance') {
-                        updateChatGovernancePanel(data);
-                    } else if (eventName === 'done') {
-                        statusEl.remove();
-                        if (fullCevap.length > 300) {
-                            const expandBtn = document.createElement('button');
-                            expandBtn.className = 'mt-3 text-sm font-bold text-primary flex items-center gap-1 hover:underline';
-                            expandBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">fullscreen</span>Geniş ekranda oku';
-                            expandBtn.onclick = () => openReaderModal(fullCevap);
-                            const messageRoot = document.getElementById(loadingId) || bubbleEl.closest('.flex') || container;
-                            messageRoot.appendChild(expandBtn);
-                        }
-                    }
-            }
-        }
-        }
-    } catch (e) {
-        if (e.name === 'AbortError') {
-            statusEl.textContent = "İptal edildi";
-            statusEl.classList.remove("animate-pulse");
-            if (!fullCevap) bubbleEl.innerHTML = "<span class='text-outline-variant italic'>Yanıt iptal edildi.</span>";
-        } else {
-            statusEl.textContent = "Bağlantı koptu";
-            statusEl.classList.remove("animate-pulse");
-            statusEl.classList.add("text-error");
-        }
-    } finally {
-        chatAbortController = null;
-        document.getElementById(`${loadingId}-dots`)?.remove();
-        document.getElementById(`${loadingId}-stop`)?.remove();
-        statusEl.classList.remove("animate-pulse");
-        if (statusEl.textContent.includes('yazıyor')) {
-            statusEl.textContent = "Tamamlandı";
-            statusEl.classList.add("text-primary");
-        }
-    }
-}
-
-function openReaderModal(markdownContent) {
-    let modal = document.getElementById('readerModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'readerModal';
-        modal.className = 'fixed inset-0 z-[200] hidden items-center justify-center p-4';
-        modal.innerHTML = `
-        <div class="absolute inset-0 bg-on-background/50 backdrop-blur-sm" onclick="document.getElementById('readerModal').classList.add('hidden'); document.getElementById('readerModal').classList.remove('flex');"></div>
-        <div class="card relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden">
-            <div class="flex items-center justify-between border-b border-outline-variant p-5">
-                <h3 class="font-display text-2xl font-bold flex items-center gap-2"><span class="material-symbols-outlined text-primary">auto_awesome</span> CureBot Yanıtı</h3>
-                <button onclick="document.getElementById('readerModal').classList.add('hidden'); document.getElementById('readerModal').classList.remove('flex');" class="btn-icon"><span class="material-symbols-outlined">close</span></button>
-            </div>
-            <div class="overflow-y-auto p-6 md:p-8 text-on-surface font-body-lg leading-8" id="readerModalContent"></div>
-        </div>`;
-        document.body.appendChild(modal);
-    }
     document.getElementById('readerModalContent').innerHTML = formatMarkdownSafe(markdownContent);
     modal.classList.remove('hidden');
     modal.classList.add('flex');
@@ -1182,96 +996,7 @@ async function uploadHealthRecord(event) {
 
 
 
-// -- Sesli Asistan (Voice AI) --
 
-let recognition;
-let isRecording = false;
-
-if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SpeechRecognition();
-    recognition.lang = 'tr-TR';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onresult = function(event) {
-        const transcript = event.results[0][0].transcript;
-        const input = document.getElementById('chatInput');
-        if (input) {
-            input.value = transcript;
-            sendChat(); // Otomatik gönder
-        } else {
-            openCureBotWidget(transcript);
-        }
-    };
-
-    recognition.onerror = function(event) {
-        console.error('Ses tanıma hatası:', event.error);
-        stopVoiceRecognition();
-    };
-
-    recognition.onend = function() {
-        stopVoiceRecognition();
-    };
-}
-
-function toggleVoiceRecognition() {
-    if (!recognition) {
-        alert('Tarayıcınız sesli komut özelliğini desteklemiyor. Lütfen Chrome, Edge veya Safari kullanın.');
-        return;
-    }
-    
-    // Mute active speech synthesis when microphone is activated / Mikrofon açıldığında aktif seslendirmeyi durdur
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-    }
-    
-    if (isRecording) {
-        recognition.stop();
-    } else {
-        recognition.start();
-        isRecording = true;
-        const micBtn = document.getElementById('micBtn');
-        const micIcon = document.getElementById('micIcon');
-        micBtn.classList.add('bg-error', 'text-on-error', 'animate-pulse');
-        micBtn.classList.remove('hover:bg-surface-container', 'text-on-surface-variant');
-        micIcon.textContent = 'mic_none';
-        const input = document.getElementById('chatInput');
-        if (input) input.placeholder = 'Sizi dinliyorum...';
-    }
-}
-
-function stopVoiceRecognition() {
-    isRecording = false;
-    const micBtn = document.getElementById('micBtn');
-    const micIcon = document.getElementById('micIcon');
-    if(micBtn) {
-        micBtn.classList.remove('bg-error', 'text-on-error', 'animate-pulse');
-        micBtn.classList.add('hover:bg-surface-container', 'text-on-surface-variant');
-        micIcon.textContent = 'mic';
-    }
-    const input = document.getElementById('chatInput');
-    if(input) input.placeholder = "CureBot'a bir şey sor...";
-}
-
-// AI cevabını seslendirme (Akıcı ve tatlı bir anlatım)
-function speakText(text) {
-    if (!('speechSynthesis' in window)) return;
-    
-    // Zaten konuşuyorsa sustur
-    window.speechSynthesis.cancel();
-    
-    // Markdown ve emojileri büyük ölçüde temizle
-    let cleanText = text.replace(/[#*`_|>]/g, '');
-    cleanText = cleanText.replace(/-/g, '.'); // Liste maddelerini cümleye çevir
-    
-    // Tarifin tamamını okursa sıkıcı olabilir. Normal bir diyalog gibi okutalım.
-    let textToSpeak = cleanText;
-    if (cleanText.includes('Malzemeler') || cleanText.includes('Yapılışı')) {
-        const splitText = cleanText.split('Malzemeler');
-        // Sadece giriş kısmını okuyacak
-        textToSpeak = splitText[0].trim() + ". Harika bir tarif hazırladım! Detaylı malzemeleri ve yapılışını ekrandan okuyabilirsiniz. Şimdiden afiyet olsun.";
-    }
     
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     utterance.lang = 'tr-TR';
@@ -1906,17 +1631,7 @@ function drawTahlilChart(labs) {
     });
 }
 
-function updateChatGovernancePanel(data) {
-    const root = document.getElementById('chatGovernancePanel');
-    if (!root) return;
-    if (!data) {
-        root.innerHTML = `
-            <div class="rounded-lg border border-outline-variant bg-surface-container-low p-4">
-                <p class="font-bold text-on-surface">Yanıt bekleniyor</p>
-                <p class="mt-1 text-sm text-on-surface-variant">CureBot yanıt verdiğinde karar kaydı, operasyonel güven ve tahmini risk özeti burada görünür.</p>
-            </div>`;
-        return;
-    }
+
     const decisionId = String(data.decision_id || '').replace(/[^a-zA-Z0-9_-]/g, '');
     const risk = Number(data.risk_score || 0);
     const confidence = Number(data.confidence_score || 0);

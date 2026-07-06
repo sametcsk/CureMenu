@@ -94,6 +94,7 @@
         </div>
     </div>
 
+    <script src="/static/modules/auth-manager.js"></script>
     <script>
         const form = document.getElementById('loginForm');
         const submitBtn = document.getElementById('submitBtn');
@@ -116,24 +117,7 @@
             submitBtn.textContent = 'Giriş yapılıyor...';
 
             try {
-                const loginRes = await fetch('/api/login', {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ telefon, sifre }),
-                });
-                
-                const loginData = await loginRes.json();
-                
-                if (!loginRes.ok || !loginData.success) {
-                    throw new Error(loginData.detail || 'Giriş yapılamadı.');
-                }
-
-                localStorage.setItem('cm_telefon', telefon);
-                localStorage.setItem('cm_kullanici_adi', loginData.kullanici_adi || '');
-                localStorage.setItem('cm_has_profile', loginData.has_profile ? 'true' : 'false');
-                localStorage.setItem('cm_disclaimer_ok', 'true');
-                
+                const loginData = await window.AuthManager.login(telefon, sifre);
                 window.location.href = '/dashboard';
                 
             } catch (error) {
