@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 import sqlite3
 
-from src.models import KullaniciProfili, ProfilKaydetRequest, AileUyesiEkleRequest, AileUyesi, Cinsiyet
+from src.models import KullaniciProfili, ProfilKaydetRequest, AileUyesiEkleRequest, AileUyesi
 from src.database import get_db, profil_getir_db, profil_kaydet_db
 from src.auth import get_current_user
 from src.messages import PROFIL_BULUNAMADI, ONCE_PROFIL_OLUSTUR
@@ -25,12 +25,10 @@ async def save_profile(req: ProfilKaydetRequest, telefon: str = Depends(get_curr
     if profil is None:
         profil = KullaniciProfili()
     
-    cinsiyet = Cinsiyet.ERKEK if req.cinsiyet.lower() in ["erkek", "male"] else Cinsiyet.KADIN
-    
     ana_kullanici = AileUyesi(
         ad=req.ad,
         yas=req.yas,
-        cinsiyet=cinsiyet,
+        cinsiyet=req.cinsiyet,
         boy=req.boy,
         kilo=req.kilo,
         hastaliklar=req.hastaliklar,
@@ -52,12 +50,10 @@ async def add_family_member(req: AileUyesiEkleRequest, telefon: str = Depends(ge
     if profil is None:
         raise HTTPException(status_code=404, detail=ONCE_PROFIL_OLUSTUR)
     
-    cinsiyet = Cinsiyet.ERKEK if req.cinsiyet.lower() in ["erkek", "male"] else Cinsiyet.KADIN
-    
     uye = AileUyesi(
         ad=req.ad,
         yas=req.yas,
-        cinsiyet=cinsiyet,
+        cinsiyet=req.cinsiyet,
         boy=req.boy,
         kilo=req.kilo,
         hastaliklar=req.hastaliklar,

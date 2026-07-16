@@ -7,7 +7,7 @@ import re
 
 from src.llm import invoke_with_model_fallback, parse_llm_response
 from src.agent_state import AgentState
-from src.logger import get_logger
+from src.logger import get_logger, log_failure
 from src.memory import klinik_bilgi_getir
 from src.prompt_manager import PromptManager
 from src.governance.decision import calculate_confidence, extract_citations_from_rag
@@ -123,11 +123,12 @@ def _quality_profile_from_summary(profil_ozeti: str) -> dict:
         for item in _profile_field(profil_ozeti, "Hastalıklar (ICD-11 Standart)").split(",")
         if item.strip() and item.strip().lower() != "yok"
     ]
+    ages = [int(value) for value in re.findall(r"\bYas:\s*(\d{1,3})", profil_ozeti or "")]
     return {
         "alerjiler": allergies,
         "hastaliklar": diseases,
-        "yas": 30,
-        "cinsiyet": "",
+        "yas": min(ages) if ages else 30,
+        "cinsiyet": _profile_field(profil_ozeti, "Cinsiyet"),
         "hedef": _profile_field(profil_ozeti, "Beslenme Hedefi"),
     }
 
@@ -170,7 +171,7 @@ def supervisor_node(state: AgentState) -> dict:
             uzman_onerisi=veri.get("uzman_onerisi", ""),
         )
     except Exception as e:
-        logger.error("Supervisor JSON parse hatası: %s - Gelen: %s", e, icerik[:200])
+        log_failure(logger, "supervisor_response_parse", e, component="supervisor")
         # Fallback to diet if failed
         return _governance_update(
             state,
@@ -198,7 +199,10 @@ def onceliklendirme_node(state: AgentState) -> dict:
     })
     cevap = invoke_with_model_fallback(prompt)
     icerik = parse_llm_response(cevap)
-    logger.info("Triyaj Uzmanı çakışmaları çözdü: %s", icerik[:100] + "...")
+    logger.info(
+        "event=clinical_priority_resolved component=triage status=completed output_chars=%d",
+        len(icerik),
+    )
     return _governance_update(
         state,
         "ClinicalPriorityResolved",
@@ -250,6 +254,7 @@ def denetleyici_node(state: AgentState) -> dict:
     onerilen_yemek = state["uzman_onerisi"]
     quality_profile = _quality_profile_from_summary(state.get("profil_ozeti", ""))
     policy_result = PolicyEngine().check_policy(quality_profile, state.get("hedef_islem", "meal_recommendation"))
+    policy_warning = " ".join(policy_result.get("applied_policies") or [])
     rule_result = RuleEngine().check_rules(quality_profile, onerilen_yemek, [onerilen_yemek])
     quality_events = [
         make_event(
@@ -369,6 +374,11 @@ def denetleyici_node(state: AgentState) -> dict:
         f"{rule['medication']}: {rule['explanation']}"
         for rule in medication_safety.get("matched_rules", [])
     ]
+    unknown_medications = [
+        item.get("original")
+        for item in medication_safety.get("normalized_medications", [])
+        if not item.get("normalized_name")
+    ]
     if medication_safety.get("severity") == "unknown" and medication_safety.get("needs_professional_review"):
         warning = (
             "İlaç-besin etkileşimi doğrulanamadı; kayıtlı ilacın güvenli eşleşmesini yapamadım. "
@@ -399,9 +409,16 @@ def denetleyici_node(state: AgentState) -> dict:
             },
             **updated,
         )
-    if deterministik_ilac_riskleri:
+    if deterministik_ilac_riskleri and medication_safety.get("severity") == "avoid":
+        if unknown_medications:
+            deterministik_ilac_riskleri.append(
+                "Bazı ilaçların etkileşimi doğrulanamadı; sağlık profesyoneli değerlendirmesi gerekir."
+            )
         sebep = " ".join(deterministik_ilac_riskleri)
-        logger.warning("Deterministik ilac-besin kurali calisti: %s", sebep)
+        logger.warning(
+            "event=medication_food_rule component=medical_safety status=blocked reason_chars=%d",
+            len(sebep),
+        )
         confidence = calculate_confidence(
             safe=False,
             evidence_found=True,
@@ -424,16 +441,69 @@ def denetleyici_node(state: AgentState) -> dict:
             confidence=confidence,
         )
 
+    if deterministik_ilac_riskleri:
+        warning = " ".join(deterministik_ilac_riskleri)
+        if unknown_medications:
+            warning += " Bazı ilaçların etkileşimi doğrulanamadı; sağlık profesyoneline danış."
+        confidence = calculate_confidence(
+            safe=True,
+            evidence_found=True,
+            citations=[],
+        )
+        confidence["medical_risk"] = max(float(confidence.get("medical_risk", 0.0)), 0.5)
+        updated = {
+            "guvenli_mi": True,
+            "uyari_mesaji": warning,
+            "risk_score": confidence["medical_risk"],
+            "confidence": confidence,
+        }
+        if state.get("hedef_islem") in {"SOHBET", "SECENEK_SUN", "SECENEK_SUN_BITTI"}:
+            updated["uzman_onerisi"] = f"{onerilen_yemek}\n\nDikkat: {warning}"
+        return _governance_update(
+            state,
+            "RuleTriggered",
+            "medication_safety",
+            status="review",
+            metadata={
+                "risks": deterministik_ilac_riskleri,
+                "severity": medication_safety.get("severity"),
+                "needs_professional_review": medication_safety.get("needs_professional_review"),
+            },
+            **updated,
+        )
+
     # RAG: Veritabanındaki makalelerden yemeğe veya hasta profiline uygun bilimsel kuralları getir
     ilac_sorgu_metni = ", ".join(ilaclar) if ilaclar else "Yok"
     sorgu = f"İlaç Besin Etkileşimi: Kullanılan İlaçlar: {ilac_sorgu_metni} - Önerilen Yemek: {onerilen_yemek} - Profil: {state['profil_ozeti']}"
     
     klinik_kanit = klinik_bilgi_getir(sorgu, k_adet=4)
     citations = extract_citations_from_rag(klinik_kanit)
+    evidence_review_required = bool(getattr(klinik_kanit, "review_required", True))
+    evidence_review_status = str(getattr(klinik_kanit, "clinical_review_status", "not_established"))
+    if not klinik_kanit:
+        evidence_warning = (
+            "Bu öneri için registry kapsamındaki resmî kaynaklarda yeterli eşleşme bulunamadı. "
+            "Belirsizliği sağlık profesyoneliyle değerlendirin."
+        )
+    elif evidence_review_required:
+        evidence_warning = (
+            "Kaynak kaydı izlenebilir olsa da ilgili sağlık kuralının uzman incelemesi henüz tamamlanmadı. "
+            "Riskli veya yeni bir durumda sağlık profesyoneline danışın."
+        )
+    else:
+        evidence_warning = ""
+    final_policy_warning = " ".join(
+        item for item in (policy_warning, evidence_warning) if item
+    )
     citation_scores = [
         CitationValidator().validate_citation(
             similarity_score=float(citation.get("similarity_score", float('inf'))),
             evidence_span=citation.get("evidence_span", ""),
+            lexical_score=(
+                float(citation["lexical_score"])
+                if citation.get("lexical_score") is not None
+                else None
+            ),
         )
         for citation in citations
     ]
@@ -455,7 +525,12 @@ def denetleyici_node(state: AgentState) -> dict:
     
     if "SAFE: NO" in icerik.upper():
         sebep = icerik.split("REASON:")[1].strip() if "REASON:" in icerik else "Tıbbi profilinize uygun değil."
-        logger.warning("Tıbbi kalkanımız devrede: %s yemeğini sizin için güvenli bulmadık. Sebep: %s", onerilen_yemek, sebep)
+        logger.warning(
+            "event=medical_safety_review component=auditor status=blocked "
+            "recommendation_chars=%d reason_chars=%d",
+            len(onerilen_yemek or ""),
+            len(sebep or ""),
+        )
         confidence = calculate_confidence(
             safe=False,
             evidence_found=bool(klinik_kanit),
@@ -471,6 +546,9 @@ def denetleyici_node(state: AgentState) -> dict:
                         "evidence_found": bool(klinik_kanit),
                         "citation_count": len(citations),
                         "citation_validation_min": min(citation_scores) if citation_scores else 0.0,
+                        "evidence_policy": "official_scoped_only",
+                        "clinical_review_status": evidence_review_status,
+                        "review_required": evidence_review_required,
                     },
                 ),
                 make_event(
@@ -487,12 +565,20 @@ def denetleyici_node(state: AgentState) -> dict:
             citations=citations,
         )
         
-    logger.info("Harika haber! %s yemeği tıbbi profilinize %%100 uygun bulundu.", onerilen_yemek)
+    logger.info(
+        "Tibbi denetim tamamlandi: output_chars=%d citation_count=%d",
+        len(onerilen_yemek or ""),
+        len(citations),
+    )
     confidence = calculate_confidence(
         safe=True,
         evidence_found=bool(klinik_kanit),
         citations=citations,
     )
+    if policy_result.get("requires_review"):
+        confidence["medical_risk"] = max(float(confidence.get("medical_risk", 0.0)), 0.5)
+    if evidence_review_required:
+        confidence["medical_risk"] = max(float(confidence.get("medical_risk", 0.0)), 0.5)
     return _governance_events_update(
         state,
         [
@@ -503,16 +589,24 @@ def denetleyici_node(state: AgentState) -> dict:
                         "evidence_found": bool(klinik_kanit),
                         "citation_count": len(citations),
                         "citation_validation_min": min(citation_scores) if citation_scores else 0.0,
+                        "evidence_policy": "official_scoped_only",
+                        "clinical_review_status": evidence_review_status,
+                        "review_required": evidence_review_required,
                     },
                 ),
             make_event(
                 "RiskClassified",
                 "auditor",
-                metadata={"safe": True, "risk_score": confidence["medical_risk"]},
+                status="review" if evidence_review_required else "ok",
+                metadata={
+                    "known_rule_conflict": False,
+                    "risk_score": confidence["medical_risk"],
+                    "clinical_review_status": evidence_review_status,
+                },
             ),
         ],
         guvenli_mi=True,
-        uyari_mesaji="",
+        uyari_mesaji=final_policy_warning,
         risk_score=confidence["medical_risk"],
         confidence=confidence,
         citations=citations,
@@ -533,8 +627,8 @@ def haftalik_plan_olustur(profil_ozeti: str, hafiza_metni: str, is_regeneration:
     Create a complete 7-day meal plan (Monday to Sunday) with 3 meals per day (Breakfast, Lunch, Dinner).
     
     STRICT MEDICAL GUARDRAILS (CRITICAL):
-    1. You must independently identify ALL dietary restrictions associated with the patient's listed diseases (e.g., if Gut disease is present, strictly eliminate all high-purine foods, yeast, specific meats, and certain dairy).
-    2. Before adding ANY meal to the table, mentally verify it against EVERY disease and allergy in the profile. If there is even a 1% risk of it being contraindicated, DO NOT use it.
+    1. Apply only well-established dietary restrictions associated with the listed diseases. Do not invent blanket bans or treat moderate restrictions as absolute contraindications.
+    2. Before adding a meal, verify explicit ingredients against every recorded disease and allergy. Exclude confirmed allergens and concrete contraindications; use conservative portions for moderate restrictions.
     3. Another AI agent will verify your menu later. If you suggest a harmful food, the system will crash and the patient will lose trust. Be extremely conservative.
     4. Exclude any allergies or negatively reviewed items completely.
     
@@ -543,10 +637,24 @@ def haftalik_plan_olustur(profil_ozeti: str, hafiza_metni: str, is_regeneration:
     - DIETARY BALANCE & ENJOYMENT: Leave room for enjoyment. Automatically include safe, profile-compliant desserts, snacks, or comforting meals (e.g., sugar-free alternatives for diabetics) to keep the patient motivated.
     - Let your clinical intelligence decide the best culinary variety. Do not stick to monotonous or repetitive meal patterns.
     - Use accessible ingredients but combine them in exciting ways.
-    - Output the result as a beautiful Markdown table in Turkish.
-    - The table should have columns for 'Gün' (Day), 'Sabah' (Breakfast), 'Öğle' (Lunch), and 'Akşam' (Dinner).
-    - CRITICAL: Inside the table cells, next to each meal name, you MUST include the estimated Calories and Macros (Protein, Carbs, Fats) in parentheses. Example: "Menemen (320 kcal, 15g P, 10g K, 20g Y)".
-    - Provide ONLY the Markdown table, without any conversational text before or after.
+    - Output MUST BE IN STRICT JSON FORMAT matching this schema:
+    {{
+      "days": [
+        {{
+          "day": "Pazartesi",
+          "breakfast": "Meal Name (320 kcal, 15g P, 10g K, 20g Y)",
+          "lunch": "...",
+          "dinner": "...",
+          "snacks": ["..."],
+          "notes": ["..."]
+        }}
+      ],
+      "summary": "A short motivational summary in Turkish",
+      "warnings": ["Important medical warnings or dietary notes in Turkish"],
+      "confidence": {{"medical_risk": 0.1}}
+    }}
+    - CRITICAL: Inside each meal field, you MUST include the estimated Calories and Macros (Protein, Carbs, Fats) in parentheses. Example: "Menemen (320 kcal, 15g P, 10g K, 20g Y)".
+    - Do NOT output markdown, ONLY pure JSON. No markdown code blocks like ```json.
     """
     
     if is_regeneration:
@@ -555,7 +663,20 @@ def haftalik_plan_olustur(profil_ozeti: str, hafiza_metni: str, is_regeneration:
     
     logger.info("Sizin için özenle 7 günlük, sağlıklı ve lezzetli bir beslenme planı hazırlıyoruz...")
     cevap = invoke_with_model_fallback(prompt, temperature=0.9 if is_regeneration else 0.7)
-    return parse_llm_response(cevap)
+    raw_response = parse_llm_response(cevap)
+    import json
+    try:
+        if raw_response.startswith('```json'):
+            raw_response = raw_response[7:-3].strip()
+        elif raw_response.startswith('```'):
+            raw_response = raw_response[3:-3].strip()
+        from src.models import WeeklyPlan
+        plan_data = json.loads(raw_response)
+        plan = WeeklyPlan(**plan_data)
+        return plan.model_dump()
+    except Exception as e:
+        log_failure(logger, "weekly_plan_response_parse", e, component="weekly_plan")
+        raise RuntimeError("Plan format validation failed") from e
 
 def mutfak_sefi_node(state: AgentState) -> dict:
     """
@@ -564,7 +685,10 @@ def mutfak_sefi_node(state: AgentState) -> dict:
     becerilerini kullanıyor (Hız ve kararlılık artışı).
     """
     onerilen_yemek = str(state.get("uzman_onerisi", "Sağlıklı Yemek"))[:50]
-    logger.info("Mutfak şefimiz %s yemeğinin en güzel tarifini hazırlıyor...", onerilen_yemek)
+    logger.info(
+        "event=recipe_generation component=kitchen status=started recommendation_chars=%d",
+        len(onerilen_yemek),
+    )
     
     sohbet_gecmisi_str = _sohbet_gecmisi_metni(state)
     
@@ -627,12 +751,12 @@ def aile_ortak_menu_olustur(profil_ozeti_listesi: str) -> str:
     
     YOUR TASK:
     Analyze ALL family members' medical restrictions. 
-    You must find the "lowest common denominator" — meaning you must ONLY suggest foods that are 100% safe for EVERY SINGLE MEMBER of the family.
+    You must find the "lowest common denominator" — only suggest foods compatible with every known restriction in the supplied family profiles.
     If one person has diabetes and another has celiac, the food MUST be BOTH sugar-free and gluten-free.
     
     REQUIREMENTS:
     - Suggest exactly 5 traditional Turkish main courses (Ana Yemek).
-    - For each dish, explain BRIEFLY why it is perfectly safe for the specific diseases in the family (e.g. "Ahmet'in diyabeti için şekersiz, Ayşe'nin çölyak hastalığı için glütensizdir").
+    - For each dish, explain BRIEFLY which recorded profile restrictions it addresses. Do not claim clinical certainty.
     - Format as a beautiful Markdown list in Turkish. Do not add any extra conversational text.
     """
     
@@ -643,7 +767,7 @@ def aile_ortak_menu_olustur(profil_ozeti_listesi: str) -> str:
 def mutfak_asistani(profil_ozeti: str, malzemeler: str) -> str:
     """
     Buzdolabındaki malzemeleri ve hastanın tıbbi profilini alarak,
-    kullanıcıya özel %100 güvenli bir yemek tarifi üretir.
+    kullanıcının profilinde bilinen kısıtları dikkate alan bir yemek tarifi üretir.
     """
     logger.info("Mutfaktaki malzemelerinize bakıyoruz... Size özel, pratik ve güvenli bir tarif yolda!")
     
@@ -661,7 +785,7 @@ def mutfak_asistani(profil_ozeti: str, malzemeler: str) -> str:
     (You may assume basic pantry staples like salt, pepper, olive oil, water, onion, and garlic are always available).
     
     STRICT MEDICAL GUARDRAILS (CRITICAL):
-    1. The recipe MUST be 100% safe and compliant with the patient's medical profile.
+    1. The recipe MUST comply with every known restriction in the supplied medical profile.
     2. If the available ingredients list contains ANY item that is HARMFUL or RISKY for the patient's conditions (e.g., sugar for a diabetic, gluten for celiac), you MUST NOT use that ingredient in the recipe!
     3. If you eliminate a harmful ingredient, you MUST warn the patient in the "Şefin Yorumu ve Tıbbi Uyarı" section explaining medically why you didn't use it.
     4. CUREBOT INTEGRATION (CRITICAL): If you see an "Unknown Container/Sauce" or "Bilinmeyen Kap/Sos" in the ingredients, YOU MUST explicitly tell the user: "⚠️ Fotoğrafta ne olduğunu anlayamadığım bir sos/kap gördüm. Eğer bunun ne olduğunu sayfanın yanındaki **CureBot** asistanına yazarsanız (Örn: 'Buzdolabındaki o sos mayonezdi'), tarifi sizin için anında güncelleyebilir."
@@ -699,7 +823,7 @@ def adime_raporlayici_node(state: AgentState) -> dict:
     {{
         "assessment": "Summary of patient profile and current state",
         "diagnosis": "The primary nutritional diagnosis and risks",
-        "intervention": "The final approved meal and its macros",
+        "intervention": "The final selected meal and its estimated macros",
         "monitoring_evaluation": "What the patient should monitor (e.g. blood sugar after 2 hours)"
     }}
     

@@ -5,9 +5,11 @@ Kullanıcı profillerini ve logları şimdilik lokalde (SQLite) tutuyoruz.
 """
 import sqlite3
 import json
+import hashlib
+import time
 from datetime import datetime
 from src.models import KullaniciProfili
-from src.logger import get_logger
+from src.logger import get_logger, log_failure
 from src.config import settings
 from src.governance.kpi import calculate_clinical_kpis
 from src.privacy.redaction import dumps_redacted_json, redact_json_string, redact_text
@@ -157,9 +159,63 @@ def _ensure_db():
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS revoked_refresh_tokens (
+            jti_hash TEXT PRIMARY KEY,
+            expires_at INTEGER NOT NULL,
+            revoked_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_revoked_refresh_tokens_expires_at
+        ON revoked_refresh_tokens(expires_at)
+    """)
+
     conn.commit()
     conn.close()
     _db_initialized = True
+
+
+def _refresh_jti_hash(jti: str) -> str:
+    return hashlib.sha256(jti.encode("utf-8")).hexdigest()
+
+
+def refresh_token_jti_is_revoked_db(jti: str | None, conn: sqlite3.Connection = None) -> bool:
+    if not jti:
+        return False
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        row = _conn.execute(
+            "SELECT 1 FROM revoked_refresh_tokens WHERE jti_hash = ?",
+            (_refresh_jti_hash(jti),),
+        ).fetchone()
+        return row is not None
+
+
+def refresh_token_jti_consume_db(
+    jti: str | None,
+    expires_at: int | float | None,
+    conn: sqlite3.Connection = None,
+) -> bool:
+    """Atomically consume a refresh JTI; False means it was already consumed."""
+    if not jti:
+        return False
+    _ensure_db()
+    expiry = int(expires_at or time.time())
+    with get_connection(conn) as _conn:
+        _conn.execute(
+            "DELETE FROM revoked_refresh_tokens WHERE expires_at < ?",
+            (int(time.time()),),
+        )
+        cursor = _conn.execute(
+            """
+            INSERT OR IGNORE INTO revoked_refresh_tokens (jti_hash, expires_at, revoked_at)
+            VALUES (?, ?, ?)
+            """,
+            (_refresh_jti_hash(jti), expiry, datetime.now().isoformat()),
+        )
+        _conn.commit()
+        return cursor.rowcount == 1
 
 
 def profil_getir_db(telefon: str, conn: sqlite3.Connection = None) -> KullaniciProfili:
@@ -176,7 +232,7 @@ def profil_getir_db(telefon: str, conn: sqlite3.Connection = None) -> KullaniciP
             try:
                 return KullaniciProfili.model_validate_json(row[0])
             except Exception as e:
-                logger.warning("Profil JSON çözümleme hatası (%s): %s", telefon, e)
+                log_failure(logger, "profile_json_parse", e, component="database")
                 return None
         return None
 

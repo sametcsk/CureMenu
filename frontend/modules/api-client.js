@@ -13,6 +13,22 @@ function onRefreshed(token) {
     refreshSubscribers = [];
 }
 
+function apiHataMesaji(data, varsayilan = 'Bir hata oluştu. Lütfen tekrar deneyin.') {
+    if (!data) return varsayilan;
+    if (data.error && typeof data.error.message === 'string') return data.error.message;
+    if (typeof data.message === 'string') return data.message;
+    const detail = data.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail) && detail.length > 0) {
+        return detail[0].msg || varsayilan;
+    }
+    return varsayilan;
+}
+
+function baglantiHatasi(_error) {
+    return 'Bağlantı kurulamadı. Lütfen birazdan tekrar deneyin.';
+}
+
 async function safeFetchJson(url, options = {}) {
     options.credentials = 'include'; // Ensure HttpOnly cookies are sent
     let res = await fetch(url, options);
@@ -27,11 +43,11 @@ async function safeFetchJson(url, options = {}) {
                     onRefreshed(true);
                 } else {
                     onRefreshed(false);
-                    logout(); // If refresh fails, log them out
+                    window.logout?.(); // If refresh fails, log them out
                 }
             } catch (e) {
                 onRefreshed(false);
-                logout();
+                window.logout?.();
             } finally {
                 isRefreshing = false;
             }
@@ -72,11 +88,11 @@ async function safeFetchStream(url, options = {}) {
                     onRefreshed(true);
                 } else {
                     onRefreshed(false);
-                    logout();
+                    window.logout?.();
                 }
             } catch (e) {
                 onRefreshed(false);
-                logout();
+                window.logout?.();
             } finally {
                 isRefreshing = false;
             }
@@ -113,3 +129,12 @@ function formatMarkdownSafe(text) {
     }
     return escapeHtml(safeText).replace(/\n/g, '<br>');
 }
+
+window.API = API;
+window.safeFetchJson = safeFetchJson;
+window.safeFetchStream = safeFetchStream;
+window.apiHataMesaji = apiHataMesaji;
+window.baglantiHatasi = baglantiHatasi;
+window.onRefreshed = onRefreshed;
+window.formatMarkdownSafe = formatMarkdownSafe;
+window.escapeHtml = escapeHtml;

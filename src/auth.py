@@ -1,27 +1,30 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
+import sqlite3
 import jwt
 from fastapi import Request, HTTPException, status
 import uuid
 
 from src.config import settings
-from src.logger import get_logger
+from src.logger import get_logger, log_failure
+from src.database import refresh_token_jti_consume_db, refresh_token_jti_is_revoked_db
 
 logger = get_logger(__name__)
-_revoked_jtis: set[str] = set()
-
 def generate_jti() -> str:
     """Benzersiz token id'si üretir (Token Blacklist/Rotation için)"""
     return str(uuid.uuid4())
 
 
-def revoke_token_jti(jti: str | None) -> None:
-    if jti:
-        _revoked_jtis.add(jti)
+def revoke_token_jti(
+    jti: str | None,
+    expires_at: int | float | None,
+    conn: sqlite3.Connection | None = None,
+) -> bool:
+    return refresh_token_jti_consume_db(jti, expires_at, conn=conn)
 
 
-def is_token_revoked(jti: str | None) -> bool:
-    return bool(jti and jti in _revoked_jtis)
+def is_token_revoked(jti: str | None, conn: sqlite3.Connection | None = None) -> bool:
+    return refresh_token_jti_is_revoked_db(jti, conn=conn)
 
 def create_tokens(user_id: str, role: str = "user") -> Tuple[str, str]:
     """
@@ -57,7 +60,11 @@ def create_tokens(user_id: str, role: str = "user") -> Tuple[str, str]:
     
     return access_token, refresh_token
 
-def verify_token(token: str, expected_type: Optional[str] = None) -> dict:
+def verify_token(
+    token: str,
+    expected_type: Optional[str] = None,
+    conn: sqlite3.Connection | None = None,
+) -> dict:
     """
     Verilen JWT token'ı doğrular ve payload'ı döner.
     """
@@ -71,7 +78,7 @@ def verify_token(token: str, expected_type: Optional[str] = None) -> dict:
         )
         if expected_type and payload.get("type") != expected_type:
             raise jwt.InvalidTokenError("Geçersiz token tipi")
-        if is_token_revoked(payload.get("jti")):
+        if expected_type == "refresh" and is_token_revoked(payload.get("jti"), conn=conn):
             raise jwt.InvalidTokenError("Token revoked")
         return payload
     except jwt.ExpiredSignatureError:
@@ -81,7 +88,7 @@ def verify_token(token: str, expected_type: Optional[str] = None) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
     except jwt.InvalidTokenError as e:
-        logger.warning(f"Geçersiz token denemesi: {e}")
+        log_failure(logger, "token_validation", e, component="auth")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Geçersiz kimlik bilgisi",

@@ -1,7 +1,8 @@
 {
-  "version": "high_risk_medications:v1",
+  "version": "high_risk_medications:v2",
   "rules": [
     {
+      "rule_id": "warfarin-vitamin-k-consistency:v2",
       "medication": "warfarin",
       "aliases": ["coumadin", "jantoven", "kumadin"],
       "risk_terms": ["k vitamini", "vitamin k", "ispanak", "lahana", "karalahana", "brokoli", "maydanoz"],
@@ -9,13 +10,15 @@
       "explanation": "Warfarin kullanırken K vitamini yüksek besinler INR dengesini etkileyebilir."
     },
     {
+      "rule_id": "atorvastatin-large-grapefruit:v2",
       "medication": "atorvastatin",
-      "aliases": ["statin", "lipitor"],
+      "aliases": ["lipitor"],
       "risk_terms": ["greyfurt", "grapefruit"],
-      "severity": "avoid",
-      "explanation": "Statin grubu ilaçlarda greyfurt ilaç düzeyini artırabilir."
+      "severity": "caution",
+      "explanation": "Atorvastatin kullanırken özellikle yüksek miktarda greyfurt suyu ilaç düzeyini artırabilir; miktar ve kullanım şekli doğrulanmalıdır."
     },
     {
+      "rule_id": "metformin-excess-alcohol:v2",
       "medication": "metformin",
       "aliases": ["glucophage", "glifor"],
       "risk_terms": ["alkol", "bira", "sarap", "şarap", "raki", "rakı", "viski"],
@@ -23,6 +26,7 @@
       "explanation": "Metformin kullanırken alkol laktik asidoz riskini artırabilir."
     },
     {
+      "rule_id": "levothyroxine-absorption-timing:v2",
       "medication": "levothyroxine",
       "aliases": ["levotiroksin", "euthyrox", "tefor"],
       "risk_terms": ["kalsiyum", "demir", "süt", "sut", "yoğurt", "yogurt", "peynir", "ayran"],
@@ -30,13 +34,15 @@
       "explanation": "Levothyroxine emilimi kalsiyum, demir ve bazı süt ürünleriyle azalabilir; zamanlama önemlidir."
     },
     {
+      "rule_id": "ciprofloxacin-dairy-alone-timing:v2",
       "medication": "ciprofloxacin",
       "aliases": ["cipro", "siprofloksasin"],
       "risk_terms": ["süt", "sut", "yoğurt", "yogurt", "peynir", "ayran", "kalsiyum"],
       "severity": "caution",
-      "explanation": "Ciprofloxacin kalsiyum ve süt ürünleriyle birlikte alındığında emilimi azalabilir."
+      "explanation": "Ciprofloxacin dozu yalnızca süt ürünü veya kalsiyumla birlikte alınırsa emilimi azalabilir; süt ürünü içeren normal bir öğün ve doz zamanlaması ayrıca doğrulanmalıdır."
     },
     {
+      "rule_id": "linezolid-high-tyramine:v2",
       "medication": "linezolid",
       "aliases": ["zyvox", "maoi", "mao inhibitor", "mao inhibitörü", "monoamin oksidaz inhibitörü", "monoamine oxidase inhibitor"],
       "risk_terms": ["tiramin", "eski peynir", "fermente", "sucuk", "salam", "soya sosu", "şarap", "sarap", "bira"],

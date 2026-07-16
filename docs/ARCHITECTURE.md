@@ -11,8 +11,8 @@ This document outlines the core responsibilities of the different logical layers
 **Details:** This layer evaluates *how well* the system is performing a given task. It calculates confidence scores (`confidence.py`), validates RAG citations (`citation_validator.py`), and logs explainability metrics (`explainability.py`). It monitors the quality of AI outputs but does not enforce medical rules.
 
 ## 3. Medical Knowledge (`src/medical_knowledge/`)
-**Responsibility:** Medical domain logic and strict health validation.
-**Details:** This layer holds the source of truth for clinical interactions. It checks drug-food interactions (`safety_checker.py`) and interfaces with external clinical terminology or ontology databases (like ICD-11). If a medical rule is violated, this layer raises the flag.
+**Responsibility:** Versioned medical terminology normalization and known-rule checks.
+**Details:** This layer checks the limited deterministic drug-food rules currently represented by the local registry (`safety_checker.py`) and can use external terminology providers for normalization. It flags known matches and uncertainty; it does not establish clinical correctness or replace expert review.
 
 ## 4. Rules (`src/rules/`)
 **Responsibility:** Business and application-level policy enforcement.
@@ -20,7 +20,7 @@ This document outlines the core responsibilities of the different logical layers
 
 ## 5. Grocery (`src/grocery/`)
 **Responsibility:** E-commerce, inventory, and supply chain logic.
-**Details:** Converts abstract dietary plans into actionable shopping items. Handles price estimation, alternative ingredient sourcing, and integration with grocery store APIs. It uses the `medical_knowledge` layer to ensure recommended substitutions don't violate patient restrictions.
+**Details:** Converts abstract dietary plans into actionable shopping items. Handles price estimation and alternative ingredient suggestions. It uses the `medical_knowledge` layer to flag substitutions that match known profile restrictions; unknown or out-of-scope cases require review.
 
 ## 6. Privacy (`src/privacy/`)
 **Responsibility:** Data redaction and PII protection.

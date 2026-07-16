@@ -7,18 +7,18 @@
 
 ## Ürün Fikri ve Açıklaması
 
-**CureMenu**, her türlü kronik hastalık, alerji, tıbbi hassasiyet veya spesifik beslenme hedefi olan bireyler ve aileleri için geliştirilmiş yapay zeka destekli, klinik standartları rehber edinen kapsamlı bir beslenme asistanıdır. Geleneksel "herkese uyan" diyet listeleri yerine, kullanıcının tahlil geçmişini, güncel rahatsızlıklarını, tüm alerjilerini ve ilaç kullanımlarını dikkate alan gelişmiş algoritmik bir altyapı sunar. Sadece hasta bireyleri değil, sağlıklı beslenmek isteyen herkesi kapsar.
+**CureMenu**, ilaç kullanan, alerjisi veya kronik durumu bulunan kişilerin günlük yemek kararlarını profil bilgisi, sınırlı deterministik güvenlik kuralları ve kaynak destekli açıklamalarla destekleyen bir beslenme karar destek prototipidir. Tanı koymaz, tedavi düzenlemez ve sağlık profesyonelinin yerine geçmez.
 
-Evde veya dışarıda yaşanan "Ne yiyebilirim?" sorununu çözmek amacıyla, çoklu ajan (Multi-Agent) mimarisinden güç alarak sadece yemek önerisi vermekle kalmaz; bu önerileri tıbbi güvenlik kurallarına tabi tutarak güvenilir bir karar destek mekanizması sunar.
+Evde veya dışarıda yaşanan "Ne yiyebilirim?" sorusuna yardımcı olmak amacıyla önerileri profil, alerji ve bilinen ilaç-besin kurallarıyla kontrol eder. Kapsam dışı, riskli veya belirsiz durumda koşulsuz uygunluk iddiası yerine profesyonel değerlendirme uyarısı üretir.
 
 ## Öne Çıkan Özellikler
 
-- **Gelişmiş Sağlık Profili & Tahlil (PDF) Entegrasyonu:** Hastalık, alerji ve kullanılan ilaç bilgilerinin yanı sıra sisteme yüklenen laboratuvar sonuçlarını okuyarak (OCR/PDF Parsing) risk analizi yapar.
-- **Kesişim Odaklı Aile Modu:** Aynı evi paylaşan ancak farklı kronik rahatsızlıkları (örn. biri diyabet, diğeri çölyak) olan aile bireyleri için herkesin güvenle tüketebileceği "ortak payda" yemeklerini hesaplar.
-- **Güvenlik Çemberi (Clinical Guardrails):** Üretken yapay zekanın halüsinasyon riskine karşı, her bir öneriyi arka planda denetmen ajanlar ve statik kurallar (örn. ilaç-besin etkileşim listesi) ile kontrol eder. Şüpheli durumları bloklar.
-- **Dinamik Haftalık Plan & Atıştırmalık:** Kullanıcının makro dengesine ve sağlık profiline uygun 7 günlük plan oluşturur. Öğün alternatifleri ve anlık atıştırmalık taleplerini yönetir.
-- **Akıllı Menü Tarayıcı:** Restorana gidildiğinde QR kod veya fotoğraf üzerinden menüyü okuyarak, menüdeki hangi yiyeceklerin sağlık profilinize uygun olduğunu saniyeler içinde analiz eder.
-- **İzlenebilirlik ve Karar Kayıtları (Governance):** Yapay zekanın "neden" o yemeği önerdiğini, hangi kaynakları baz aldığını ve güvenlik skorunu şeffaf bir olay zinciri (event log) ile kullanıcıya sunar.
+- **Sağlık Profili & Tahlil PDF Akışı:** Hastalık, alerji ve ilaç bilgileriyle birlikte metin katmanı bulunan laboratuvar PDF'lerinden beslenme bağlamı çıkarır; sonuçlar tanı amacıyla kullanılmaz.
+- **Kesişim Odaklı Aile Modu:** Farklı kısıtları olan aile bireyleri için ortak seçenek taslağı üretir ve bilinen çatışmaları işaretler.
+- **Güvenlik Kontrolleri:** Üretken yapay zeka çıktısını sınırlı deterministik kurallar ve denetim akışıyla kontrol eder; riskli sonucu engeller, belirsiz sonucu uzman incelemesine yönlendirir.
+- **Dinamik Haftalık Plan & Atıştırmalık:** Sağlık profiline göre 7 günlük plan taslağı, öğün alternatifi ve atıştırmalık önerileri üretir.
+- **Akıllı Menü Tarayıcı:** URL veya fotoğraftan çıkarılan menü metnini profil kısıtlarıyla karşılaştırır; okunamayan veya belirsiz içerikte uyarı verir.
+- **İzlenebilirlik ve Karar Kayıtları (Governance):** Öneri akışındaki kaynak, kural ve tahmini risk kayıtlarını olay zinciriyle saklar; bu kayıtlar klinik doğruluk skoru değildir.
 - **Bütçe Optimizasyonu:** Sunulan haftalık planın tahmini market maliyetini hesaplayarak aile bütçesine katkı sağlar.
 
 ---
@@ -27,7 +27,7 @@ Evde veya dışarıda yaşanan "Ne yiyebilirim?" sorununu çözmek amacıyla, ç
 
 - Kendisinde veya sevdiklerinde kronik sağlık sorunları olan ve günlük beslenme rutinini güvenle yönetmek isteyen bireyler.
 - Birden fazla farklı diyeti (örn. glutensiz ve az tuzlu) aynı mutfakta yönetmeye çalışan ebeveynler.
-- Sporcular, gebeler veya özel beslenme hedefleri olan, kan tahlillerine uygun menü arayanlar.
+- Özel beslenme hedefi olan ve plan taslağını sağlık profesyoneliyle birlikte değerlendirmek isteyen kullanıcılar. Çocuk, gebelik/emzirme ve böbrek hastalığı gibi yüksek değişkenlik taşıyan profiller uzman incelemesi gerektirir.
 - Dışarıda, restoran menülerinde ne yiyeceği konusunda kafa karışıklığı ve korku yaşayan alerjik bireyler.
 
 ---
@@ -41,7 +41,7 @@ Evde veya dışarıda yaşanan "Ne yiyebilirim?" sorununu çözmek amacıyla, ç
 | **Yapay Zeka Mimarisi** | LangGraph (StateGraph tabanlı Multi-Agent Workflow), Google Gemini, Tavily |
 | **Hafıza & RAG** | ChromaDB (Yerel vektör veritabanı, HuggingFace embeddings) |
 | **İlişkisel Veritabanı** | SQLite (Profiller, loglar) + Alembic Migration |
-| **Kalite ve Güvenlik** | NeMo benzeri tıbbi Guardrail, Pydantic Structured Outputs |
+| **Kalite ve Güvenlik** | Deterministik kontrol kuralları, kaynak izlenebilirliği, Pydantic Structured Outputs |
 
 ---
 
@@ -78,6 +78,20 @@ python run.py
 Tarayıcınızda açın: **http://localhost:8000**
 - Ana Sayfa: `/`
 - Dashboard: `/dashboard`
+
+### Sağlık kaynağı izlenebilirliği
+
+Resmî kaynak URL'leri, PDF hash'leri, izin verilen sayfalar ve ilaç-besin kural bağlantıları `data/clinical_evidence_registry.json` dosyasında tek yerde tutulur.
+
+```powershell
+# Yerel PDF/hash/sayfa/kural kontrolü
+.\.venv\Scripts\python.exe scripts\sync_clinical_evidence.py --check-only
+
+# Kaynak bütünlüğü kontrolü geçerse resmî kapsamlı koleksiyonu yeniden kur
+.\.venv\Scripts\python.exe scripts\sync_clinical_evidence.py --rebuild
+```
+
+Uzak kaynak değiştiğinde hash otomatik kabul edilmez; insan ve sağlık uzmanı incelemesi gerekir. Kaynak bütünlüğü kontrolü klinik performans kanıtı değildir.
 
 ---
 

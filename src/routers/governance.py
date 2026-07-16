@@ -8,7 +8,7 @@ router = APIRouter()
 
 @router.get("/api/clinical-kpis")
 async def get_clinical_kpis(telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
-    """Klinik güven skorlarını ve temel KPI'ları döndürür."""
+    """Operasyonel kontrol ve izlenebilirlik KPI'larını döndürür."""
     # Sadece kendi telefon numarasının verilerini döndür (Multitenant safety)
     kpis = klinik_kpi_getir(telefon, conn=db)
     return {"success": True, "kpis": kpis}

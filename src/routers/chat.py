@@ -7,22 +7,31 @@ from fastapi.concurrency import run_in_threadpool
 import sqlite3
 
 from src.models import ChatRequest
-from src.database import get_db, etkilesim_logla, klinik_karar_kaydet, loglari_getir_db
+from src.database import (
+    get_db,
+    etkilesim_logla,
+    klinik_karar_getir,
+    klinik_karar_kaydet,
+    klinik_kararlari_getir,
+    loglari_getir_db,
+)
 from src.auth import get_current_user
 from src.messages import PROFIL_GEREKLI
 from src.governance.decision import build_decision_record, calculate_confidence
 from src.agent_state import create_initial_state
-from src.memory import hafizadakini_getir
+from src.memory import build_memory_namespace, hafizadakini_getir
 from src.governance.events import apply_event, make_event
 from src.graph import app as langgraph_app
 from src.nodes import _quality_profile_from_summary
 from src.quality.policy_engine import PolicyEngine
 from src.quality.rule_engine import RuleEngine
-from src.logger import get_logger
+from src.logger import get_logger, log_failure
 from src.config import settings
 from src.profil_utils import hedef_ilaclari, profil_ozeti_olustur, aile_profil_ozeti_olustur
 from src.database import profil_getir_db
 from src.messages import PROFIL_BULUNAMADI
+from src.medical_knowledge.normalizer import extract_medication_mentions, normalize_text
+from src.rate_limit import authenticated_user_or_ip, limiter
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -35,8 +44,7 @@ if settings.ENABLE_NEMO_GUARDRAILS:
         rails_config = RailsConfig.from_path("config")
         rails = LLMRails(rails_config)
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning("NeMo Guardrails yüklenemedi: %s", e)
+        log_failure(logger, "guardrails_initialize", e, component="chat")
 
 
 def _get_profil_ve_hedef(telefon: str, kimin_icin: str, db: sqlite3.Connection):
@@ -60,11 +68,11 @@ def _get_profil_ve_hedef(telefon: str, kimin_icin: str, db: sqlite3.Connection):
 def _profil_baglamini_hazirla(telefon: str, kimin_icin: str, db: sqlite3.Connection):
     profil, hedef = _get_profil_ve_hedef(telefon, kimin_icin, db=db)
     if kimin_icin == "aile":
-        return profil, aile_profil_ozeti_olustur(profil), "user_family"
+        return profil, aile_profil_ozeti_olustur(profil), build_memory_namespace(telefon, "family")
 
     if hedef is None:
         raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
-    return profil, profil_ozeti_olustur(hedef), f"user_{hedef.ad.lower()}"
+    return profil, profil_ozeti_olustur(hedef), build_memory_namespace(telefon, f"member:{hedef.id}")
 
 
 def _sse(event: str, payload: dict | None = None) -> str:
@@ -132,6 +140,9 @@ def _simple_chat_state(initial_state: dict, answer: str) -> dict:
         citations=[],
         deterministic_block=bool(found_risks),
     )
+    policy_warnings = list(policy_result.get("applied_policies") or [])
+    if policy_result.get("requires_review"):
+        confidence["medical_risk"] = max(float(confidence.get("medical_risk", 0.0)), 0.5)
     state = apply_event(
         initial_state,
         "FastAnswerGenerated",
@@ -168,13 +179,135 @@ def _simple_chat_state(initial_state: dict, answer: str) -> dict:
         ),
     ]
     state.update({
-        "hedef_islem": "SOHBET", "guvenli_mi": is_safe, "uyari_mesaji": " ".join(found_risks), "tarif_metni": answer,
+        "hedef_islem": "SOHBET", "guvenli_mi": is_safe,
+        "uyari_mesaji": " ".join([*found_risks, *policy_warnings]), "tarif_metni": answer,
         "uzman_onerisi": None, "risk_score": confidence["medical_risk"], "confidence": confidence, "citations": []
     })
     return state
 
+
+def _merge_medications(profile_medications: list[str], message: str) -> tuple[list[str], list[str]]:
+    message_medications = extract_medication_mentions(message)
+    merged: list[str] = []
+    seen: set[str] = set()
+    for medication in [*(profile_medications or []), *message_medications]:
+        key = normalize_text(str(medication))
+        if key and key not in seen:
+            seen.add(key)
+            merged.append(str(medication).strip())
+    return merged, message_medications
+
+
+def _is_previous_answer_source_question(message: str) -> bool:
+    text = _normalized_message(message)
+    refers_to_previous = any(
+        phrase in text
+        for phrase in ("bu cevap", "bu cevab", "bu yanit", "onceki cevap", "onceki cevab", "onceki yanit")
+    )
+    return refers_to_previous and any(word in text for word in ("kaynak", "kayna", "dayanak", "referans"))
+
+
+def _previous_answer_source_state(
+    initial_state: dict,
+    *,
+    telefon: str,
+    db: sqlite3.Connection,
+) -> tuple[dict, str] | None:
+    if not _is_previous_answer_source_question(initial_state.get("istek", "")):
+        return None
+
+    decisions = klinik_kararlari_getir(telefon, limit=1, conn=db)
+    previous = klinik_karar_getir(decisions[0]["decision_id"], conn=db) if decisions else None
+    recorded_citations = list((previous or {}).get("citations") or [])
+    verified_citations = [
+        citation
+        for citation in recorded_citations
+        if str(citation.get("source_id") or "").strip()
+        and str(citation.get("evidence_span") or "").strip()
+    ]
+
+    if verified_citations:
+        source_lines = [
+            f"- {citation.get('title') or citation.get('source_id')}"
+            for citation in verified_citations
+        ]
+        answer = (
+            "Önceki yanıtın karar kaydında doğrulanabilir kaynaklar bulunuyor:\n"
+            + "\n".join(source_lines)
+            + f"\n\nKarar kaydı: {previous.get('decision_id')}"
+        )
+    else:
+        answer = (
+            "Önceki yanıt için doğrulanabilir bir kaynak kaydı bulunmuyor. "
+            "Bu nedenle belirli bir kurum, rehber veya makale adı vermeyeceğim. "
+            "Sağlıkla ilgili belirsiz bir noktada doktorunuza, eczacınıza veya diyetisyeninize danışın."
+        )
+
+    state = _simple_chat_state(initial_state, answer)
+    state["hedef_islem"] = "SOURCE_DISCLOSURE"
+    state["citations"] = verified_citations
+    state = apply_event(
+        state,
+        "SourceDisclosureGenerated",
+        "api.chat",
+        metadata={
+            "previous_decision_found": previous is not None,
+            "verified_citation_count": len(verified_citations),
+        },
+    )
+    return state, answer
+
+
+def _safety_outcome(result: dict) -> tuple[bool, bool]:
+    risk_score = float(result.get("risk_score") or 0.0)
+    blocked = result.get("guvenli_mi") is False
+    review_required = risk_score >= 0.5
+    relevant_events = {
+        "MedicationSafetyChecked",
+        "MedicationReviewRequired",
+        "RuleTriggered",
+        "RuleChecked",
+        "RiskClassified",
+    }
+    for event in result.get("governance_events") or []:
+        if event.get("event_type") not in relevant_events:
+            continue
+        metadata = event.get("metadata") or {}
+        blocked = blocked or bool(metadata.get("blocking")) or event.get("status") == "blocked"
+        review_required = review_required or event.get("status") in {"review", "fallback"}
+        review_required = review_required or bool(metadata.get("needs_professional_review"))
+        review_required = review_required or bool(metadata.get("requires_review"))
+    return blocked, review_required
+
+
 def _final_cevap_metni(result: dict, streamed_text: str = "") -> str:
-    return result.get("tarif_metni") or result.get("uzman_onerisi") or result.get("uyari_mesaji") or result.get("adime_raporu") or streamed_text or ""
+    warning = str(result.get("uyari_mesaji") or "").strip()
+    base_answer = str(
+        result.get("tarif_metni")
+        or result.get("uzman_onerisi")
+        or result.get("adime_raporu")
+        or streamed_text
+        or ""
+    ).strip()
+    blocked, review_required = _safety_outcome(result)
+    if blocked:
+        reason = warning or "Bu seçeneğin sağlık profiliyle güvenli uyumu doğrulanamadı."
+        return (
+            f"Güvenlik uyarısı: {reason}\n\n"
+            "Bu seçeneği uygulamadan önce doktorunuza, eczacınıza veya diyetisyeninize danışın."
+        )
+    if review_required:
+        reason = warning or "İlaç-besin etkileşimi veya önerinin güvenli uyumu doğrulanamadı."
+        professional_warning = (
+            "Bu öneriyi uygulamadan önce doktorunuza, eczacınıza veya diyetisyeninize danışın."
+        )
+        parts = [f"Doğrulama uyarısı: {reason}"]
+        if base_answer and base_answer != warning:
+            parts.append(base_answer)
+        if professional_warning.casefold() not in "\n".join(parts).casefold():
+            parts.append(professional_warning)
+        return "\n\n".join(parts)
+    return base_answer or warning
 
 def _chat_fallback_message(profil_ozeti: str, user_message: str) -> str:
     request_hint = user_message.strip()[:140] if user_message else "beslenme sorusu"
@@ -193,9 +326,13 @@ def _chat_fallback_state(initial_state: dict, fallback_message: str, error: Exce
     return fallback_state
 
 @router.post("/api/chat")
+@limiter.limit("12/minute", key_func=authenticated_user_or_ip)
 async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
     profil, profil_ozeti, kullanici_id = _profil_baglamini_hazirla(telefon, req.kimin_icin, db=db)
-    ilaclar = hedef_ilaclari(profil, req.kimin_icin)
+    ilaclar, message_medications = _merge_medications(
+        hedef_ilaclari(profil, req.kimin_icin),
+        req.mesaj,
+    )
     
     if kullanici_id is None:
         raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
@@ -219,6 +356,16 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
     initial_state = create_initial_state(
         istek=req.mesaj, profil_ozeti=profil_ozeti, hafiza=gecmis, sohbet_gecmisi=sohbet_gecmisi, ilaclar=ilaclar,
     )
+    if message_medications:
+        initial_state = apply_event(
+            initial_state,
+            "MedicationMentionExtracted",
+            "medical_knowledge.normalizer",
+            metadata={
+                "message_medication_count": len(message_medications),
+                "merged_medication_count": len(ilaclar),
+            },
+        )
 
     injection_answer = _prompt_injection_warning(req.mesaj)
     if injection_answer:
@@ -244,6 +391,33 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "fast_path": True})
             yield _sse("done")
         return StreamingResponse(simple_stream(), media_type="text/event-stream")
+
+    source_disclosure = _previous_answer_source_state(initial_state, telefon=telefon, db=db)
+    if source_disclosure:
+        source_state, source_answer = source_disclosure
+        decision_record = build_decision_record(
+            source_state,
+            telefon=telefon,
+            kimin_icin=req.kimin_icin,
+            final_answer=source_answer,
+        )
+        bg_tasks.add_task(klinik_karar_kaydet, decision_record)
+        bg_tasks.add_task(etkilesim_logla, telefon, "", "CureBot", req.mesaj, source_answer[:500], None)
+
+        async def source_stream():
+            yield _sse("message", {"chunk": source_answer})
+            yield _sse(
+                "governance",
+                {
+                    "decision_id": decision_record["decision_id"],
+                    "risk_score": decision_record["risk_score"],
+                    "confidence_score": decision_record["confidence_score"],
+                    "source_disclosure": True,
+                },
+            )
+            yield _sse("done")
+
+        return StreamingResponse(source_stream(), media_type="text/event-stream")
     
     if rails:
         try:
@@ -261,7 +435,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
                     yield f"event: error\ndata: {json.dumps({'message': msg_text})}\n\n"
                 return StreamingResponse(guardrail_stream(), media_type="text/event-stream")
         except Exception as e:
-            logger.error("NeMo Guardrails hatası: %s", e)
+            log_failure(logger, "guardrails_request", e, component="chat")
 
     async def event_generator():
         yield _sse("heartbeat")
@@ -291,7 +465,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"]})
             yield _sse("done")
         except Exception as e:
-            logger.exception("CureBot streaming pipeline failed")
+            log_failure(logger, "chat_stream", e, component="chat")
             fallback_answer = _chat_fallback_message(profil_ozeti, req.mesaj)
             fallback_state = _chat_fallback_state(initial_state, fallback_answer, e)
             decision_record = build_decision_record(fallback_state, telefon=telefon, kimin_icin=req.kimin_icin, final_answer=fallback_answer)

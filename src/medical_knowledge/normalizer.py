@@ -33,7 +33,6 @@ LOCAL_MEDICATION_ALIASES = {
     "glifor": "metformin",
     "atorvastatin": "atorvastatin",
     "lipitor": "atorvastatin",
-    "statin": "atorvastatin",
     "ciprofloxacin": "ciprofloxacin",
     "cipro": "ciprofloxacin",
     "siprofloksasin": "ciprofloxacin",
@@ -68,6 +67,52 @@ class NormalizedMedication:
 
 def normalize_text(value: str) -> str:
     return (value or "").strip().casefold().translate(TR_MAP)
+
+
+_MEDICATION_MENTION_PATTERNS = (
+    re.compile(
+        r"(?P<name>[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü0-9.-]{1,39})\s+"
+        r"(?:(?:adlı|adli|isimli)\s+)?(?:ila[cç](?:ı|i|ını|ini)?\s+)?"
+        r"kullan(?:ıyorum|iyorum|maktayım|maktayim)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:ilacım|ilacim|ilacın adı|ilacin adi|ilaç adı)\s*[:=-]?\s*"
+        r"(?P<name>[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü0-9.-]{1,39})",
+        re.IGNORECASE,
+    ),
+)
+
+
+def extract_medication_mentions(text: str) -> list[str]:
+    """Extract explicit medication mentions without using an LLM."""
+    found: list[str] = []
+    seen: set[str] = set()
+    stopwords = {
+        "ben",
+        "bunu",
+        "onu",
+        "duzenli",
+        "düzenli",
+        "surekli",
+        "sürekli",
+        "ilac",
+        "ilaç",
+        "ilaci",
+        "ilacı",
+    }
+    for pattern in _MEDICATION_MENTION_PATTERNS:
+        for match in pattern.finditer(text or ""):
+            name = match.group("name").strip(" .,:;!?()[]{}")
+            key = normalize_text(name)
+            has_medication_context = bool(re.search(r"\bila[cç]", text or "", re.IGNORECASE))
+            looks_like_named_product = bool(name[:1].isupper()) or canonical_medication_name(name) is not None
+            if key in stopwords or not (has_medication_context or looks_like_named_product):
+                continue
+            if name and key not in seen:
+                seen.add(key)
+                found.append(name)
+    return found
 
 
 def _candidate_values(result: dict[str, Any]) -> list[str]:

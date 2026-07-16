@@ -4,11 +4,11 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>CureMenu - Klinik Beslenme Konsolu</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries,typography"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.tailwindcss.com/3.4.17?plugins=forms,container-queries,typography"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet"/>
 <script>
@@ -93,7 +93,17 @@ body{
 .chat-scroll::-webkit-scrollbar-thumb:hover{background:rgba(189,201,198,0.9)}
 .loading-dots span{animation:blink 1.4s infinite both}.loading-dots span:nth-child(2){animation-delay:.2s}.loading-dots span:nth-child(3){animation-delay:.4s}
 @keyframes blink{0%,80%,100%{opacity:.25;transform:scale(0.8)}40%{opacity:1;transform:scale(1.1)}}
-@media(max-width:900px){.app-shell{display:block}.app-sidebar{display:none}.mobile-nav{display:grid}.desktop-title{display:none}}
+.mobile-nav{display:none}
+.menu-scan-controls{display:grid;grid-template-columns:minmax(0,1fr);gap:.75rem}
+@media(min-width:1024px){.menu-scan-controls{grid-template-columns:minmax(0,1fr) 180px auto}}
+@media(max-width:767px){
+  .app-shell{display:block}
+  .app-sidebar{display:none}
+  .mobile-nav{display:flex;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
+  .mobile-nav::-webkit-scrollbar{display:none}
+  .mobile-tab-btn{flex:0 0 72px}
+  .desktop-title{display:none}
+}
 .app-sidebar, main { transition: all 0.3s ease; }
 .is-collapsed .app-sidebar { width: 88px !important; padding-left: 12px; padding-right: 12px; }
 .is-collapsed main { margin-left: 88px !important; }
@@ -176,7 +186,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 
   <section>
     <div class="card p-6">
-      <div class="mb-5 flex items-center justify-between gap-3"><div><h3 class="font-display text-2xl font-extrabold">Günlük sağlık özeti</h3><p class="text-sm text-on-surface-variant">Profil ve son işlemlerden derlenen görünüm.</p></div><button class="btn-icon" onclick="loadDashboardOverview(true)" title="Yenile"><span class="material-symbols-outlined">refresh</span></button></div>
+      <div class="mb-5 flex items-center justify-between gap-3"><div><h3 class="font-display text-2xl font-extrabold">Günlük sağlık özeti</h3><p class="text-sm text-on-surface-variant">Profil ve son işlemlerden derlenen görünüm.</p></div><button class="btn-icon" onclick="window.GovernanceDashboard.loadDashboardOverview(true)" title="Yenile"><span class="material-symbols-outlined">refresh</span></button></div>
       <div id="dailySummaryGrid" class="grid gap-4 md:grid-cols-2 lg:grid-cols-4"></div>
     </div>
   </section>
@@ -186,7 +196,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
   <div class="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
     <div><h2 class="font-display text-4xl font-extrabold">Sağlık Profilim</h2><p class="mt-2 text-on-surface-variant">Hastalık, alerji, ilaç ve hedef bilgilerini burada yönet.</p></div>
     <div class="flex gap-2">
-      <button onclick="showOnboarding()" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">edit</span>Bilgilerimi Güncelle</button>
+      <button onclick="window.ProfileManager.showOnboarding()" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">edit</span>Bilgilerimi Güncelle</button>
       <button onclick="document.getElementById('addModal').classList.remove('hidden')" class="btn-primary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">person_add</span>Aile profili ekle</button>
     </div>
   </div>
@@ -214,7 +224,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
       <select id="tahlilTarget" class="mt-4 w-full rounded-lg border-outline-variant bg-surface-container-low px-4 py-3"></select>
       <label class="mt-4 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-primary/30 bg-primary-container/30 px-6 py-10 text-center text-primary transition hover:bg-primary-container">
         <span class="material-symbols-outlined text-5xl">upload_file</span><span class="font-bold">Tahlil PDF'i seç</span>
-        <input type="file" id="healthRecordInput" accept=".pdf" class="hidden" onchange="uploadHealthRecord(event)"/>
+        <input type="file" id="healthRecordInput" accept=".pdf" class="hidden" onchange="window.LabUpload.uploadHealthRecord(event)"/>
       </label>
       <div id="healthRecordResult" class="mt-4"></div>
     </section>
@@ -224,15 +234,15 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 
 <div id="tab-plan" class="tab-content">
   <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">Haftalık Plan</h2><p class="mt-2 text-on-surface-variant">Profil ve aile bilgilerine göre kontrollü öğün planı oluştur.</p></div>
-  <div class="mb-5 flex flex-wrap gap-3"><select id="planTarget" class="rounded-lg border-outline-variant bg-white px-4 py-3"></select><button onclick="generatePlan()" class="btn-primary px-6 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">auto_awesome</span>Planı oluştur</button><button onclick="requestSnack()" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">nutrition</span>Atıştırmalık Öner</button></div>
+  <div class="mb-5 flex flex-wrap gap-3"><select id="planTarget" class="rounded-lg border-outline-variant bg-white px-4 py-3"></select><button id="generatePlanBtn" class="btn-primary px-6 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">auto_awesome</span>Planı oluştur</button><button type="button" data-weekly-action="snack" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">nutrition</span>Atıştırmalık Öner</button></div>
   <div id="planResult" class="card min-h-[220px] p-6"><div class="py-12 text-center text-on-surface-variant"><span class="material-symbols-outlined mb-3 block text-5xl opacity-40">calendar_month</span>Plan oluşturmak için yukarıdaki butonu kullan.</div></div>
 </div>
 
 <div id="tab-tarayici" class="tab-content">
   <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">Menü Analizi</h2><p class="mt-2 text-on-surface-variant">Restoran menüsünü bağlantı, QR veya fotoğrafla profil bilgilerine göre değerlendir.</p></div>
   <section class="card p-5">
-    <div class="grid gap-3 md:grid-cols-[1fr_180px_auto]"><input id="menuUrlInput" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3" placeholder="https://ornekrestoran.com/menu" type="url"/><select id="menuTarget" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3"></select><button onclick="scanMenu()" class="btn-primary px-6 py-3 font-bold">Linki tara</button></div>
-    <div class="mt-5 flex flex-wrap gap-3"><label class="btn-secondary cursor-pointer px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">photo_camera</span>Menü fotoğrafı<input type="file" id="menuImageInput" accept="image/*" class="hidden" onchange="scanMenuImage(this)"/></label><button onclick="startQRScanner()" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">qr_code_scanner</span>QR oku</button></div>
+    <div class="menu-scan-controls"><input id="menuUrlInput" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3" placeholder="https://ornekrestoran.com/menu" type="url"/><select id="menuTarget" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3"></select><button onclick="window.MenuScanner.scanMenu()" class="btn-primary px-6 py-3 font-bold">Linki tara</button></div>
+    <div class="mt-5 flex flex-wrap gap-3"><label class="btn-secondary cursor-pointer px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">photo_camera</span>Menü fotoğrafı<input type="file" id="menuImageInput" accept="image/*" class="hidden" onchange="window.MenuScanner.scanMenuImage(this)"/></label><button onclick="window.MenuScanner.startQRScanner()" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">qr_code_scanner</span>QR oku</button></div>
     <div id="qr-reader" style="width:100%;max-width:420px;display:none" class="mt-4 overflow-hidden rounded-lg border border-outline-variant bg-white"></div>
   </section>
   <div id="menuScanResult" class="mt-6"></div>
@@ -240,7 +250,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 
 <div id="tab-buzdolabi" class="tab-content">
   <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">Buzdolabı</h2><p class="mt-2 text-on-surface-variant">Evdeki malzemeleri yükle, profil bilgilerine uygun tarif fikri al.</p></div>
-  <section class="card p-5"><select id="fridgeTarget" class="w-full rounded-lg border-outline-variant bg-surface-container-low px-4 py-3"></select><label class="mt-4 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-primary/30 bg-primary-container/30 px-6 py-10 text-center text-primary transition hover:bg-primary-container"><span class="material-symbols-outlined text-5xl">add_a_photo</span><span class="font-bold">Fotoğraf yükle</span><input type="file" id="fridgeImageInput" accept="image/*" class="hidden" onchange="handleFridgeImage(event)"/></label></section>
+  <section class="card p-5"><select id="fridgeTarget" class="w-full rounded-lg border-outline-variant bg-surface-container-low px-4 py-3"></select><label class="mt-4 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-primary/30 bg-primary-container/30 px-6 py-10 text-center text-primary transition hover:bg-primary-container"><span class="material-symbols-outlined text-5xl">add_a_photo</span><span class="font-bold">Fotoğraf yükle</span><input type="file" id="fridgeImageInput" accept="image/*" class="hidden" onchange="window.MenuScanner.handleFridgeImage(event)"/></label></section>
   <div id="fridgeScanResult" class="mt-6"></div>
 </div>
 
@@ -251,8 +261,8 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 </div>
 
 <div id="tab-gecmis" class="tab-content">
-  <div class="mb-6 flex items-center justify-between gap-4"><div><h2 class="font-display text-4xl font-extrabold">Geçmiş</h2><p class="mt-2 text-on-surface-variant">Menü, tahlil, plan ve CureBot işlemleri.</p></div><button onclick="loadHistory(true)" class="btn-icon" title="Yenile"><span class="material-symbols-outlined">refresh</span></button></div>
-  <div id="historyGrid" class="space-y-4"></div><div class="mt-6 hidden justify-center" id="historyPagination"><button onclick="loadMoreHistory()" class="btn-secondary px-6 py-2 font-bold">Daha fazla göster</button></div>
+  <div class="mb-6 flex items-center justify-between gap-4"><div><h2 class="font-display text-4xl font-extrabold">Geçmiş</h2><p class="mt-2 text-on-surface-variant">Menü, tahlil, plan ve CureBot işlemleri.</p></div><button onclick="window.LabUpload.loadHistory(true)" class="btn-icon" title="Yenile"><span class="material-symbols-outlined">refresh</span></button></div>
+  <div id="historyGrid" class="space-y-4"></div><div class="mt-6 hidden justify-center" id="historyPagination"><button onclick="window.LabUpload.loadMoreHistory()" class="btn-secondary px-6 py-2 font-bold">Daha fazla göster</button></div>
 </div>
 </div>
 </main>
@@ -273,7 +283,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 <div><label class="mb-1 block font-bold">Genetik geçmiş</label><textarea id="m_genetik" class="w-full rounded-lg border-outline-variant p-3" rows="2"></textarea></div>
 <div><label class="mb-1 block font-bold">Tıbbi geçmiş</label><textarea id="m_tibbi" class="w-full rounded-lg border-outline-variant p-3" rows="2"></textarea></div>
 </div>
-<div class="flex justify-end gap-3 border-t border-outline-variant p-5"><button onclick="document.getElementById('addModal').classList.add('hidden')" class="btn-secondary px-5 py-2 font-bold">Vazgeç</button><button onclick="addMember()" class="btn-primary px-5 py-2 font-bold">Kaydet</button></div>
+<div class="flex justify-end gap-3 border-t border-outline-variant p-5"><button onclick="document.getElementById('addModal').classList.add('hidden')" class="btn-secondary px-5 py-2 font-bold">Vazgeç</button><button onclick="window.ProfileManager.addMember()" class="btn-primary px-5 py-2 font-bold">Kaydet</button></div>
 </div>
 </div>
 
@@ -291,28 +301,28 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 <div class="rounded-lg border border-warning/20 bg-warning-container p-3 text-sm text-on-surface-variant" id="ob_feragat"></div>
 <div><p class="mb-2 font-bold">CureBot'a sorabileceğiniz örnekler:</p><div id="ob_ornek_sorular" class="flex flex-wrap gap-2"></div></div>
 </div>
-<div class="flex justify-end gap-3 border-t border-outline-variant p-5"><button onclick="document.getElementById('onboardingModal').classList.add('hidden')" class="btn-secondary px-6 py-2.5 font-bold">Vazgeç</button><button onclick="completeOnboarding()" class="btn-primary px-6 py-2.5 font-bold">Profilimi oluştur ve başla</button></div>
+<div class="flex justify-end gap-3 border-t border-outline-variant p-5"><button onclick="document.getElementById('onboardingModal').classList.add('hidden')" class="btn-secondary px-6 py-2.5 font-bold">Vazgeç</button><button onclick="window.ProfileManager.completeOnboarding()" class="btn-primary px-6 py-2.5 font-bold">Profilimi oluştur ve başla</button></div>
 </div>
 </div>
 
 <div class="hidden fixed inset-0 z-[120] items-center justify-center p-4" id="decisionTimelineModal">
-<div class="absolute inset-0 bg-on-background/60 backdrop-blur-sm" onclick="closeDecisionTimeline()"></div>
+<div class="absolute inset-0 bg-on-background/60 backdrop-blur-sm" onclick="window.GovernanceDashboard.closeDecisionTimeline()"></div>
 <div class="card relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden">
-<div class="flex items-start justify-between gap-4 border-b border-outline-variant p-5"><div><h3 class="font-display text-2xl font-bold">Klinik karar adımları</h3><p class="mt-1 text-sm text-on-surface-variant">Yanıtın hangi kontrollerden geçtiğini gösterir.</p></div><button type="button" onclick="closeDecisionTimeline()" class="btn-icon"><span class="material-symbols-outlined">close</span></button></div>
+<div class="flex items-start justify-between gap-4 border-b border-outline-variant p-5"><div><h3 class="font-display text-2xl font-bold">Klinik karar adımları</h3><p class="mt-1 text-sm text-on-surface-variant">Yanıtın hangi kontrollerden geçtiğini gösterir.</p></div><button type="button" onclick="window.GovernanceDashboard.closeDecisionTimeline()" class="btn-icon"><span class="material-symbols-outlined">close</span></button></div>
 <div class="overflow-y-auto bg-surface-container-low p-5" id="decisionTimelineContent"><p class="text-on-surface-variant">Karar adımları yükleniyor...</p></div>
 </div>
 </div>
 
 <!-- Plan Aksiyon (Tarif ve Alternatif) Modalı -->
 <div class="hidden fixed inset-0 z-[120] items-center justify-center p-4" id="actionModal">
-<div class="absolute inset-0 bg-on-background/60 backdrop-blur-sm" onclick="closeActionModal()"></div>
+<div class="absolute inset-0 bg-on-background/60 backdrop-blur-sm" data-weekly-action="close"></div>
 <div class="card relative flex h-[90vh] w-[95vw] max-w-none flex-col overflow-hidden">
 <div class="flex items-start justify-between gap-4 border-b border-outline-variant p-5">
     <div>
         <h3 class="font-display text-2xl font-bold text-primary" id="actionModalTitle">İşlem Yapılıyor...</h3>
         <p class="mt-1 text-sm text-on-surface-variant" id="actionModalSubtitle">Lütfen bekleyin, CureBot isteğinizi işliyor.</p>
     </div>
-    <button type="button" onclick="closeActionModal()" class="btn-icon"><span class="material-symbols-outlined">close</span></button>
+    <button type="button" data-weekly-action="close" class="btn-icon"><span class="material-symbols-outlined">close</span></button>
 </div>
 <div class="overflow-y-auto bg-surface-container-lowest p-6" id="actionModalContent">
     <div class="py-12 text-center">
@@ -325,24 +335,36 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
     </div>
 </div>
 <div class="flex justify-end gap-3 border-t border-outline-variant p-5 bg-surface">
-    <button onclick="closeActionModal()" class="btn-secondary px-6 py-2.5 font-bold">Kapat</button>
+    <button type="button" data-weekly-action="close" class="btn-secondary px-6 py-2.5 font-bold">Kapat</button>
 </div>
 </div>
 </div>
 
 
-<nav class="mobile-nav fixed bottom-0 inset-x-0 z-50 hidden grid-cols-5 border-t border-outline-variant bg-white/95 px-1 py-2 backdrop-blur">
+<nav class="mobile-nav fixed bottom-0 inset-x-0 z-50 border-t border-outline-variant bg-white/95 px-1 py-2 backdrop-blur" aria-label="Mobil ana navigasyon">
 <button type="button" data-tab="dashboard" onclick="switchTab('dashboard')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-primary text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">home</span>Ana Sayfa</button>
-
+<button type="button" data-tab="plan" onclick="switchTab('plan')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-on-surface-variant text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">restaurant_menu</span>Plan</button>
+<button type="button" data-tab="curebot" onclick="switchTab('curebot')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-on-surface-variant text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">smart_toy</span>CureBot</button>
 <button type="button" data-tab="profile" onclick="switchTab('profile')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-on-surface-variant text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">person</span>Profil</button>
 <button type="button" data-tab="tahlil" onclick="switchTab('tahlil')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-on-surface-variant text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">vaccines</span>Tahlil</button>
-<button type="button" data-tab="governance" onclick="switchTab('governance')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-on-surface-variant text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">monitoring</span>KPI</button>
+<button type="button" data-tab="tarayici" onclick="switchTab('tarayici')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-on-surface-variant text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">document_scanner</span>Menü</button>
+<button type="button" data-tab="buzdolabi" onclick="switchTab('buzdolabi')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-on-surface-variant text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">kitchen</span>Buzdolabı</button>
+<button type="button" data-tab="gecmis" onclick="switchTab('gecmis')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-on-surface-variant text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">history</span>Geçmiş</button>
 </nav>
 
 <script src="/static/modules/api-client.js"></script>
+<script src="/static/modules/ui-utils.js"></script>
 <script src="/static/modules/auth-manager.js"></script>
 <script src="/static/modules/chat-widget.js"></script>
-<script src="/static/app.js?v=10"></script>
+<script src="/static/modules/chat-governance-panel.js"></script>
+<script src="/static/modules/weekly-plan-manager.js"></script>
+<script src="/static/modules/smart-grocery.js"></script>
+<script src="/static/modules/weekly-actions.js"></script>
+<script src="/static/modules/profile-family-manager.js"></script>
+<script src="/static/modules/menu-scanner.js"></script>
+<script src="/static/modules/lab-upload.js"></script>
+<script src="/static/modules/governance-dashboard.js"></script>
+<script src="/static/app.js?v=11"></script>
 <script>
 function toggleSidebar() {
     document.body.classList.toggle('is-collapsed');

@@ -1,14 +1,24 @@
 class CitationValidator:
-    def __init__(self):
-        pass
+    def validate_citation(
+        self,
+        similarity_score: float,
+        evidence_span: str = "",
+        lexical_score: float | None = None,
+    ) -> float:
+        """Return a conservative 0-1 retrieval quality signal.
 
-    def validate_citation(self, similarity_score: float, evidence_span: str = "") -> float:
+        Chroma distance alone is not a calibrated confidence score. When the
+        retrieval filter supplies lexical overlap, combine both signals while
+        giving lexical relevance the larger weight. Older callers retain the
+        previous distance-only behavior.
         """
-        RAG atıflarının (similarity_score) üzerinden eşleşme kalitesini döner.
-        0 (Eşleşmiyor) ile 1 (Mükemmel eşleşme) arası.
-        """
-        # Distance'ı (0.0 en iyi) 0-1 aralığında bir kalite skoruna çevir.
-        # Basit bir formül: 1 / (1 + distance) veya lineer dönüşüm.
         if similarity_score < 0:
-            return 0.0
-        return max(0.0, min(1.0, 1.0 / (1.0 + similarity_score)))
+            distance_quality = 0.0
+        else:
+            distance_quality = max(0.0, min(1.0, 1.0 / (1.0 + similarity_score)))
+
+        if lexical_score is None:
+            return distance_quality
+
+        lexical_quality = max(0.0, min(1.0, float(lexical_score)))
+        return (0.7 * lexical_quality) + (0.3 * distance_quality)

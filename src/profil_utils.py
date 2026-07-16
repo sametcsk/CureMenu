@@ -7,7 +7,7 @@ from src.models import AileUyesi, KullaniciProfili
 from src.ilac_etkilesim import ilac_etkilesim_ozeti
 from src.llm import invoke_with_model_fallback, parse_llm_response
 import json
-from src.logger import get_logger
+from src.logger import get_logger, log_failure
 from src.database import icd11_cache_get, icd11_cache_set
 
 logger = get_logger(__name__)
@@ -86,7 +86,7 @@ def icd_11_cevir(hastaliklar_listesi: list[str]) -> str:
         icd11_cache_set(cache_key, sonuc)
         return sonuc
     except Exception as e:
-        logger.warning("ICD-11 Çevirimi başarısız oldu, orijinal metin kullanılıyor: %s", e)
+        log_failure(logger, "icd11_translation", e, component="profile")
         fallback = ", ".join(h.title() for h in hastaliklar_listesi)
         icd11_cache_set(cache_key, fallback)
         return fallback
@@ -109,6 +109,7 @@ def profil_ozeti_olustur(uye: AileUyesi) -> str:
 
     return (
         f"{uye.ad}, "
+        f"Yas: {uye.yas}, Cinsiyet: {uye.cinsiyet.value}, "
         f"Boy: {getattr(uye, 'boy', 170)} cm, Kilo: {getattr(uye, 'kilo', 70.0)} kg, "
         f"Beslenme Hedefi: {getattr(uye, 'hedef', 'Sağlıklı Yaşam (Genel)')}, "
         f"Hastalıklar (ICD-11 Standart): {hastaliklar}, "
@@ -128,7 +129,10 @@ def aile_profil_ozeti_olustur(profil: KullaniciProfili) -> str:
         a = ", ".join(getattr(uye, "alerjiler", [])) if getattr(uye, "alerjiler", []) else "Yok"
         ilac = ", ".join(getattr(uye, "ilaclar", []) or []) or "Yok"
         hedef = getattr(uye, "hedef", "Sağlıklı Yaşam (Genel)")
-        satirlar.append(f"- {uye.ad}: Hedefi: {hedef}, Hastalıkları: {h}, Alerjileri: {a}, İlaçları: {ilac}")
+        satirlar.append(
+            f"- {uye.ad}: Yas: {uye.yas}, Cinsiyet: {uye.cinsiyet.value}, "
+            f"Hedefi: {hedef}, Hastalıkları: {h}, Alerjileri: {a}, İlaçları: {ilac}"
+        )
         ilac_ozet = ilac_etkilesim_ozeti(getattr(uye, "ilaclar", []) or [])
         if "ZORUNLU" in ilac_ozet:
             satirlar.append(f"  {ilac_ozet.replace(chr(10), ' ')}")

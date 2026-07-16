@@ -1,7 +1,7 @@
 # Veri Modelleri
 from pydantic import BaseModel, Field   
 from enum import Enum   
-from typing import Optional, List, Dict    
+from typing import Literal, Optional, List, Dict
 import uuid
 
 
@@ -76,10 +76,10 @@ class RegisterRequest(BaseModel):
 class ProfilKaydetRequest(BaseModel):
     kullanici_adi: str = Field(..., min_length=2, max_length=40, pattern=r"^[A-Za-zÇçĞğİıÖöŞşÜü\s]+$")
     ad: str = Field(..., min_length=2, max_length=40, pattern=r"^[A-Za-zÇçĞğİıÖöŞşÜü\s]+$")
-    yas: int
-    cinsiyet: str
-    boy: int = 170
-    kilo: float = 70
+    yas: int = Field(..., ge=1, le=100)
+    cinsiyet: Cinsiyet
+    boy: int = Field(default=170, ge=1, le=250)
+    kilo: float = Field(default=70, ge=1, le=200)
     hastaliklar: list[str] = Field(default_factory=list)
     alerjiler: list[str] = Field(default_factory=list)
     genetik_hastaliklar: list[str] = Field(default_factory=list)
@@ -89,10 +89,10 @@ class ProfilKaydetRequest(BaseModel):
 
 class AileUyesiEkleRequest(BaseModel):
     ad: str = Field(..., min_length=2, max_length=40, pattern=r"^[A-Za-zÇçĞğİıÖöŞşÜü\s]+$")
-    yas: int
-    cinsiyet: str
-    boy: int = 170
-    kilo: float = 70
+    yas: int = Field(..., ge=1, le=100)
+    cinsiyet: Cinsiyet
+    boy: int = Field(default=170, ge=1, le=250)
+    kilo: float = Field(default=70, ge=1, le=200)
     hastaliklar: list[str] = Field(default_factory=list)
     alerjiler: list[str] = Field(default_factory=list)
     genetik_hastaliklar: list[str] = Field(default_factory=list)
@@ -110,24 +110,28 @@ class HaftalikPlanRequest(BaseModel):
     is_regeneration: bool = False
 
 class GeriBildirimRequest(BaseModel):
-    yemek_adi: str
-    kimin_icin: str = "kendim"
+    yemek_adi: str = Field(..., min_length=1, max_length=500)
+    kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
+
+class ComplianceRequest(BaseModel):
+    meal: str = Field(..., min_length=1, max_length=500)
+    status: Literal["consumed"]
 
 class ScanMenuRequest(BaseModel):
-    kimin_icin: str = "kendim"
-    url: str
+    kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
+    url: str = Field(..., min_length=4, max_length=2048)
 
 class ScanMenuImageRequest(BaseModel):
-    kimin_icin: str = "kendim"
-    image_base64: str
+    kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
+    image_base64: str = Field(..., min_length=1, max_length=8_000_100)
 
 class ShoppingListRequest(BaseModel):
     plan_metni: str
     location_info: Optional[str] = None
 
 class FridgeScanRequest(BaseModel):
-    kimin_icin: str = "kendim"
-    image_base64: str
+    kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
+    image_base64: str = Field(..., min_length=1, max_length=8_000_100)
 
 # ── QUALITY ASSURANCE (QA) MODELLERİ ──
 class StructuredCitation(BaseModel):
@@ -159,3 +163,18 @@ class PlanActionRequest(BaseModel):
     action_type: str = Field(..., description="'recipe' veya 'alternative'")
     meal_text: str = Field(..., description="Aksiyon alınacak öğünün adı")
     plan_text: Optional[str] = Field(None, description="Mevcut haftalık plan metni (alternatif için)")
+    kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
+
+class WeeklyPlanDay(BaseModel):
+    day: str
+    breakfast: str
+    lunch: str
+    dinner: str
+    snacks: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+class WeeklyPlan(BaseModel):
+    days: list[WeeklyPlanDay]
+    summary: str
+    warnings: list[str] = Field(default_factory=list)
+    confidence: dict = Field(default_factory=dict)

@@ -54,7 +54,7 @@ def menu_danismani(ham_metin: str, profil_ozeti: str) -> str:
 
     # --- 2. ADIM: MÜFETTİŞ (Guardrail) ---
     prompt_2 = f"""
-    You are a medical safety checker for a diet assistant app.
+    You are a deterministic risk-control reviewer for a diet assistant app.
 
     PATIENT PROFILE:
     {profil_ozeti}
@@ -65,7 +65,7 @@ def menu_danismani(ham_metin: str, profil_ozeti: str) -> str:
     ---
 
     YOUR TASK:
-    Review the analysis above for medical safety.
+    Review the analysis above for known profile conflicts and uncertainty.
 
     CHECK FOR:
     1. Has any dish been placed in the WRONG category for this patient's conditions?
@@ -101,7 +101,11 @@ def menu_danismani(ham_metin: str, profil_ozeti: str) -> str:
         logger.info("Mufettis onayladi! Ilk analiz guvenli.")
         return ilk_cevap
     else:
-        logger.warning("Mufettis hata buldu! Sorunlar: %s", denetim_sonucu.get("issues"))
+        issues = denetim_sonucu.get("issues") or []
+        logger.warning(
+            "event=menu_safety_review component=menu_guardrail status=blocked issue_count=%d",
+            len(issues) if isinstance(issues, list) else 1,
+        )
         
         # Prefer corrected analysis from guardrail if available / Varsa guardrail'den gelen düzeltilmiş analizi tercih et
         corrected = denetim_sonucu.get("corrected_analysis", "")

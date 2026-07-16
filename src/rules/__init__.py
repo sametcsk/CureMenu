@@ -1,2 +1,1 @@
-"""Rule registries used by deterministic clinical safety checks."""
-
+"""Rule registries used by deterministic known-risk checks."""

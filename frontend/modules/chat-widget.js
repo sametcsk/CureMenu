@@ -158,7 +158,13 @@ window.ChatWidget = {
         item.className = `cm-assistant-message ${type}`;
         
         if (isHtml) {
-            item.innerHTML = window.DOMPurify ? DOMPurify.sanitize(text) : text;
+            if (window.DOMPurify) {
+                item.innerHTML = DOMPurify.sanitize(text);
+            } else if (window.escapeHtml) {
+                item.innerHTML = escapeHtml(text).replace(/\n/g, "<br>");
+            } else {
+                item.textContent = text;
+            }
         } else {
             if (window.escapeHtml) {
                 item.innerHTML = escapeHtml(text).replace(/\n/g, "<br>");
@@ -193,6 +199,12 @@ window.ChatWidget = {
         this.hideTyping();
         this.addMessage(msg, "soft");
         this.resetState();
+    },
+
+    showGovernance(data) {
+        if (!data?.decision_id || !window.ChatGovernancePanel) return;
+        const card = this.addMessage('', 'soft', true);
+        window.ChatGovernancePanel.renderChatGovernanceSummary(data, card);
     },
 
     resetState() {
@@ -276,14 +288,16 @@ window.ChatWidget = {
 
             while (true) {
                 const { value, done } = await reader.read();
-                if (done) break;
                 
-                buffer += decoder.decode(value, { stream: true });
-                const parts = buffer.split("\\n\\n");
+                if (value) {
+                    buffer += decoder.decode(value, { stream: true });
+                }
+
+                const parts = buffer.split("\n\n");
                 buffer = parts.pop() || "";
 
                 for (const part of parts) {
-                    const lines = part.split("\\n");
+                    const lines = part.split("\n");
                     const eventLine = lines.find(l => l.startsWith("event:"));
                     const dataLines = lines.filter(l => l.startsWith("data:"));
                     if (!eventLine) continue;
@@ -291,11 +305,11 @@ window.ChatWidget = {
                     const eventName = eventLine.replace("event:", "").trim();
                     let payload = {};
                     try {
-                        payload = JSON.parse(dataLines.map(l => l.replace("data:", "").trim()).join("\\n") || "{}");
+                        payload = JSON.parse(dataLines.map(l => l.replace("data:", "").trim()).join("\n") || "{}");
                     } catch (_) {}
 
                     if (eventName === "status") {
-                        this.setStatus(payload.status || "çalışıyor...");
+                        this.setStatus(payload.status || "Çalışıyor...");
                     } else if (eventName === "message" || eventName === "token") {
                         this.setStatus("CureBot yazıyor...");
                         fullAnswer += (payload.chunk || "");
@@ -303,6 +317,30 @@ window.ChatWidget = {
                     } else if (eventName === "error") {
                         this.showError(payload.message || "Yanıtı tamamlayamadım.");
                         doneSeen = true;
+                    } else if (eventName === "governance") {
+                        this.showGovernance(payload);
+                    } else if (eventName === "done") {
+                        doneSeen = true;
+                    }
+                }
+
+                if (done) {
+                    break;
+                }
+            }
+
+            if (buffer.trim()) {
+                const lines = buffer.split("\n");
+                const eventLine = lines.find(l => l.startsWith("event:"));
+                const dataLines = lines.filter(l => l.startsWith("data:"));
+                if (eventLine) {
+                    const eventName = eventLine.replace("event:", "").trim();
+                    if (eventName === "message" || eventName === "token") {
+                        try {
+                            const payload = JSON.parse(dataLines.map(l => l.replace("data:", "").trim()).join("\n") || "{}");
+                            fullAnswer += (payload.chunk || "");
+                            this.appendToken(fullAnswer);
+                        } catch (_) {}
                     } else if (eventName === "done") {
                         doneSeen = true;
                     }

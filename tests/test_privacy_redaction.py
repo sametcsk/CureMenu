@@ -29,6 +29,19 @@ def test_redaction_utility_uzun_metin_truncate_eder():
     assert redacted == "a" * 12 + "...[TRUNCATED]"
 
 
+def test_redaction_utility_url_ve_bearer_secret_maskeler():
+    text = (
+        "https://menu.example/path?table=4&access_token=raw-url-token "
+        "Authorization: Bearer raw-header-token"
+    )
+
+    redacted = redact_text(text)
+
+    assert "raw-url-token" not in redacted
+    assert "raw-header-token" not in redacted
+    assert redacted.count("[REDACTED_SECRET]") == 2
+
+
 def test_nested_metadata_redaction_secret_ve_identifier_maskeler():
     metadata = {
         "contact": {"email": "hasta@example.com", "phones": ["+90 555 111 22 33"]},

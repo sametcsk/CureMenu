@@ -34,9 +34,9 @@ def test_medication_safety_event_schema_alanlari_tasir(monkeypatch):
 
     metadata = checked["metadata"]
     assert metadata["category"] == "medication_safety"
-    assert metadata["severity"] == "high"
-    assert metadata["decision_effect"] == "block"
-    assert metadata["blocking"] is True
+    assert metadata["severity"] == "medium"
+    assert metadata["decision_effect"] == "review_required"
+    assert metadata["blocking"] is False
     assert metadata["review_required"] is True
     assert metadata["source_component"] == "medical_knowledge.safety_checker"
     assert metadata["schema_version"] == SCHEMA_VERSION
@@ -92,6 +92,25 @@ def test_kpi_helper_eski_ve_yeni_eventleri_geriye_uyumlu_okur():
     assert kpis["blocked_decision_events"] == 1
     assert kpis["review_required_event_count"] == 1
 
+
+def test_pending_clinical_review_kpi_tarafinda_onay_gibi_sayilmaz():
+    event = make_event(
+        "MedicationRuleMatched",
+        "medical_knowledge.safety_checker",
+        status="review",
+        metadata={
+            "matched_rules": [
+                {"evidence": {"clinical_review_status": "pending"}}
+            ]
+        },
+    )
+
+    kpis = calculate_clinical_kpis(decisions=[], events=[event])
+
+    assert kpis["pending_clinical_review_event_count"] == 1
+    assert kpis["kpi_scope"] == "operational_not_clinical_performance"
+    assert kpis["approve_count"] == 0
+
 def test_citation_validation_min_is_dynamic():
     from src.memory import ClinicalEvidence
     from src.governance.decision import extract_citations_from_rag
@@ -104,6 +123,7 @@ def test_citation_validation_min_is_dynamic():
     citations1 = extract_citations_from_rag(evidence1)
     assert len(citations1) == 1
     assert citations1[0]["similarity_score"] == 0.2
+    assert citations1[0]["evidence_span"] == "İçerik..."
 
     score1 = CitationValidator().validate_citation(similarity_score=citations1[0].get("similarity_score", 1.0))
 
@@ -114,6 +134,22 @@ def test_citation_validation_min_is_dynamic():
 
     assert score1 != 0.0
     assert score1 > score2
+
+
+def test_citation_validation_lexical_relevance_has_priority():
+    from src.quality.citation_validator import CitationValidator
+
+    validator = CitationValidator()
+    semantically_close_but_irrelevant = validator.validate_citation(
+        similarity_score=0.1,
+        lexical_score=0.0,
+    )
+    farther_but_lexically_relevant = validator.validate_citation(
+        similarity_score=0.8,
+        lexical_score=0.8,
+    )
+
+    assert farther_but_lexically_relevant > semantically_close_but_irrelevant
 
 def test_explainability_logger_integration():
     from src.governance.decision import build_decision_record

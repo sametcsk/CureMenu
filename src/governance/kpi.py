@@ -31,6 +31,16 @@ def event_requires_review(event: dict[str, Any]) -> bool:
     return event.get("status") in {"review", "fallback"}
 
 
+def _contains_pending_clinical_review(value: Any) -> bool:
+    if isinstance(value, dict):
+        if value.get("clinical_review_status") == "pending":
+            return True
+        return any(_contains_pending_clinical_review(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_pending_clinical_review(item) for item in value)
+    return False
+
+
 def calculate_clinical_kpis(
     decisions: list[dict[str, Any]],
     events: list[dict[str, Any]],
@@ -53,6 +63,10 @@ def calculate_clinical_kpis(
     components = Counter(e.get("component", "UNKNOWN") for e in events)
     blocked_events = [e for e in events if event_is_blocking(e)]
     review_events = [e for e in events if event_requires_review(e)]
+    pending_clinical_review_events = [
+        event for event in events
+        if _contains_pending_clinical_review(event.get("metadata") or {})
+    ]
     retrieval_events = [e for e in events if e.get("event_type") == "RetrieverExecuted"]
     evidence_found_events = [
         e for e in retrieval_events
@@ -75,6 +89,8 @@ def calculate_clinical_kpis(
         "blocked_decision_events": len(blocked_events),
         "blocked_event_rate": _rate(len(blocked_events), len(events)),
         "review_required_event_count": len(review_events),
+        "pending_clinical_review_event_count": len(pending_clinical_review_events),
+        "kpi_scope": "operational_not_clinical_performance",
         "review_required_count": confidence_actions.get("REVIEW_REQUIRED", 0),
         "reject_count": confidence_actions.get("REJECT", 0),
         "approve_count": confidence_actions.get("APPROVE", 0),

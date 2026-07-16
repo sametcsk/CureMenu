@@ -1,0 +1,148 @@
+{
+  "schema_version": "clinical_evidence_registry:v1",
+  "collection": "clinical_official_evidence_v1",
+  "last_source_check": "2026-07-15",
+  "clinical_review_required": true,
+  "compatibility_versions": {
+    "medication_rule_provenance": "medication_rule_provenance:v1",
+    "official_clinical_scope": "official_clinical_scope:v1"
+  },
+  "sources": {
+    "warfarin_fda": {
+      "filename": "fda_warfarin_coumadin_2017.pdf",
+      "url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2017/009218s017lbl.pdf",
+      "sha256": "926D0AA997920DAE2F686A7CBD0E3EF8051474BC67F7162741DCFC394E48F67C",
+      "authority": "FDA",
+      "authority_tier": 1,
+      "source_role": "regulatory_label",
+      "included_pages": [6, 13, 16],
+      "discovery_terms": ["vitamin K", "foods and botanicals", "green leafy vegetables"]
+    },
+    "atorvastatin_fda": {
+      "filename": "fda_atorvastatin_lipitor_2024.pdf",
+      "url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2024/020702s081lbl.pdf",
+      "sha256": "076F78996E41CDAE4BF40C3F8F8033CFC33F9EA9ED7351F0D2AE814B2763DC95",
+      "authority": "FDA",
+      "authority_tier": 1,
+      "source_role": "regulatory_label",
+      "included_pages": [5, 19, 28],
+      "discovery_terms": ["grapefruit", "myopathy", "rhabdomyolysis"]
+    },
+    "ciprofloxacin_fda": {
+      "filename": "fda_ciprofloxacin_cipro_2021.pdf",
+      "url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2021/019537s093%2C020780s049lbl.pdf",
+      "sha256": "0F57AEFF1CB5CB1E3D9031C4B0CF48FD7CF200C81781AAD53CBBF6B3E9CA1FA0",
+      "authority": "FDA",
+      "authority_tier": 1,
+      "source_role": "regulatory_label",
+      "included_pages": [8, 22, 28, 39, 43],
+      "discovery_terms": ["dairy products", "calcium-fortified", "multivalent cations"]
+    },
+    "levothyroxine_fda": {
+      "filename": "fda_levothyroxine_synthroid_2024.pdf",
+      "url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2024/021402s038lbl.pdf",
+      "sha256": "A55AFC986DAA612B25BB54574A7DACB798D743729316381D4D9F23ADE20451D3",
+      "authority": "FDA",
+      "authority_tier": 1,
+      "source_role": "regulatory_label",
+      "included_pages": [3, 10, 19],
+      "discovery_terms": ["calcium", "iron", "empty stomach", "absorption"]
+    },
+    "linezolid_fda": {
+      "filename": "fda_linezolid_zyvox_2024.pdf",
+      "url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2024/021130s046%2C021131s044%2C021132s046lbl.pdf",
+      "sha256": "12232CFD9C443AD9B2365C93C3F6213EC1DDC5E55444A75F194D46B2E8F6EC55",
+      "authority": "FDA",
+      "authority_tier": 1,
+      "source_role": "regulatory_label",
+      "included_pages": [22, 29],
+      "discovery_terms": ["tyramine", "adrenergic", "fermented"]
+    },
+    "metformin_fda": {
+      "filename": "fda_metformin_glumetza_2018.pdf",
+      "url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2018/021748s025lbl.pdf",
+      "sha256": "DB10AEC98ED10DE0DA7B0DCD27F1499A07E154B781D86C33100A6C58C025B0F0",
+      "authority": "FDA",
+      "authority_tier": 1,
+      "source_role": "regulatory_label",
+      "included_pages": [6, 13, 16],
+      "discovery_terms": ["alcohol", "lactate metabolism", "lactic acidosis"]
+    },
+    "kdigo_ckd_2024": {
+      "filename": "kdigo_ckd_guideline_2024.pdf",
+      "url": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+      "sha256": "B18DB280F7DC889A1A99447B779C0312CD536F939A5180B38894A5D68E4410C0",
+      "authority": "KDIGO",
+      "authority_tier": 1,
+      "source_role": "clinical_guideline",
+      "included_pages": [42, 43, 44, 45, 46],
+      "discovery_terms": ["dietary sodium", "protein intake", "potassium", "CKD"]
+    },
+    "eaaci_food_allergy_2024": {
+      "filename": "eaaci_food_allergy_guideline_2024.pdf",
+      "url": "https://eaaci.org/wp-content/uploads/2024/07/EAACI-Guidelines-on-the-Management-of-IgE-mediated-Food-Allergy-FINAL-02.07.2024-CLEAN-1.pdf",
+      "sha256": "45F59502EEB34611F871EC8B1E109ADD0FE89C616BC4C27F70BF53BF7AE98EF0",
+      "authority": "EAACI",
+      "authority_tier": 1,
+      "source_role": "clinical_guideline",
+      "included_pages": [14, 15, 16, 17, 25],
+      "discovery_terms": ["food allergy", "allergen avoidance", "anaphylaxis", "dietitian"]
+    }
+  },
+  "rules": {
+    "warfarin-vitamin-k-consistency:v2": {
+      "source_id": "warfarin_fda",
+      "pages": [16],
+      "sections": ["7.4 Foods and Botanicals"],
+      "evidence_summary": "Warfarin kullananların K vitamini alımını tutarlı tutması ve yeşil yapraklı sebze tüketiminde büyük değişikliklerden kaçınması önerilir.",
+      "evidence_class": "regulatory_label",
+      "verification_status": "source_verified",
+      "clinical_review_status": "pending"
+    },
+    "atorvastatin-large-grapefruit:v2": {
+      "source_id": "atorvastatin_fda",
+      "pages": [5, 19, 28],
+      "sections": ["5.1 Myopathy and Rhabdomyolysis", "12.3 Pharmacokinetics", "17 Patient Counseling Information"],
+      "evidence_summary": "Aşırı greyfurt tüketimi atorvastatin maruziyetini artırabilir; etiket yüksek miktarlarda tüketim konusunda dikkat ve profesyonel görüş önerir.",
+      "evidence_class": "regulatory_label",
+      "verification_status": "source_verified",
+      "clinical_review_status": "pending"
+    },
+    "metformin-excess-alcohol:v2": {
+      "source_id": "metformin_fda",
+      "pages": [6],
+      "sections": ["7.3 Alcohol"],
+      "evidence_summary": "Aşırı alkol alımı metforminin laktat metabolizmasına etkisini güçlendirebilir; aşırı kullanıma karşı uyarı gerekir.",
+      "evidence_class": "regulatory_label",
+      "verification_status": "source_verified",
+      "clinical_review_status": "pending"
+    },
+    "levothyroxine-absorption-timing:v2": {
+      "source_id": "levothyroxine_fda",
+      "pages": [3, 10, 19],
+      "sections": ["2.2 Important Considerations for Dosing", "7.1 Drugs Known to Affect Thyroid Hormone Pharmacokinetics", "17 Patient Counseling Information"],
+      "evidence_summary": "Levotiroksin aç karnına alınmalı; emilimi etkileyen kalsiyum ve demir içeren ürünlerle zaman aralığı korunmalıdır.",
+      "evidence_class": "regulatory_label",
+      "verification_status": "source_verified",
+      "clinical_review_status": "pending"
+    },
+    "ciprofloxacin-dairy-alone-timing:v2": {
+      "source_id": "ciprofloxacin_fda",
+      "pages": [8, 22],
+      "sections": ["2.4 Important Administration Instructions", "7.1 Drugs Known to Affect CIPRO Absorption"],
+      "evidence_summary": "Ciprofloxacin yalnızca süt ürünü veya kalsiyumla alınmamalı; çok değerlikli katyon içeren ürünlerde doz aralığı korunmalıdır.",
+      "evidence_class": "regulatory_label",
+      "verification_status": "source_verified",
+      "clinical_review_status": "pending"
+    },
+    "linezolid-high-tyramine:v2": {
+      "source_id": "linezolid_fda",
+      "pages": [22, 29],
+      "sections": ["7.3 Adrenergic and Serotonergic Agents", "Patient Counseling Information"],
+      "evidence_summary": "Linezolid tedavisinde yüksek tiramin içeren gıdaların büyük miktarda tüketiminden kaçınılmalıdır.",
+      "evidence_class": "regulatory_label",
+      "verification_status": "source_verified",
+      "clinical_review_status": "pending"
+    }
+  }
+}

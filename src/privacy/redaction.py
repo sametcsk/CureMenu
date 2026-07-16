@@ -25,15 +25,22 @@ EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECAS
 IBAN_RE = re.compile(r"\bTR\d{2}(?:[\s-]?\d{4}){5}[\s-]?\d{2}\b", re.IGNORECASE)
 PHONE_RE = re.compile(r"(?<!\d)(?:\+?90[\s-]?)?(?:0[\s-]?)?5\d{2}[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}(?!\d)")
 TC_ID_RE = re.compile(r"(?<!\d)\d{11}(?!\d)")
+URL_SECRET_RE = re.compile(
+    r"([?&](?:access_token|refresh_token|token|api_key|apikey|secret|password|sifre)=)[^&#\s]+",
+    re.IGNORECASE,
+)
+BEARER_SECRET_RE = re.compile(r"\b(Bearer\s+)[A-Z0-9._~+/=-]+", re.IGNORECASE)
 
 
 def redact_text(value: str, max_length: int = DEFAULT_MAX_TEXT_LENGTH) -> str:
     """Mask direct personal identifiers in free text while preserving clinical context."""
     text = value or ""
-    text = EMAIL_RE.sub("[REDACTED_EMAIL]", text)
     text = IBAN_RE.sub("[REDACTED_IBAN]", text)
     text = PHONE_RE.sub("[REDACTED_PHONE]", text)
     text = TC_ID_RE.sub("[REDACTED_ID]", text)
+    text = EMAIL_RE.sub("[REDACTED_EMAIL]", text)
+    text = URL_SECRET_RE.sub(r"\1[REDACTED_SECRET]", text)
+    text = BEARER_SECRET_RE.sub(r"\1[REDACTED_SECRET]", text)
     if max_length > 0 and len(text) > max_length:
         return f"{text[:max_length]}...[TRUNCATED]"
     return text

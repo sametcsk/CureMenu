@@ -20,5 +20,9 @@ def test_db_path(tmp_path, monkeypatch):
 def client(test_db_path):
     from fastapi.testclient import TestClient
     from api import app
+    from src.rate_limit import limiter
 
-    return TestClient(app, base_url="https://testserver")
+    limiter.reset()
+    with TestClient(app, base_url="https://testserver") as test_client:
+        yield test_client
+    limiter.reset()

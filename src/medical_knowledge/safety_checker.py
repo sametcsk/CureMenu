@@ -3,6 +3,7 @@ from hashlib import sha256
 
 from src.governance.events import make_event
 from src.medical_knowledge.medication_rules import high_risk_rules_version, highest_severity, match_rules
+from src.medical_knowledge.provenance import rule_provenance_version
 from src.medical_knowledge.normalizer import MedicationNormalizer
 
 
@@ -38,11 +39,14 @@ def check_medication_food_safety(
         severity = "safe"
 
     needs_review = bool(unknown or matched_rules)
-    if matched_rules:
-        explanation = " ".join(rule["explanation"] for rule in matched_rules)
-    elif unknown:
+    explanation_parts = [rule["explanation"] for rule in matched_rules]
+    if unknown:
         names = ", ".join(item["original"] for item in unknown)
-        explanation = f"Bilinmeyen ilaç kaydı var: {names}. Sağlık profesyoneli değerlendirmesi gerekir."
+        explanation_parts.append(
+            f"Bilinmeyen ilaç kaydı var: {names}. Sağlık profesyoneli değerlendirmesi gerekir."
+        )
+    if explanation_parts:
+        explanation = " ".join(explanation_parts)
     elif medications:
         explanation = "Bilinen yüksek riskli ilaç-besin kuralı tetiklenmedi."
     else:
@@ -56,6 +60,7 @@ def check_medication_food_safety(
         "source_type": _result_source_type(normalized, matched_rules),
         "needs_professional_review": needs_review,
         "rule_version": high_risk_rules_version(),
+        "rule_provenance_version": rule_provenance_version(),
     }
 
 
@@ -90,6 +95,7 @@ def medication_safety_events(result: dict[str, Any]) -> list[dict[str, Any]]:
                 "matched_count": len(matched),
                 "matched_rules": matched,
                 "rule_version": result.get("rule_version"),
+                "rule_provenance_version": result.get("rule_provenance_version"),
             },
         ),
         make_event(

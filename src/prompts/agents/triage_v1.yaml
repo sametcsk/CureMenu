@@ -2,7 +2,7 @@ prompt_id: "triage_agent"
 version: "v1"
 owner: "medical_team"
 created_at: "2026-07-03"
-approved_by: "chief_medical_officer"
+clinical_review_status: "pending"
 status: "active"
 model: "gemini-3.1-flash"
 temperature: 0.1

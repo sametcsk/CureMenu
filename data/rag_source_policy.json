@@ -1,0 +1,21 @@
+{
+  "version": "rag_source_policy:v1",
+  "excluded_sources": {
+    "kepan_2025.pdf": "Merged multi-document PDF; individual source attribution is unreliable.",
+    "20260623-168580-9qoc3l.pdf": "AI/chatbot evidence; retained for product research, not patient-level dietary evidence.",
+    "ai_chatbots_health_behavior_change.pdf": "AI/chatbot evidence; retained for product research, not patient-level dietary evidence.",
+    "ai_chronic_disease_self_management.pdf": "AI self-management evidence; retained for product research, not patient-level dietary evidence.",
+    "applsci-15-09283-v2.pdf": "AI system research; not an authoritative patient-level clinical source.",
+    "ehr_rag_bridging_long_horizon_records.pdf": "RAG architecture research; not patient-level dietary evidence.",
+    "enhancing_guardrails_safe_healthcare_ai.pdf": "AI safety research; not patient-level dietary evidence.",
+    "eu-ai-act-high-risk-compliance-pharma-medical-devices.pdf": "Regulatory research; not patient-level dietary evidence.",
+    "hl7-fhir-guide-to-esource-epro-interoperability.pdf": "Interoperability guidance; not patient-level dietary evidence.",
+    "icd11factsheet_en.pdf": "Classification reference; not patient-level dietary evidence.",
+    "journal.pdig.0000758.pdf": "AI/RAG product research; not authoritative patient-level dietary evidence.",
+    "nutrients-18-00938-v2.pdf": "Generative AI review; retained for product research, not patient-level dietary evidence.",
+    "nutriorion_multi_agent_personalized_nutrition.pdf": "Multi-agent architecture research; not patient-level dietary evidence.",
+    "presentation-fhir-and-eu-common-standard-epi-g-rodriguez_en.pdf": "Interoperability presentation; not patient-level dietary evidence.",
+    "rag_type_2_diabetes_mellitus_care.pdf": "RAG architecture research; not authoritative patient-level dietary evidence.",
+    "s44325-025-00101-6.pdf": "AI behavior-change research; not patient-level dietary evidence."
+  }
+}

@@ -11,13 +11,13 @@ from src.database import (
 
 def test_profil_kayit_ve_getir(test_db_path):
     profil = KullaniciProfili()
-    profil.ana_kullanici = AileUyesi(ad="AyÅŸe", yas=35, cinsiyet=Cinsiyet.KADIN, hastaliklar=["diyabet"])
+    profil.ana_kullanici = AileUyesi(ad="Ayşe", yas=35, cinsiyet=Cinsiyet.KADIN, hastaliklar=["diyabet"])
 
-    profil_kaydet_db("5551234567", "AyÅŸe K.", profil)
+    profil_kaydet_db("5551234567", "Ayşe K.", profil)
     yuklenen = profil_getir_db("5551234567")
 
     assert yuklenen is not None
-    assert yuklenen.ana_kullanici.ad == "AyÅŸe"
+    assert yuklenen.ana_kullanici.ad == "Ayşe"
     assert "diyabet" in yuklenen.ana_kullanici.hastaliklar
 
 

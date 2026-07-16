@@ -132,12 +132,16 @@ def ilac_etkilesim_ozeti(ilaclar: list[str]) -> str:
     if not klinik_kanit:
         return (
             f"Kullandigi ilaclar: {ilac_listesi}. "
-            "RAG veritabaninda bu ilaclar icin spesifik bir etkilesim bulunamadi; "
-            "yine de genel farmakolojik ilac-yemek etkilesimlerini dikkate al."
+            "Registry kapsamindaki resmi kaynaklarda bu ilaclar icin yeterli bir etkilesim eslesmesi bulunamadi. "
+            "Kesin bir etkilesim sonucu cikarma; belirsizligi doktor veya eczaciyla degerlendirmesini oner."
         )
 
-    logger.info("Dynamic RAG medication check active: %s", ilac_listesi)
+    logger.info(
+        "event=medication_rag_lookup status=completed medication_count=%d",
+        len(ilaclar),
+    )
     return (
-        "KULLANILAN ILACLAR ICIN DINAMIK RAG KLINIK KANITLARI (ZORUNLU UYULACAK):\n"
+        "KULLANILAN ILACLAR ICIN RESMI KAPSAMLI KAYNAK ALINTILARI "
+        "(DESTEKLEYICI BILGI; UZMAN ONAYI DEGILDIR):\n"
         f"{klinik_kanit}"
     )

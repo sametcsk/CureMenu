@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 
 from src.medical_knowledge.bioportal_client import BioPortalClient
 from src.medical_knowledge.normalizer import MedicationNormalizer
@@ -54,7 +55,10 @@ def _normalize(value: str) -> str:
 
 
 def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
-    return any(keyword in text for keyword in keywords)
+    return any(
+        re.search(rf"(?<![a-z0-9]){re.escape(keyword)}(?![a-z0-9])", text)
+        for keyword in keywords
+    )
 
 
 def _item_matches_group(item: str, group: str) -> bool:
@@ -92,8 +96,13 @@ def assess_item_health(
             explanation = " ".join(rule.get("explanation", "") for rule in matched_rules)
             severity = medication_safety.get("severity", "caution")
             return HealthAssessment(
-                "avoid",
+                "avoid" if severity == "avoid" else "caution",
                 f"İlaç-besin riski ({severity}): {explanation}",
+            )
+        if medication_safety.get("severity") == "unknown":
+            return HealthAssessment(
+                "unknown",
+                "Kayıtlı ilaç için bu ürünün etkileşimi doğrulanamadı; sağlık profesyoneline danışılmalı.",
             )
 
     for allergy in allergy_terms:
@@ -111,13 +120,13 @@ def assess_item_health(
 
     if _contains_any(disease_text, ("diyabet", "seker", "diabetes")):
         if _item_matches_group(item, "sugar"):
-            return HealthAssessment("avoid", "Diyabet kaydı nedeniyle ilave şekerden kaçınılmalı.")
+            return HealthAssessment("caution", "Diyabet kaydı nedeniyle şeker miktarı ve porsiyon doğrulanmalı.")
         if _item_matches_group(item, "high_glycemic"):
             return HealthAssessment("caution", "Karbonhidrat porsiyonu diyabet kaydı nedeniyle dikkat gerektirir.")
 
     if _contains_any(disease_text, ("hipertansiyon", "tansiyon", "hypertension")):
         if _item_matches_group(item, "sodium"):
-            return HealthAssessment("avoid", "Hipertansiyon kaydı nedeniyle tuz/işlenmiş ürün riski var.")
+            return HealthAssessment("caution", "Hipertansiyon kaydı nedeniyle sodyum miktarı doğrulanmalı.")
         if _item_matches_group(item, "processed"):
             return HealthAssessment("caution", "İşlenmiş ürünlerde sodyum içeriği değişebileceği için dikkat gerekir.")
 

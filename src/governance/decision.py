@@ -25,21 +25,37 @@ def extract_citations_from_rag(clinical_evidence: str) -> list[dict[str, Any]]:
     seen = set()
     
     # Check if the string object has the citations list attached
-    scores_map = {}
+    citation_metadata: dict[str, dict[str, Any]] = {}
     if hasattr(clinical_evidence, "citations"):
         for c in clinical_evidence.citations:
-            scores_map[c["source_id"]] = c["similarity_score"]
+            source_id = str(c.get("source_id") or "").strip()
+            if source_id:
+                citation_metadata[source_id] = dict(c)
 
     for match in re.finditer(r"\[([^\]]+)\]:", clinical_evidence):
         source_id = match.group(1).strip()
         if source_id and source_id not in seen:
             seen.add(source_id)
+            metadata = citation_metadata.get(source_id, {})
             citations.append(
                 {
                     "source_id": source_id,
-                    "similarity_score": float(scores_map.get(source_id, 0.0)),
-                    "title": source_id,
-                    "evidence_span": "",
+                    "similarity_score": float(metadata.get("similarity_score", 0.0)),
+                    "title": str(metadata.get("title") or source_id),
+                    "page": metadata.get("page"),
+                    "lexical_score": float(metadata.get("lexical_score", 0.0)),
+                    "matched_terms": list(metadata.get("matched_terms") or []),
+                    "evidence_span": str(metadata.get("evidence_span") or ""),
+                    "authority": metadata.get("authority"),
+                    "authority_tier": metadata.get("authority_tier", 3),
+                    "source_role": metadata.get("source_role"),
+                    "source_url": metadata.get("source_url"),
+                    "scope_version": metadata.get("scope_version"),
+                    "file_sha256": metadata.get("file_sha256"),
+                    "registry_source_id": metadata.get("registry_source_id"),
+                    "verification_status": metadata.get("verification_status"),
+                    "clinical_review_status": metadata.get("clinical_review_status", "not_established"),
+                    "review_required": bool(metadata.get("review_required", True)),
                 }
             )
     return citations
@@ -61,7 +77,12 @@ def calculate_confidence(
         scores = [
             validator.validate_citation(
                 similarity_score=float(c.get("similarity_score", float('inf'))),
-                evidence_span=c.get("evidence_span", "")
+                evidence_span=c.get("evidence_span", ""),
+                lexical_score=(
+                    float(c["lexical_score"])
+                    if c.get("lexical_score") is not None
+                    else None
+                ),
             )
             for c in citations
         ]

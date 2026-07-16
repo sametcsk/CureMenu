@@ -6,10 +6,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from dotenv import load_dotenv
 from functools import lru_cache
@@ -23,16 +22,38 @@ from src.messages import (
 )
 from src.ilac_etkilesim import YAYGIN_ILACLAR
 from src.routers import auth, profile, chat, tools, governance, grocery
-from src.logger import get_logger
+from src.logger import get_logger, log_failure
+from src.rate_limit import limiter
+from src.readiness import collect_readiness
 
 logger = get_logger(__name__)
 settings.validate_startup_security()
 
-app = FastAPI(title="CureMenu API", version="1.0.0")
+app = FastAPI(title="CureMenu API", version="1.0.0", debug=settings.DEBUG)
 
-limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
+
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts_list)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Permissions-Policy", "camera=(self), microphone=(), geolocation=()")
+
+    path = request.url.path
+    if path.startswith("/api/") or path in {"/", "/dashboard", "/giris", "/kayit", "/guven", "/health", "/live", "/ready"}:
+        response.headers.setdefault("Cache-Control", "no-store")
+
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip().lower()
+    is_https = request.url.scheme == "https" or (settings.TRUST_PROXY_HEADERS and forwarded_proto == "https")
+    if settings.is_production and is_https:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_turkce(request: Request, exc: RateLimitExceeded):
@@ -44,7 +65,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.exception("Sistem Hatasi (Global Exception Handler)")
+    log_failure(logger, "unhandled_request", exc, component="api")
     hata_mesaji = kullanici_hatasi(exc)
     return JSONResponse(status_code=500, content={"success": False, "detail": hata_mesaji})
 
@@ -84,6 +105,22 @@ async def serve_guven():
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "CureMenu API"}
+
+@app.get("/live")
+async def live_check():
+    return {"status": "ok", "service": "CureMenu API"}
+
+@app.get("/ready")
+async def ready_check():
+    readiness = collect_readiness()
+    status_code = 200 if readiness["ready"] else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "ready" if readiness["ready"] else "not_ready",
+            **readiness,
+        },
+    )
 
 @lru_cache(maxsize=1)
 def _get_public_metinler_cached():
