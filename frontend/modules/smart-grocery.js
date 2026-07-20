@@ -51,10 +51,10 @@ async function calculateBudget() {
                 </div>
             </div>`;
         } else {
-            resultDiv.innerHTML = `<div class="text-center py-4 text-error"><p>${apiHataMesaji(data, 'Rapor oluşturulamadı.')}</p></div>`;
+            renderTextState(resultDiv, apiHataMesaji(data, 'Rapor oluşturulamadı.'), 'text-center py-4 text-error');
         }
     } catch (e) {
-        resultDiv.innerHTML = `<div class="text-center py-4 text-error"><p>${baglantiHatasi(e)}</p></div>`;
+        renderTextState(resultDiv, baglantiHatasi(e), 'text-center py-4 text-error');
     }
 }
 
@@ -133,12 +133,12 @@ async function openSmartGrocery() {
             })
         });
         if (!res.ok || !data?.success) {
-            content.innerHTML = `<div class="rounded-lg border border-error/20 bg-error-container p-5 text-on-error-container">${apiHataMesaji(data, 'Akıllı sepet hazırlanamadı.')}</div>`;
+            renderTextState(content, apiHataMesaji(data, 'Akıllı sepet hazırlanamadı.'), 'rounded-lg border border-error/20 bg-error-container p-5 text-on-error-container');
             return;
         }
         renderSmartGrocery(data);
     } catch (e) {
-        content.innerHTML = `<div class="rounded-lg border border-error/20 bg-error-container p-5 text-on-error-container">${baglantiHatasi(e)}</div>`;
+        renderTextState(content, baglantiHatasi(e), 'rounded-lg border border-error/20 bg-error-container p-5 text-on-error-container');
     }
 }
 

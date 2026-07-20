@@ -55,7 +55,7 @@
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.12/dist/purify.min.js"></script>
 </head>
 <body class="min-h-screen bg-canvas text-ink font-body antialiased">
     <main class="grid min-h-screen lg:grid-cols-[0.9fr_1.1fr]">
@@ -303,12 +303,23 @@
                 ['Alerjiler', parseList(document.getElementById('allergies').value).join(', ') || 'Bildirilmedi'],
                 ['İlaçlar', parseList(document.getElementById('medications').value).join(', ') || 'Bildirilmedi'],
             ];
-            document.getElementById('profileSummary').innerHTML = rows.map(([label, value]) => `
-                <div class="flex items-start justify-between gap-4 border-b border-line/70 pb-2 last:border-b-0">
-                    <span>${label}</span>
-                    <strong class="text-right text-ink">${value}</strong>
-                </div>
-            `).join('');
+            const summary = document.getElementById('profileSummary');
+            const fragment = document.createDocumentFragment();
+            rows.forEach(([label, value]) => {
+                const row = document.createElement('div');
+                row.className = 'flex items-start justify-between gap-4 border-b border-line/70 pb-2 last:border-b-0';
+
+                const labelNode = document.createElement('span');
+                labelNode.textContent = label;
+
+                const valueNode = document.createElement('strong');
+                valueNode.className = 'text-right text-ink';
+                valueNode.textContent = value;
+
+                row.append(labelNode, valueNode);
+                fragment.appendChild(row);
+            });
+            summary.replaceChildren(fragment);
         }
 
         nextBtn.addEventListener('click', () => {

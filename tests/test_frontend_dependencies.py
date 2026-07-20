@@ -28,7 +28,7 @@ EXPECTED_EXTERNAL_ASSETS = {
     "dashboard.html": [
         "https://cdn.tailwindcss.com/3.4.17?plugins=forms,container-queries,typography",
         "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js",
+        "https://cdn.jsdelivr.net/npm/dompurify@3.4.12/dist/purify.min.js",
         "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js",
         "https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js",
         "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap",
@@ -44,21 +44,21 @@ EXPECTED_EXTERNAL_ASSETS = {
         "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap",
         "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap",
         "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js",
+        "https://cdn.jsdelivr.net/npm/dompurify@3.4.12/dist/purify.min.js",
     ],
     "index.html": [
         "https://cdn.tailwindcss.com/3.4.17?plugins=forms,container-queries,typography",
         "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap",
         "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap",
         "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js",
+        "https://cdn.jsdelivr.net/npm/dompurify@3.4.12/dist/purify.min.js",
     ],
     "kayit.html": [
         "https://cdn.tailwindcss.com/3.4.17?plugins=forms,container-queries",
         "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap",
         "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap",
         "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js",
+        "https://cdn.jsdelivr.net/npm/dompurify@3.4.12/dist/purify.min.js",
     ],
 }
 
@@ -80,7 +80,5 @@ def test_non_google_cdn_assets_are_version_pinned():
                 assert "@" in parsed.path
             elif parsed.netloc == "unpkg.com":
                 assert "@" in parsed.path
-            elif parsed.netloc == "cdnjs.cloudflare.com":
-                assert "/3.0.6/" in parsed.path
             else:
                 raise AssertionError(f"Unexpected external asset host in {filename}: {asset}")

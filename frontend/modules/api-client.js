@@ -29,6 +29,16 @@ function baglantiHatasi(_error) {
     return 'Bağlantı kurulamadı. Lütfen birazdan tekrar deneyin.';
 }
 
+function renderTextState(container, message, className = '', tagName = 'div') {
+    if (!container) return null;
+    const allowedTags = new Set(['div', 'p']);
+    const node = document.createElement(allowedTags.has(tagName) ? tagName : 'div');
+    if (className) node.className = className;
+    node.textContent = message == null ? '' : String(message);
+    container.replaceChildren(node);
+    return node;
+}
+
 async function safeFetchJson(url, options = {}) {
     options.credentials = 'include'; // Ensure HttpOnly cookies are sent
     let res = await fetch(url, options);
@@ -135,6 +145,7 @@ window.safeFetchJson = safeFetchJson;
 window.safeFetchStream = safeFetchStream;
 window.apiHataMesaji = apiHataMesaji;
 window.baglantiHatasi = baglantiHatasi;
+window.renderTextState = renderTextState;
 window.onRefreshed = onRefreshed;
 window.formatMarkdownSafe = formatMarkdownSafe;
 window.escapeHtml = escapeHtml;

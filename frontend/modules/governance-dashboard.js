@@ -255,12 +255,12 @@ async function openDecisionTimeline(decisionId) {
     try {
         const { res, data } = await safeFetchJson(API + `/api/clinical-decisions/${encodeURIComponent(decisionId)}`);
         if (!res.ok || !data?.success) {
-            content.innerHTML = `<p class="text-error">${apiHataMesaji(data, 'Karar detayi alinamadi.')}</p>`;
+            renderTextState(content, apiHataMesaji(data, 'Karar detayi alinamadi.'), 'text-error', 'p');
             return;
         }
         content.innerHTML = renderDecisionTimeline(data.decision || {});
     } catch (e) {
-        content.innerHTML = `<p class="text-error">${baglantiHatasi(e)}</p>`;
+        renderTextState(content, baglantiHatasi(e), 'text-error', 'p');
     }
 }
 
@@ -296,7 +296,7 @@ async function loadClinicalKpis(reset = false) {
         if (decisionRes.ok && decisionData?.success) renderClinicalDecisions(decisionData.decisions || []);
         else renderClinicalDecisions([]);
     } catch (e) {
-        if (summary) summary.innerHTML = `<div class="text-center py-12 text-error col-span-full">${baglantiHatasi(e)}</div>`;
+        renderTextState(summary, baglantiHatasi(e), 'text-center py-12 text-error col-span-full');
         renderKpiEventBreakdown([]);
         renderClinicalDecisions([]);
     }

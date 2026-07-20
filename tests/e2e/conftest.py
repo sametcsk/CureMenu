@@ -21,6 +21,8 @@ playwright_sync = pytest.importorskip(
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+DOMPURIFY_SOURCE = (REPO_ROOT / "tests" / "fixtures" / "dompurify-3.4.12.min.js").read_text(encoding="utf-8")
+MARKED_SOURCE = (REPO_ROOT / "tests" / "fixtures" / "marked-12.0.2.min.js").read_text(encoding="utf-8")
 _PHONE_SEQUENCE = itertools.count(1001)
 
 
@@ -158,13 +160,13 @@ def _external_asset_handler(base_url: str):
             route.fulfill(
                 status=200,
                 content_type="application/javascript",
-                body="window.marked={parse:function(value){return String(value||'')}};",
+                body=MARKED_SOURCE,
             )
         elif "dompurify" in url:
             route.fulfill(
                 status=200,
                 content_type="application/javascript",
-                body="window.DOMPurify={sanitize:function(value){return String(value||'')}};",
+                body=DOMPURIFY_SOURCE,
             )
         elif "chart" in url:
             route.fulfill(

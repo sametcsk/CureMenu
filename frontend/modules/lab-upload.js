@@ -32,14 +32,18 @@ async function uploadHealthRecord(event) {
             <div class="bg-primary-container/20 border border-primary/30 rounded-lg p-6 text-center">
                 <span class="material-symbols-outlined text-primary text-4xl mb-2">task_alt</span>
                 <h4 class="font-headline-md text-primary mb-2">Başarıyla Yüklendi!</h4>
-                <p class="font-body-md text-on-surface">${data.message || 'Tahlil notların kaydedildi. CureBot sonraki yanıtlarda bu bilgileri dikkate alabilir.'}</p>
+                <p class="font-body-md text-on-surface" data-upload-message></p>
                 <button onclick="openCureBotWidget('Tahlillerimi yükledim. Beslenme açısından nelere dikkat etmeliyim?')" class="mt-4 bg-primary text-on-primary px-6 py-2 rounded-full font-label-md hover:bg-primary/90 transition-colors shadow-sm">CureBot ile Konuşmaya Başla</button>
             </div>`;
+            const uploadMessage = result.querySelector('[data-upload-message]');
+            if (uploadMessage) {
+                uploadMessage.textContent = data.message || 'Tahlil notların kaydedildi. CureBot sonraki yanıtlarda bu bilgileri dikkate alabilir.';
+            }
         } else {
-            result.innerHTML = `<div class="bg-error-container text-on-error-container p-6 rounded-lg text-center"><p>${apiHataMesaji(data, 'PDF yüklenemedi.')}</p></div>`;
+            renderTextState(result, apiHataMesaji(data, 'PDF yüklenemedi.'), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
         }
     } catch (e) {
-        result.innerHTML = `<div class="bg-error-container text-on-error-container p-6 rounded-lg text-center"><p>${baglantiHatasi(e)}</p></div>`;
+        renderTextState(result, baglantiHatasi(e), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
     }
 }
 
@@ -186,7 +190,7 @@ async function loadHistory(reset = false) {
         const { res, data } = await safeFetchJson(`${API}/api/history?page=${currentHistoryPage}&limit=${HISTORY_LIMIT}`);
         if (!res.ok || !data?.success) {
             const grid = document.getElementById('historyGrid');
-            if (grid && reset) grid.innerHTML = `<div class="text-center py-12 text-error">${apiHataMesaji(data, 'Geçmiş yüklenemedi.')}</div>`;
+            if (grid && reset) renderTextState(grid, apiHataMesaji(data, 'Geçmiş yüklenemedi.'), 'text-center py-12 text-error');
             return;
         }
         const grid = document.getElementById('historyGrid');
@@ -247,7 +251,7 @@ async function loadHistory(reset = false) {
     } catch (e) {
         console.error("Geçmiş yüklenirken hata:", e);
         const grid = document.getElementById('historyGrid');
-        if (grid && reset) grid.innerHTML = `<div class="text-center py-12 text-error">${baglantiHatasi(e)}</div>`;
+        if (grid && reset) renderTextState(grid, baglantiHatasi(e), 'text-center py-12 text-error');
     }
 }
 

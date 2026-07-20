@@ -26,10 +26,10 @@ async function scanMenu() {
                 </div>
             </div>`;
         } else {
-            result.innerHTML = `<div class="bg-error-container text-on-error-container p-6 rounded-lg text-center"><p>${apiHataMesaji(data, 'Menü okunamadı.')}</p></div>`;
+            renderTextState(result, apiHataMesaji(data, 'Menü okunamadı.'), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
         }
     } catch (e) {
-        result.innerHTML = `<div class="bg-error-container text-on-error-container p-6 rounded-lg text-center"><p>${baglantiHatasi(e)}</p></div>`;
+        renderTextState(result, baglantiHatasi(e), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
     }
 }
 
@@ -54,10 +54,10 @@ async function scanMenuImage(inputEl) {
             if (data && data.success) {
                 result.innerHTML = `<div class="bg-surface-container-lowest rounded-lg p-8 shadow-l1 border border-outline-variant/20"><div class="prose prose-sm md:prose-base max-w-none font-body-md text-on-surface">${formatMarkdownSafe(data.analiz)}</div></div>`;
             } else {
-                result.innerHTML = `<div class="bg-error-container text-on-error-container p-6 rounded-lg text-center"><p>${apiHataMesaji(data, 'Menü fotoğrafı okunamadı.')}</p></div>`;
+                renderTextState(result, apiHataMesaji(data, 'Menü fotoğrafı okunamadı.'), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
             }
         } catch (e) {
-            result.innerHTML = `<div class="bg-error-container text-on-error-container p-6 rounded-lg text-center"><p>${baglantiHatasi(e)}</p></div>`;
+            renderTextState(result, baglantiHatasi(e), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
         }
         inputEl.value = '';
     };
@@ -130,7 +130,7 @@ async function scanFridge(imageBase64) {
         });
 
         if (!res.ok || !data?.success) {
-            result.innerHTML = `<div class="card border-error-container bg-error-container p-6 text-center text-on-error-container"><p>${apiHataMesaji(data, 'Fotoğraftaki malzemeler okunamadı. Daha net ışıkta, ürünleri kadraja alarak tekrar deneyebilirsin.')}</p></div>`;
+            renderTextState(result, apiHataMesaji(data, 'Fotoğraftaki malzemeler okunamadı. Daha net ışıkta, ürünleri kadraja alarak tekrar deneyebilirsin.'), 'card border-error-container bg-error-container p-6 text-center text-on-error-container');
             return;
         }
 
@@ -148,7 +148,7 @@ async function scanFridge(imageBase64) {
                 </section>
             </div>`;
     } catch (e) {
-        result.innerHTML = `<div class="card border-error-container bg-error-container p-6 text-center text-on-error-container"><p>${baglantiHatasi(e)}</p></div>`;
+        renderTextState(result, baglantiHatasi(e), 'card border-error-container bg-error-container p-6 text-center text-on-error-container');
     }
 }
     window.MenuScanner = {
