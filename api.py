@@ -29,7 +29,14 @@ from src.readiness import collect_readiness
 logger = get_logger(__name__)
 settings.validate_startup_security()
 
-app = FastAPI(title="CureMenu API", version="1.0.0", debug=settings.DEBUG)
+app = FastAPI(
+    title="CureMenu API",
+    version="1.0.0",
+    debug=settings.DEBUG,
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
+)
 
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)

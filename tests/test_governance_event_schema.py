@@ -172,3 +172,43 @@ def test_explainability_logger_integration():
     assert event["metadata"]["decision_id"] == "dec_test_expl"
     assert event["metadata"]["user_id"] == "555"
     assert "explainability" in event["metadata"]
+
+
+def test_citation_metadatada_olan_gercek_kaynak_doner():
+    from src.governance.decision import extract_citations_from_rag
+    from src.memory import ClinicalEvidence
+
+    evidence = ClinicalEvidence("[Gercek Kaynak]:\nKanit metni...")
+    evidence.citations = [
+        {"source_id": "Gercek Kaynak", "similarity_score": 0.4, "title": "Rehber", "evidence_span": "Kanit metni..."}
+    ]
+
+    citations = extract_citations_from_rag(evidence)
+
+    assert len(citations) == 1
+    assert citations[0]["source_id"] == "Gercek Kaynak"
+    assert citations[0]["similarity_score"] == 0.4
+    assert citations[0]["title"] == "Rehber"
+
+
+def test_citation_metadatada_olmayan_sahte_etiket_donmez():
+    from src.governance.decision import extract_citations_from_rag
+    from src.memory import ClinicalEvidence
+
+    evidence = ClinicalEvidence("[Gercek Kaynak]:\nKanit...\n[Uydurma Kaynak]:\nSahte kanit...")
+    evidence.citations = [{"source_id": "Gercek Kaynak", "similarity_score": 0.4}]
+
+    citations = extract_citations_from_rag(evidence)
+
+    source_ids = [c["source_id"] for c in citations]
+    assert source_ids == ["Gercek Kaynak"]
+    assert "Uydurma Kaynak" not in source_ids
+
+
+def test_citation_metadatasiz_duz_metin_citation_uretmez():
+    from src.governance.decision import extract_citations_from_rag
+
+    plain_text = "[Etiketli Kaynak]:\nMetadata'sı olmayan düz metin."
+
+    assert extract_citations_from_rag(plain_text) == []
+    assert extract_citations_from_rag("") == []

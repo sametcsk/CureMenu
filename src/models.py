@@ -160,9 +160,9 @@ class DenetleyiciKarari(BaseModel):
     explainability: Optional[ExplainabilityLog] = None
 
 class PlanActionRequest(BaseModel):
-    action_type: str = Field(..., description="'recipe' veya 'alternative'")
-    meal_text: str = Field(..., description="Aksiyon alınacak öğünün adı")
-    plan_text: Optional[str] = Field(None, description="Mevcut haftalık plan metni (alternatif için)")
+    action_type: Literal["recipe", "alternative", "snack"] = Field(..., description="'recipe', 'alternative' veya 'snack'")
+    meal_text: str = Field(..., min_length=1, max_length=500, description="Aksiyon alınacak öğünün adı")
+    plan_text: Optional[str] = Field(None, max_length=50_000, description="Mevcut haftalık plan metni (alternatif için)")
     kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
 
 class WeeklyPlanDay(BaseModel):

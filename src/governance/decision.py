@@ -17,13 +17,10 @@ def _get_calculator() -> ConfidenceCalculator:
 
 
 def extract_citations_from_rag(clinical_evidence: str) -> list[dict[str, Any]]:
-    """Extract source labels from the current RAG context format."""
+    """Extract citations only for sources backed by attached RAG metadata."""
     if not clinical_evidence:
         return []
 
-    citations = []
-    seen = set()
-    
     # Check if the string object has the citations list attached
     citation_metadata: dict[str, dict[str, Any]] = {}
     if hasattr(clinical_evidence, "citations"):
@@ -32,32 +29,49 @@ def extract_citations_from_rag(clinical_evidence: str) -> list[dict[str, Any]]:
             if source_id:
                 citation_metadata[source_id] = dict(c)
 
+    # Plain text without attached metadata must not produce citations
+    if not citation_metadata:
+        return []
+
+    citations = []
+    seen = set()
+
+    def _append_citation(source_id: str, metadata: dict[str, Any]) -> None:
+        citations.append(
+            {
+                "source_id": source_id,
+                "similarity_score": float(metadata.get("similarity_score", 0.0)),
+                "title": str(metadata.get("title") or source_id),
+                "page": metadata.get("page"),
+                "lexical_score": float(metadata.get("lexical_score", 0.0)),
+                "matched_terms": list(metadata.get("matched_terms") or []),
+                "evidence_span": str(metadata.get("evidence_span") or ""),
+                "authority": metadata.get("authority"),
+                "authority_tier": metadata.get("authority_tier", 3),
+                "source_role": metadata.get("source_role"),
+                "source_url": metadata.get("source_url"),
+                "scope_version": metadata.get("scope_version"),
+                "file_sha256": metadata.get("file_sha256"),
+                "registry_source_id": metadata.get("registry_source_id"),
+                "verification_status": metadata.get("verification_status"),
+                "clinical_review_status": metadata.get("clinical_review_status", "not_established"),
+                "review_required": bool(metadata.get("review_required", True)),
+            }
+        )
+
+    # Text labels are used only for ordering/matching against real metadata
     for match in re.finditer(r"\[([^\]]+)\]:", clinical_evidence):
         source_id = match.group(1).strip()
-        if source_id and source_id not in seen:
+        if source_id and source_id not in seen and source_id in citation_metadata:
             seen.add(source_id)
-            metadata = citation_metadata.get(source_id, {})
-            citations.append(
-                {
-                    "source_id": source_id,
-                    "similarity_score": float(metadata.get("similarity_score", 0.0)),
-                    "title": str(metadata.get("title") or source_id),
-                    "page": metadata.get("page"),
-                    "lexical_score": float(metadata.get("lexical_score", 0.0)),
-                    "matched_terms": list(metadata.get("matched_terms") or []),
-                    "evidence_span": str(metadata.get("evidence_span") or ""),
-                    "authority": metadata.get("authority"),
-                    "authority_tier": metadata.get("authority_tier", 3),
-                    "source_role": metadata.get("source_role"),
-                    "source_url": metadata.get("source_url"),
-                    "scope_version": metadata.get("scope_version"),
-                    "file_sha256": metadata.get("file_sha256"),
-                    "registry_source_id": metadata.get("registry_source_id"),
-                    "verification_status": metadata.get("verification_status"),
-                    "clinical_review_status": metadata.get("clinical_review_status", "not_established"),
-                    "review_required": bool(metadata.get("review_required", True)),
-                }
-            )
+            _append_citation(source_id, citation_metadata[source_id])
+
+    # Metadata-backed sources not labeled in the text are still real citations
+    for source_id, metadata in citation_metadata.items():
+        if source_id not in seen:
+            seen.add(source_id)
+            _append_citation(source_id, metadata)
+
     return citations
 
 

@@ -172,3 +172,31 @@ def test_legacy_provider_flag_cannot_enable_closed_beta_tracing(monkeypatch):
 
     with pytest.raises(ValueError, match="LangSmith tracing must be disabled"):
         settings.configure_langsmith_tracing()
+
+
+def test_development_ortaminda_docs_acik(client):
+    assert client.get("/docs").status_code == 200
+    assert client.get("/openapi.json").status_code == 200
+
+
+def test_production_ortaminda_docs_kapali(test_db_path):
+    import importlib
+
+    import api as api_module
+    from fastapi.testclient import TestClient
+
+    mp = pytest.MonkeyPatch()
+    try:
+        _set_safe_production_config(mp)
+        mp.setattr(settings, "CUREMENU_DB_PATH", test_db_path)
+        mp.setattr(settings, "LANGCHAIN_TRACING", False)
+        prod_app = importlib.reload(api_module).app
+
+        with TestClient(prod_app, base_url="https://app.example") as prod_client:
+            assert prod_client.get("/docs").status_code == 404
+            assert prod_client.get("/redoc").status_code == 404
+            assert prod_client.get("/openapi.json").status_code == 404
+            assert prod_client.get("/live").status_code == 200
+    finally:
+        mp.undo()
+        importlib.reload(api_module)
