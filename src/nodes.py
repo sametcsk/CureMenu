@@ -255,7 +255,10 @@ def denetleyici_node(state: AgentState) -> dict:
     quality_profile = _quality_profile_from_summary(state.get("profil_ozeti", ""))
     policy_result = PolicyEngine().check_policy(quality_profile, state.get("hedef_islem", "meal_recommendation"))
     policy_warning = " ".join(policy_result.get("applied_policies") or [])
-    rule_result = RuleEngine().check_rules(quality_profile, onerilen_yemek, [onerilen_yemek])
+    rule_inputs = [onerilen_yemek]
+    if state.get("istek"):
+        rule_inputs.append(state["istek"])
+    rule_result = RuleEngine().check_rules(quality_profile, onerilen_yemek, rule_inputs)
     quality_events = [
         make_event(
             "PolicyChecked",
@@ -280,6 +283,22 @@ def denetleyici_node(state: AgentState) -> dict:
     state["governance_events"] = list(state.get("governance_events") or []) + quality_events
 
     if rule_result.get("found_risks"):
+        input_medication_safety = check_medication_food_safety(
+            state.get("ilaclar") or [],
+            state.get("istek", ""),
+        )
+        state = dict(state)
+        state["governance_events"] = list(state.get("governance_events") or []) + medication_safety_events(
+            input_medication_safety
+        )
+        warning_parts = list(rule_result["found_risks"])
+        warning_parts.extend(
+            str(rule.get("explanation") or "").strip()
+            for rule in input_medication_safety.get("matched_rules", [])
+            if str(rule.get("explanation") or "").strip()
+        )
+        warning_parts.extend(policy_result.get("applied_policies") or [])
+        warning_parts = list(dict.fromkeys(warning_parts))
         confidence = calculate_confidence(
             safe=False,
             evidence_found=True,
@@ -293,7 +312,7 @@ def denetleyici_node(state: AgentState) -> dict:
             status="blocked",
             metadata={"risks": rule_result["found_risks"]},
             guvenli_mi=False,
-            uyari_mesaji=" ".join(rule_result["found_risks"]),
+            uyari_mesaji=" ".join(warning_parts),
             risk_score=confidence["medical_risk"],
             confidence=confidence,
         )
@@ -397,7 +416,7 @@ def denetleyici_node(state: AgentState) -> dict:
             "confidence": confidence,
         }
         if state.get("hedef_islem") in {"SOHBET", "SECENEK_SUN", "SECENEK_SUN_BITTI"}:
-            updated["uzman_onerisi"] = f"{onerilen_yemek}\n\n{warning}"
+            updated["uzman_onerisi"] = onerilen_yemek
         return _governance_update(
             state,
             "MedicationReviewRequired",
@@ -458,7 +477,7 @@ def denetleyici_node(state: AgentState) -> dict:
             "confidence": confidence,
         }
         if state.get("hedef_islem") in {"SOHBET", "SECENEK_SUN", "SECENEK_SUN_BITTI"}:
-            updated["uzman_onerisi"] = f"{onerilen_yemek}\n\nDikkat: {warning}"
+            updated["uzman_onerisi"] = onerilen_yemek
         return _governance_update(
             state,
             "RuleTriggered",
@@ -729,8 +748,6 @@ def mutfak_sefi_node(state: AgentState) -> dict:
     
     cevap = invoke_with_model_fallback(prompt)
     tarif = parse_llm_response(cevap)
-    if state.get("uyari_mesaji"):
-        tarif = f"{state['uyari_mesaji']}\n\n{tarif}"
     return _governance_update(
         state,
         "FinalAnswerGenerated",

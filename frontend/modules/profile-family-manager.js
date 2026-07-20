@@ -136,7 +136,12 @@ function openProfileEditor() {
     setValue('ob_ad', profil.ad || window.AuthManager.getUser().kullanici_adi || '');
     setValue('ob_yas', profil.yas || 35);
     setValue('ob_cinsiyet', profil.cinsiyet || 'kadın');
-    setValue('ob_hedef', profil.hedef || 'Sağlıklı Yaşam (Genel)');
+    const goalSelect = document.getElementById('ob_hedef');
+    if (window.ProfileGoals && goalSelect) {
+        window.ProfileGoals.populateSelect(goalSelect, profil.hedef);
+    } else {
+        setValue('ob_hedef', profil.hedef || 'Sağlıklı Yaşam');
+    }
     setValue('ob_hastaliklar', (profil.hastaliklar || []).join(', '));
     setValue('ob_alerjiler', (profil.alerjiler || []).join(', '));
     setValue('ob_ilaclar', (profil.ilaclar || []).join(', '));

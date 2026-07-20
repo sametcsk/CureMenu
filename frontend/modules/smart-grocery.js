@@ -221,7 +221,7 @@ function renderSmartGrocery(data) {
             </article>`)
         .join('');
     const decisionHtml = data.decision_id
-        ? `<div class="mb-5 rounded-lg border border-outline-variant bg-surface p-4 text-sm text-on-surface-variant"><span class="font-bold text-on-surface">Karar kaydı:</span> ${escapeHtml(data.decision_id)}${data.price_catalog_version ? ` · ${escapeHtml(data.price_catalog_version)}` : ''}</div>`
+        ? '<div class="mb-5 rounded-lg border border-outline-variant bg-surface p-4 text-sm text-on-surface-variant">Sepet önerileri, profiliniz ve güvenlik kontrolleri dikkate alınarak değerlendirildi.</div>'
         : '';
 
     content.innerHTML = `

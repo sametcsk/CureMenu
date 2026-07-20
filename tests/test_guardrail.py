@@ -39,3 +39,63 @@ def test_gout_red_meat_is_not_treated_as_absolute_allergy_block():
     )
 
     assert result["found_risks"] == []
+
+
+def test_registered_milk_protein_allergy_matches_milk_wording():
+    result = RuleEngine().check_rules(
+        {"alerjiler": ["İnek sütü proteini"], "hastaliklar": []},
+        "Sütlü muzlu içecek",
+        ["Sütlü muzlu içecek"],
+    )
+
+    assert result["found_risks"] == ["Alerji riski (Kesin İhlal): İnek sütü proteini"]
+
+
+def test_food_warning_is_not_mistaken_for_food_recommendation():
+    result = RuleEngine().check_rules(
+        {"alerjiler": [], "hastaliklar": ["gut"]},
+        "Gut hastalığında yüksek pürinli sakatat riski vardır; sakatat önerilmez.",
+        ["Gut hastalığında yüksek pürinli sakatat riski vardır; sakatat önerilmez."],
+    )
+
+    assert result["found_risks"] == []
+
+
+def test_kidney_disease_context_is_not_mistaken_for_organ_meat():
+    result = RuleEngine().check_rules(
+        {"alerjiler": [], "hastaliklar": ["gut", "evre 3 kronik böbrek hastalığı"]},
+        "Böbrek hastalığında öneri güncel tahlillerle değerlendirilmelidir.",
+        ["Böbrek hastalığında öneri güncel tahlillerle değerlendirilmelidir."],
+    )
+
+    assert result["found_risks"] == []
+
+
+def test_kidney_meat_is_still_detected_for_gout():
+    result = RuleEngine().check_rules(
+        {"alerjiler": [], "hastaliklar": ["gut"]},
+        "Izgara kuzu böbrek",
+        ["kuzu böbrek"],
+    )
+
+    assert result["found_risks"] == ["Gut hastalığında yüksek pürinli sakatat riski."]
+
+
+def test_plant_milk_is_not_mistaken_for_cow_milk_protein():
+    result = RuleEngine().check_rules(
+        {"alerjiler": ["İnek sütü proteini"], "hastaliklar": []},
+        "Badem sütlü chia pudingi",
+        ["Badem sütlü chia pudingi"],
+    )
+
+    assert result["found_risks"] == []
+
+
+def test_egg_free_wording_is_not_mistaken_for_egg_ingredient():
+    result = RuleEngine().check_rules(
+        {"alerjiler": ["yumurta"], "hastaliklar": []},
+        "Yumurtasız sebzeli mücver",
+        ["Yumurtasız sebzeli mücver"],
+    )
+
+    assert result["found_risks"] == []

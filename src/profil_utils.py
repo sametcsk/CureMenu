@@ -111,7 +111,7 @@ def profil_ozeti_olustur(uye: AileUyesi) -> str:
         f"{uye.ad}, "
         f"Yas: {uye.yas}, Cinsiyet: {uye.cinsiyet.value}, "
         f"Boy: {getattr(uye, 'boy', 170)} cm, Kilo: {getattr(uye, 'kilo', 70.0)} kg, "
-        f"Beslenme Hedefi: {getattr(uye, 'hedef', 'Sağlıklı Yaşam (Genel)')}, "
+        f"Beslenme Hedefi: {getattr(uye, 'hedef', 'Sağlıklı Yaşam')}, "
         f"Hastalıklar (ICD-11 Standart): {hastaliklar}, "
         f"Genetik Geçmiş: {genetik}, "
         f"Tıbbi Geçmiş: {tibbi}, "
@@ -128,7 +128,7 @@ def aile_profil_ozeti_olustur(profil: KullaniciProfili) -> str:
         h = ", ".join(uye.hastaliklar) if uye.hastaliklar else "Yok"
         a = ", ".join(getattr(uye, "alerjiler", [])) if getattr(uye, "alerjiler", []) else "Yok"
         ilac = ", ".join(getattr(uye, "ilaclar", []) or []) or "Yok"
-        hedef = getattr(uye, "hedef", "Sağlıklı Yaşam (Genel)")
+        hedef = getattr(uye, "hedef", "Sağlıklı Yaşam")
         satirlar.append(
             f"- {uye.ad}: Yas: {uye.yas}, Cinsiyet: {uye.cinsiyet.value}, "
             f"Hedefi: {hedef}, Hastalıkları: {h}, Alerjileri: {a}, İlaçları: {ilac}"

@@ -276,7 +276,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 <div><label class="mb-1 block font-bold">Ad soyad</label><input id="m_ad" class="w-full rounded-lg border-outline-variant p-3" placeholder="Örn. Ayşe Yılmaz" type="text"/></div>
 <div class="grid grid-cols-3 gap-3"><div><label class="mb-1 block font-bold">Yaş</label><input id="m_yas" class="w-full rounded-lg border-outline-variant p-3" type="number"/></div><div><label class="mb-1 block font-bold">Boy</label><input id="m_boy" value="170" class="w-full rounded-lg border-outline-variant p-3" type="number"/></div><div><label class="mb-1 block font-bold">Kilo</label><input id="m_kilo" value="70" class="w-full rounded-lg border-outline-variant p-3" type="number"/></div></div>
 <div><label class="mb-1 block font-bold">Cinsiyet</label><select id="m_cinsiyet" class="w-full rounded-lg border-outline-variant p-3"><option value="erkek">Erkek</option><option value="kadın">Kadın</option></select></div>
-<div><label class="mb-1 block font-bold">Beslenme hedefi</label><select id="m_hedef" class="w-full rounded-lg border-outline-variant p-3"><option value="Sağlıklı Yaşam (Genel)">Sağlıklı Yaşam (Genel)</option><option value="Kilo Verme / Yağ Yakımı">Kilo Verme / Yağ Yakımı</option><option value="Kas Kazanımı / Sporcu Beslenmesi">Kas Kazanımı / Sporcu Beslenmesi</option><option value="Hamilelik / Emzirme Beslenmesi">Hamilelik / Emzirme Beslenmesi</option><option value="Sindirim / Bağırsak Sağlığı">Sindirim / Bağırsak Sağlığı</option><option value="Çocuk Gelişimi">Çocuk Gelişimi</option></select></div>
+<div><label class="mb-1 block font-bold">Beslenme hedefi</label><select id="m_hedef" data-profile-goal-select class="w-full rounded-lg border-outline-variant p-3"></select></div>
 <div><label class="mb-1 block font-bold">Hastalıklar</label><input id="m_hastaliklar" class="w-full rounded-lg border-outline-variant p-3" placeholder="diyabet, hipertansiyon" type="text"/></div>
 <div><label class="mb-1 block font-bold">Alerjiler</label><input id="m_alerjiler" class="w-full rounded-lg border-outline-variant p-3" placeholder="fıstık, gluten" type="text"/></div>
 <div><label class="mb-1 block font-bold">Kullandığı ilaçlar</label><input id="m_ilaclar" class="w-full rounded-lg border-outline-variant p-3" placeholder="metformin, lisinopril" type="text"/></div>
@@ -294,7 +294,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 <div class="space-y-4 overflow-y-auto p-5">
 <div><label class="mb-1 block font-bold">Adınız</label><input id="ob_ad" class="w-full rounded-lg border-outline-variant p-3" type="text"/></div>
 <div class="grid grid-cols-2 gap-3"><div><label class="mb-1 block font-bold">Yaş</label><input id="ob_yas" class="w-full rounded-lg border-outline-variant p-3" type="number" value="35"/></div><div><label class="mb-1 block font-bold">Cinsiyet</label><select id="ob_cinsiyet" class="w-full rounded-lg border-outline-variant p-3"><option value="kadın">Kadın</option><option value="erkek">Erkek</option></select></div></div>
-<div><label class="mb-1 block font-bold">Beslenme hedefi</label><select id="ob_hedef" class="w-full rounded-lg border-outline-variant p-3"><option value="Sağlıklı Yaşam (Genel)">Sağlıklı Yaşam (Genel)</option><option value="Kilo Verme / Yağ Yakımı">Kilo Verme / Yağ Yakımı</option><option value="Kas Kazanımı / Sporcu Beslenmesi">Kas Kazanımı / Sporcu Beslenmesi</option><option value="Hamilelik / Emzirme Beslenmesi">Hamilelik / Emzirme Beslenmesi</option><option value="Sindirim / Bağırsak Sağlığı">Sindirim / Bağırsak Sağlığı</option></select></div>
+<div><label class="mb-1 block font-bold">Beslenme hedefi</label><select id="ob_hedef" data-profile-goal-select class="w-full rounded-lg border-outline-variant p-3"></select></div>
 <div><label class="mb-2 block font-bold">Hastalıklar</label><div id="ob_hastalik_chips" class="mb-2 flex flex-wrap gap-2"></div><input id="ob_hastaliklar" class="w-full rounded-lg border-outline-variant p-3" placeholder="diyabet, hipertansiyon..." type="text"/></div>
 <div><label class="mb-1 block font-bold">Alerjiler</label><input id="ob_alerjiler" class="w-full rounded-lg border-outline-variant p-3" type="text"/></div>
 <div><label class="mb-2 block font-bold">Kullandığı ilaçlar</label><div id="ob_ilac_chips" class="mb-2 flex flex-wrap gap-2"></div><input id="ob_ilaclar" class="w-full rounded-lg border-outline-variant p-3" type="text"/></div>
@@ -356,11 +356,12 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 <script src="/static/modules/ui-utils.js"></script>
 <script src="/static/modules/auth-manager.js"></script>
 <script src="/static/modules/chat-widget.js"></script>
-<script src="/static/modules/chat-governance-panel.js"></script>
+<script src="/static/modules/chat-governance-panel.js?v=12"></script>
 <script src="/static/modules/weekly-plan-manager.js"></script>
-<script src="/static/modules/smart-grocery.js"></script>
+<script src="/static/modules/smart-grocery.js?v=12"></script>
 <script src="/static/modules/weekly-actions.js"></script>
-<script src="/static/modules/profile-family-manager.js"></script>
+<script src="/static/modules/profile-goals.js?v=12"></script>
+<script src="/static/modules/profile-family-manager.js?v=12"></script>
 <script src="/static/modules/menu-scanner.js"></script>
 <script src="/static/modules/lab-upload.js"></script>
 <script src="/static/modules/governance-dashboard.js"></script>

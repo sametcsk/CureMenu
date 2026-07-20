@@ -10,15 +10,13 @@ class Cinsiyet(str, Enum):
     KADIN = "kadın"
 
 class BeslenmeHedefi(str, Enum):
-    GENEL = "Sağlıklı Yaşam (Genel)"
-    KILO_VERME = "Kilo Verme / Yağ Yakımı"
-    SPORCU = "Kas Kazanımı / Sporcu Beslenmesi"
-    KADIN_SAGLIGI = "Kadın Sağlığı (PCOS / Hormon Dengesi)"
-    HAMILELIK = "Hamilelik / Emzirme Beslenmesi"
-    SINDIRIM = "Sindirim / Bağırsak Sağlığı"
-    ZIHIN = "Zihin Açıklığı / Odaklanma"
-    DETOKS = "Detoks / Ödem Atma"
-    COCUK_GELISIMI = "Çocuk Gelişimi"
+    GENEL = "Sağlıklı Yaşam"
+    KILO_KONTROLU = "Kilo Kontrolü"
+    YAG_YAKIMI = "Yağ Yakımı"
+    KAS_KAZANIMI = "Kas Kazanımı"
+    KALP_SAGLIGI = "Kalp Sağlığı"
+    SINDIRIM = "Sindirim ve Bağırsak Sağlığı"
+    ENERJI_PERFORMANS = "Enerji ve Performans"
 
 
 class UygunlukDurumu(str, Enum):
@@ -85,7 +83,7 @@ class ProfilKaydetRequest(BaseModel):
     genetik_hastaliklar: list[str] = Field(default_factory=list)
     tibbi_gecmis: Optional[str] = None
     ilaclar: list[str] = Field(default_factory=list)
-    hedef: str = "Sağlıklı Yaşam (Genel)"
+    hedef: str = BeslenmeHedefi.GENEL.value
 
 class AileUyesiEkleRequest(BaseModel):
     ad: str = Field(..., min_length=2, max_length=40, pattern=r"^[A-Za-zÇçĞğİıÖöŞşÜü\s]+$")
@@ -98,7 +96,7 @@ class AileUyesiEkleRequest(BaseModel):
     genetik_hastaliklar: list[str] = Field(default_factory=list)
     tibbi_gecmis: Optional[str] = None
     ilaclar: list[str] = Field(default_factory=list)
-    hedef: str = "Sağlıklı Yaşam (Genel)"
+    hedef: str = BeslenmeHedefi.GENEL.value
 
 class ChatRequest(BaseModel):
     mesaj: str
@@ -164,6 +162,17 @@ class PlanActionRequest(BaseModel):
     meal_text: str = Field(..., min_length=1, max_length=500, description="Aksiyon alınacak öğünün adı")
     plan_text: Optional[str] = Field(None, max_length=50_000, description="Mevcut haftalık plan metni (alternatif için)")
     kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
+
+
+class SnackSuggestion(BaseModel):
+    name: str = Field(..., min_length=2, max_length=120)
+    ingredients: list[str] = Field(..., min_length=1, max_length=20)
+    preparation: str = Field(..., min_length=2, max_length=1000)
+    why_it_fits: str = Field(..., min_length=2, max_length=1000)
+
+
+class SnackSuggestionsPayload(BaseModel):
+    snacks: list[SnackSuggestion] = Field(..., min_length=1, max_length=3)
 
 class WeeklyPlanDay(BaseModel):
     day: str

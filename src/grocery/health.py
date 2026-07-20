@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 import re
+import unicodedata
 
 from src.medical_knowledge.bioportal_client import BioPortalClient
 from src.medical_knowledge.normalizer import MedicationNormalizer
 from src.medical_knowledge.safety_checker import check_medication_food_safety
+from src.quality.rule_engine import contains_positive_food_mention
 
 
 @dataclass(frozen=True)
@@ -51,18 +53,25 @@ ALLERGY_GROUPS = {
 
 
 def _normalize(value: str) -> str:
-    return (value or "").strip().lower().translate(TR_MAP)
+    folded = unicodedata.normalize("NFKD", str(value or "").casefold())
+    without_marks = "".join(char for char in folded if not unicodedata.combining(char))
+    return without_marks.translate(str.maketrans({"ı": "i"})).strip()
 
 
 def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
-    return any(
-        re.search(rf"(?<![a-z0-9]){re.escape(keyword)}(?![a-z0-9])", text)
-        for keyword in keywords
-    )
+    return any(contains_positive_food_mention(text, keyword) for keyword in keywords)
 
 
 def _item_matches_group(item: str, group: str) -> bool:
-    return _contains_any(item, FOOD_GROUPS.get(group, ()))
+    safe_prefixes: tuple[str, ...] = ()
+    if group == "dairy":
+        safe_prefixes = ("bitkisel", "badem", "soya", "yulaf", "pirinc", "hindistan cevizi")
+    elif group == "gluten":
+        safe_prefixes = ("glutensiz",)
+    return any(
+        contains_positive_food_mention(item, keyword, safe_prefixes=safe_prefixes)
+        for keyword in FOOD_GROUPS.get(group, ())
+    )
 
 
 def _allergy_group(allergy: str) -> str | None:
@@ -109,7 +118,7 @@ def assess_item_health(
         group = _allergy_group(allergy)
         if group and _item_matches_group(item, group):
             return HealthAssessment("avoid", f"Alerji kaydıyla çakışıyor: {allergy}")
-        if allergy and allergy in item:
+        if allergy and contains_positive_food_mention(item, allergy):
             return HealthAssessment("avoid", f"Alerji kaydıyla çakışıyor: {allergy}")
 
     if _contains_any(disease_text, ("colyak", "celiac", "gluten")) and _item_matches_group(item, "gluten"):
@@ -131,7 +140,7 @@ def assess_item_health(
             return HealthAssessment("caution", "İşlenmiş ürünlerde sodyum içeriği değişebileceği için dikkat gerekir.")
 
     if _contains_any(disease_text, ("gut", "gout")):
-        if "sakatat" in item:
+        if contains_positive_food_mention(item, "sakatat"):
             return HealthAssessment("avoid", "Gut kaydı nedeniyle yüksek pürin riski var.")
         if _item_matches_group(item, "purine"):
             return HealthAssessment("caution", "Gut kaydı nedeniyle pürin yükü dikkat gerektirir.")

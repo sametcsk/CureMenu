@@ -430,7 +430,7 @@ def test_final_cevap_riskli_oneriyi_guvenli_gibi_sunmaz():
         }
     )
 
-    assert "Güvenlik uyarısı" in answer
+    assert "Sağlık profiliniz nedeniyle" in answer
     assert "sağlık durumunuza" not in answer
     assert "harika ve güvenli" not in answer
     assert "doktorunuza" in answer
@@ -449,9 +449,37 @@ def test_final_cevap_bilinmeyen_ilacta_profesyonel_inceleme_ister():
         }
     )
 
-    assert "Doğrulama uyarısı" in answer
+    assert "Doğrulama uyarısı" not in answer
     assert "Yoğurt" in answer
     assert "eczacınıza" in answer
+
+
+def test_final_cevap_kullaniciya_teknik_inceleme_dili_sizdirmaz():
+    from src.routers.chat import _final_cevap_metni
+
+    answer = _final_cevap_metni(
+        {
+            "uzman_onerisi": "Yumurtasız, sütsüz ve yer fıstıksız nohut ezmeli bir kahvaltı deneyebilirsiniz.",
+            "uyari_mesaji": (
+                "Kaynak kaydı izlenebilir olsa da ilgili sağlık kuralının uzman incelemesi henüz "
+                "tamamlanmadı. Böbrek hastalığında öneri güncel tahlillerle değerlendirilmelidir."
+            ),
+            "guvenli_mi": True,
+            "risk_score": 0.5,
+            "governance_events": [],
+        }
+    )
+
+    assert "Yumurtasız, sütsüz ve yer fıstıksız" in answer
+    assert "doktorunuza" in answer
+    for forbidden in (
+        "Doğrulama uyarısı",
+        "kaynak kaydı izlenebilir",
+        "uzman incelemesi",
+        "kritiktir",
+        "evidence_span",
+    ):
+        assert forbidden.casefold() not in answer.casefold()
 
 
 def test_final_cevap_guvenli_ok_eventini_yanlislikla_incelemeye_gondermez():
@@ -668,6 +696,171 @@ def test_weekly_plan_colyakta_ekmek_onerisini_bloklar(mock_plan, mock_hafiza, cl
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "PLAN_SAFETY_BLOCKED"
+
+
+@patch("src.routers.tools.hafizadakini_getir", return_value=[])
+@patch("src.routers.tools.haftalik_plan_olustur")
+def test_weekly_plan_explicit_safe_substitutes_are_not_blocked(mock_plan, mock_hafiza, client):
+    login_with_profile(
+        client,
+        "5554445574",
+        "Safe Substitute Plan Test",
+        hastaliklar=["çölyak", "gut"],
+        alerjiler=["İnek sütü proteini", "yumurta", "yer fıstığı"],
+    )
+    mock_plan.return_value = {
+        "days": [{
+            "day": "Pazartesi",
+            "breakfast": "Badem sütlü chia pudingi",
+            "lunch": "Glutensiz ekmek ile sebzeli sandviç",
+            "dinner": "Yumurtasız sebzeli mücver",
+            "snacks": ["Taze elma"],
+            "notes": [],
+        }],
+        "summary": "Plan",
+        "warnings": [],
+        "confidence": {},
+    }
+
+    response = client.post("/api/weekly-plan", json={"kimin_icin": "kendim"})
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+
+@patch("src.routers.tools.invoke_with_model_fallback")
+def test_snack_explicit_safe_substitutes_are_not_blocked(mock_llm, client):
+    login_with_profile(
+        client,
+        "5554445575",
+        "Safe Substitute Snack Test",
+        hastaliklar=["çölyak", "gut"],
+        alerjiler=["İnek sütü proteini", "yumurta", "yer fıstığı"],
+    )
+    mock_llm.return_value = type(
+        "Response",
+        (),
+        {
+            "content": (
+                '{"snacks": ['
+                '{"name":"Chia pudingi","ingredients":["badem sütü","chia tohumu"],'
+                '"preparation":"Karıştırıp dinlendirin.",'
+                '"why_it_fits":"Porsiyon kontrollü bir seçenektir."},'
+                '{"name":"Avokadolu pirinç patlağı","ingredients":["avokado","glutensiz pirinç patlağı"],'
+                '"preparation":"Avokadoyu ezip üzerine sürün.",'
+                '"why_it_fits":"Kayıtlı alerjenleri içermez."}'
+                ']}'
+            )
+        },
+    )()
+
+    response = client.post(
+        "/api/plan-action",
+        json={
+            "action_type": "snack",
+            "meal_text": "Snack Request",
+            "plan_text": "Pazartesi: güvenli sentetik plan",
+            "kimin_icin": "kendim",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert "Chia pudingi" in response.json()["result"]["snack_onerileri"]
+
+
+def test_chat_explicit_allergy_conflict_returns_without_model(client, monkeypatch):
+    login_with_profile(
+        client,
+        "5554445588",
+        "Input Safety Test",
+        hastaliklar=["gut", "evre 3 kronik böbrek hastalığı"],
+        alerjiler=["İnek sütü proteini", "yumurta", "yer fıstığı"],
+    )
+
+    async def should_not_run(_state):
+        raise AssertionError("Explicit allergy conflict should not invoke the model graph")
+
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+    response = client.post(
+        "/api/chat",
+        json={
+            "mesaj": "Kas kazanmak için süt, yumurta ve yer fıstığı ezmesi içeren bir kahvaltı tüketebilir miyim?",
+            "kimin_icin": "kendim",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "İnek sütü proteini" in response.text
+    assert "yumurta" in response.text
+    assert "yer fıstığı" in response.text
+    assert "sakatat" not in response.text
+    assert "Kesin İhlal" not in response.text
+    assert '"input_safety": true' in response.text
+
+
+def test_chat_allergensiz_alternatifi_engellemeden_sade_uyari_gosterir(client, monkeypatch):
+    login_with_profile(
+        client,
+        "5554445589",
+        "Safe Alternative Language Test",
+        hastaliklar=["evre 3 kronik böbrek hastalığı"],
+        alerjiler=["İnek sütü proteini", "yumurta", "yer fıstığı"],
+    )
+    calls = {"count": 0}
+
+    async def safe_stream(_state):
+        calls["count"] += 1
+        yield {
+            "denetmen": {
+                "uzman_onerisi": "Yumurtasız, sütsüz ve yer fıstıksız nohut ezmeli bir kahvaltı deneyebilirsiniz.",
+                "uyari_mesaji": (
+                    "Kaynak kaydı izlenebilir olsa da ilgili sağlık kuralının uzman incelemesi "
+                    "henüz tamamlanmadı. Böbrek hastalığında güncel tahliller değerlendirilmelidir."
+                ),
+                "hedef_islem": "SOHBET",
+                "guvenli_mi": True,
+                "risk_score": 0.5,
+                "confidence": {"final_score": 0.6, "action": "REVIEW"},
+                "citations": [],
+            }
+        }
+
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", safe_stream)
+    response = client.post(
+        "/api/chat",
+        json={
+            "mesaj": "Yumurtasız, sütsüz ve yer fıstıksız proteinli bir kahvaltı önerir misin?",
+            "kimin_icin": "kendim",
+        },
+    )
+
+    assert response.status_code == 200
+    assert calls["count"] == 1
+    assert "Yumurtasız, sütsüz ve yer fıstıksız" in response.text
+    assert "doktorunuza" in response.text
+    for forbidden in (
+        "Doğrulama uyarısı",
+        "kaynak kaydı izlenebilir",
+        "uzman incelemesi",
+        "kritiktir",
+    ):
+        assert forbidden.casefold() not in response.text.casefold()
+
+
+def test_ilac_uyarilari_kullaniciya_yumusak_dille_sunulur():
+    from src.presentation import user_facing_safety_guidance
+
+    warfarin = user_facing_safety_guidance("Warfarin için INR dengesini koruyunuz; kritiktir.")
+    levothyroxine = user_facing_safety_guidance("Levothyroxine emilimi için zamanlama kritiktir.")
+
+    assert "düzenli ve tutarlı" in warfarin
+    assert "tamamen kesmek" in warfarin
+    assert "doktorunuza veya eczacınıza" in warfarin
+    assert "bazı besin ve takviyeler" in levothyroxine
+    assert "doktorunuzun veya eczacınızın önerisini" in levothyroxine
+    assert "kritiktir" not in warfarin.casefold()
+    assert "kritiktir" not in levothyroxine.casefold()
 
 
 @patch("src.routers.tools.extract_ingredients_from_image_base64", side_effect=RuntimeError("gemini model not found"))

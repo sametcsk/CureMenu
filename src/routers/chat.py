@@ -28,9 +28,11 @@ from src.quality.rule_engine import RuleEngine
 from src.logger import get_logger, log_failure
 from src.config import settings
 from src.profil_utils import hedef_ilaclari, profil_ozeti_olustur, aile_profil_ozeti_olustur
+from src.grocery.profile import grocery_profile_facts
 from src.database import profil_getir_db
 from src.messages import PROFIL_BULUNAMADI
 from src.medical_knowledge.normalizer import extract_medication_mentions, normalize_text
+from src.presentation import friendly_source_title, format_rule_risks_for_user, user_facing_safety_guidance
 from src.rate_limit import authenticated_user_or_ip, limiter
 
 logger = get_logger(__name__)
@@ -228,13 +230,12 @@ def _previous_answer_source_state(
 
     if verified_citations:
         source_lines = [
-            f"- {citation.get('title') or citation.get('source_id')}"
+            f"- {friendly_source_title(citation.get('title'))}"
             for citation in verified_citations
         ]
         answer = (
-            "Önceki yanıtın karar kaydında doğrulanabilir kaynaklar bulunuyor:\n"
+            "Önceki yanıt hazırlanırken kullanılan doğrulanabilir kaynaklar:\n"
             + "\n".join(source_lines)
-            + f"\n\nKarar kaydı: {previous.get('decision_id')}"
         )
     else:
         answer = (
@@ -291,21 +292,11 @@ def _final_cevap_metni(result: dict, streamed_text: str = "") -> str:
     ).strip()
     blocked, review_required = _safety_outcome(result)
     if blocked:
-        reason = warning or "Bu seçeneğin sağlık profiliyle güvenli uyumu doğrulanamadı."
-        return (
-            f"Güvenlik uyarısı: {reason}\n\n"
-            "Bu seçeneği uygulamadan önce doktorunuza, eczacınıza veya diyetisyeninize danışın."
-        )
+        return user_facing_safety_guidance(warning, blocked=True)
     if review_required:
-        reason = warning or "İlaç-besin etkileşimi veya önerinin güvenli uyumu doğrulanamadı."
-        professional_warning = (
-            "Bu öneriyi uygulamadan önce doktorunuza, eczacınıza veya diyetisyeninize danışın."
-        )
-        parts = [f"Doğrulama uyarısı: {reason}"]
+        parts = [user_facing_safety_guidance(warning)]
         if base_answer and base_answer != warning:
             parts.append(base_answer)
-        if professional_warning.casefold() not in "\n".join(parts).casefold():
-            parts.append(professional_warning)
         return "\n\n".join(parts)
     return base_answer or warning
 
@@ -324,6 +315,26 @@ def _chat_fallback_state(initial_state: dict, fallback_message: str, error: Exce
         "uzman_onerisi": None, "risk_score": confidence["medical_risk"], "confidence": confidence, "citations": []
     })
     return fallback_state
+
+
+def _explicit_input_safety_answer(profil, kimin_icin: str, message: str) -> str | None:
+    facts = grocery_profile_facts(profil, kimin_icin)
+    result = RuleEngine().check_rules(
+        {"alerjiler": facts.allergies, "hastaliklar": facts.diseases},
+        message,
+        [message],
+    )
+    risks = list(result.get("found_risks") or [])
+    if not risks:
+        return None
+    risk_lines = "\n".join(f"- {risk}" for risk in format_rule_risks_for_user(risks))
+    return (
+        "Bu seçeneği mevcut haliyle önermiyorum. Profilinizle şu açık çakışmalar bulundu:\n"
+        f"{risk_lines}\n\n"
+        "Bu malzemeleri kullanmadan hazırlanmış bir alternatif seçin. "
+        "İlaçlarınız veya böbrek hastalığınız nedeniyle kişisel miktar ve zamanlama için "
+        "doktorunuza, eczacınıza ya da diyetisyeninize danışın."
+    )
 
 @router.post("/api/chat")
 @limiter.limit("12/minute", key_func=authenticated_user_or_ip)
@@ -378,6 +389,33 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "input_guardrail": True})
             yield _sse("done")
         return StreamingResponse(injection_stream(), media_type="text/event-stream")
+
+    input_safety_answer = _explicit_input_safety_answer(profil, req.kimin_icin, req.mesaj)
+    if input_safety_answer:
+        blocked_state = _guardrail_block_state(initial_state, input_safety_answer)
+        decision_record = build_decision_record(
+            blocked_state,
+            telefon=telefon,
+            kimin_icin=req.kimin_icin,
+            final_answer=input_safety_answer,
+        )
+        bg_tasks.add_task(klinik_karar_kaydet, decision_record)
+        bg_tasks.add_task(etkilesim_logla, telefon, "", "CureBot", req.mesaj, input_safety_answer[:500], None)
+
+        async def input_safety_stream():
+            yield _sse("message", {"chunk": input_safety_answer})
+            yield _sse(
+                "governance",
+                {
+                    "decision_id": decision_record["decision_id"],
+                    "risk_score": decision_record["risk_score"],
+                    "confidence_score": decision_record["confidence_score"],
+                    "input_safety": True,
+                },
+            )
+            yield _sse("done")
+
+        return StreamingResponse(input_safety_stream(), media_type="text/event-stream")
 
     simple_answer = _simple_chat_message(req.mesaj, profil_ozeti, gecmis_klinik)
     if simple_answer:

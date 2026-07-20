@@ -203,6 +203,8 @@ def test_medication_safety_governance_eventleri_uretilir(monkeypatch):
 
 
 def test_unknown_ilac_final_cevapta_profesyonel_uyari_uretir(monkeypatch):
+    from src.routers.chat import _final_cevap_metni
+
     monkeypatch.delenv("BIOPORTAL_API_KEY", raising=False)
     state = create_initial_state(
         profil_ozeti="Ali, Hastalıklar (ICD-11 Standart): Yok, Alerjiler: Yok, Kullandığı İlaçlar: BilinmeyenIlac",
@@ -216,7 +218,9 @@ def test_unknown_ilac_final_cevapta_profesyonel_uyari_uretir(monkeypatch):
 
     assert result["guvenli_mi"] is True
     assert result["risk_score"] >= 0.5
-    assert "İlaç-besin etkileşimi doğrulanamadı" in result["uzman_onerisi"]
+    assert result["uzman_onerisi"] == "Mercimek çorbası"
+    assert "İlaç-besin etkileşimi doğrulanamadı" in result["uyari_mesaji"]
+    assert "doktorunuza" in _final_cevap_metni(result)
     assert any(event["event_type"] == "MedicationReviewRequired" for event in result["governance_events"])
 
 
@@ -306,3 +310,66 @@ def test_absence_wording_does_not_trigger_medication_food_rule(monkeypatch):
 
     assert cipro["matched_rules"] == []
     assert metformin["matched_rules"] == []
+
+
+def test_guardrail_checks_original_request_and_keeps_related_warnings(monkeypatch):
+    monkeypatch.delenv("BIOPORTAL_API_KEY", raising=False)
+    state = create_initial_state(
+        profil_ozeti=(
+            "Test, Yas: 52, Cinsiyet: Erkek, Beslenme Hedefi: Kas Kazanımı, "
+            "Hastalıklar (ICD-11 Standart): Gut, evre 3 kronik böbrek hastalığı, "
+            "Alerjiler: İnek sütü proteini, yer fıstığı, "
+            "Kullandığı İlaçlar: Warfarin, Levotiroksin"
+        ),
+        istek="Sütlü, yer fıstığı ezmeli ve ıspanaklı içecek tüketebilir miyim?",
+        hafiza=[],
+        ilaclar=["Warfarin", "Levotiroksin"],
+    )
+    state.update({
+        "uzman_onerisi": "Bu içecek uygun değildir. Gut hastalığında sakatat riski ayrıca değerlendirilir.",
+        "hedef_islem": "SECENEK_SUN_BITTI",
+    })
+
+    result = denetleyici_node(state)
+
+    assert result["guvenli_mi"] is False
+    assert "İnek sütü proteini" in result["uyari_mesaji"]
+    assert "yer fıstığı" in result["uyari_mesaji"]
+    assert "Warfarin" in result["uyari_mesaji"]
+    assert "Levothyroxine" in result["uyari_mesaji"]
+    assert "Böbrek hastalığında" in result["uyari_mesaji"]
+    assert "sakatat riski." not in result["uyari_mesaji"]
+    assert any(
+        event.get("event_type") == "MedicationSafetyChecked"
+        for event in result["governance_events"]
+    )
+
+
+def test_secondary_health_check_accepts_explicit_safe_substitutes():
+    from src.grocery.health import assess_item_health
+
+    milk = assess_item_health(
+        "Badem sütlü chia pudingi",
+        allergies=["İnek sütü proteini"],
+        diseases=[],
+    )
+    gluten = assess_item_health(
+        "Glutensiz ekmek ile sebzeli sandviç",
+        allergies=[],
+        diseases=["çölyak"],
+    )
+    egg = assess_item_health(
+        "Yumurtasız sebzeli mücver",
+        allergies=["yumurta"],
+        diseases=[],
+    )
+    gout_warning = assess_item_health(
+        "Gut hastalığında sakatat önerilmez.",
+        allergies=[],
+        diseases=["gut"],
+    )
+
+    assert milk.status == "safe"
+    assert gluten.status == "safe"
+    assert egg.status == "safe"
+    assert gout_warning.status == "safe"

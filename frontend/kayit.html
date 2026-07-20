@@ -170,14 +170,7 @@
                                 </label>
                                 <label class="block md:col-span-2">
                                     <span class="mb-1 block text-sm font-bold">Beslenme hedefi</span>
-                                    <select id="goal" class="input-field" required>
-                                        <option value="Sağlıklı Yaşam (Genel)">Sağlıklı Yaşam (Genel)</option>
-                                        <option value="Kilo Verme / Yağ Yakımı">Kilo Verme / Yağ Yakımı</option>
-                                        <option value="Kas Kazanımı / Sporcu Beslenmesi">Kas Kazanımı / Sporcu Beslenmesi</option>
-                                        <option value="Diyabet Dostu Beslenme">Diyabet Dostu Beslenme</option>
-                                        <option value="Kalp Dostu Beslenme">Kalp Dostu Beslenme</option>
-                                        <option value="Sindirim / Bağırsak Sağlığı">Sindirim / Bağırsak Sağlığı</option>
-                                    </select>
+                                    <select id="goal" class="input-field" data-profile-goal-select required></select>
                                 </label>
                             </div>
                         </section>
@@ -245,6 +238,7 @@
     </main>
 
     <script src="/static/modules/auth-manager.js"></script>
+    <script src="/static/modules/profile-goals.js?v=12"></script>
     <script>
         const form = document.getElementById('profileWizard');
         const panels = Array.from(document.querySelectorAll('[data-step-panel]'));

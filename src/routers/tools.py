@@ -5,7 +5,7 @@ import sqlite3
 import json
 import time
 
-from src.models import ComplianceRequest, FridgeScanRequest, GeriBildirimRequest, HaftalikPlanRequest, PlanActionRequest, ScanMenuImageRequest, ScanMenuRequest
+from src.models import ComplianceRequest, FridgeScanRequest, GeriBildirimRequest, HaftalikPlanRequest, PlanActionRequest, ScanMenuImageRequest, ScanMenuRequest, SnackSuggestionsPayload
 from src.database import get_db, etkilesim_logla, klinik_karar_kaydet, profil_getir_db
 from src.auth import get_current_user
 from src.messages import PLAN_OLUSTURULAMADI, MENU_BOS, MENU_FOTO_OKUNAMADI, BUZDOLABI_FOTO_OKUNAMADI, PROFIL_GEREKLI, PROFIL_BULUNAMADI
@@ -172,7 +172,28 @@ def _recommendation_text(output) -> str:
         )
     if isinstance(output, dict) and "snack_onerileri" in output:
         return str(output.get("snack_onerileri") or "")
+    if isinstance(output, dict) and isinstance(output.get("snacks"), list):
+        safety_fields: list[str] = []
+        for snack in output["snacks"]:
+            if not isinstance(snack, dict):
+                continue
+            safety_fields.append(str(snack.get("name") or ""))
+            safety_fields.extend(str(item) for item in snack.get("ingredients", []) if item)
+        return "\n".join(safety_fields)
     return str(output or "")
+
+
+def _render_snack_suggestions(payload: SnackSuggestionsPayload) -> str:
+    sections = []
+    for snack in payload.snacks:
+        ingredients = ", ".join(snack.ingredients)
+        sections.append(
+            f"### {snack.name}\n"
+            f"**Malzemeler:** {ingredients}\n\n"
+            f"{snack.preparation}\n\n"
+            f"**Neden uygun:** {snack.why_it_fits}"
+        )
+    return "\n\n".join(sections)
 
 
 def _check_tool_output_safety(profil, kimin_icin: str, output) -> dict:
@@ -702,9 +723,17 @@ Briefly explain the recipes and your clinical reasoning in Markdown format.
 Do NOT reference the wrong day!
 Write the final response entirely in Turkish.
 
-WARNING: Provide your response ONLY in the following JSON format. Do not use markdown code blocks (` ```json `):
+WARNING: Provide your response ONLY in the following JSON format. Do not use markdown code blocks (` ```json `).
+Put only foods that will actually be used under ingredients. Keep safety explanations in why_it_fits:
 {{
-  "snack_onerileri": "Buraya Markdown formatında 2-3 atıştırmalık önerisi ve tariflerini, ayrıca bugünkü menüyle nasıl dengelendiğinin açıklamasını yaz."
+  "snacks": [
+    {{
+      "name": "Atıştırmalık adı",
+      "ingredients": ["gerçek malzeme 1", "gerçek malzeme 2"],
+      "preparation": "Kısa hazırlanışı",
+      "why_it_fits": "Profil ve bugünkü plan açısından kısa, temkinli açıklama"
+    }}
+  ]
 }}"""
         messages = _plan_action_messages(
             instruction,
@@ -715,12 +744,20 @@ WARNING: Provide your response ONLY in the following JSON format. Do not use mar
             snack_cevap_obj = await run_in_threadpool(invoke_with_model_fallback, messages)
             snack_metni = parse_llm_response(snack_cevap_obj)
             json_match = re.search(r'\{.*\}', snack_metni, re.DOTALL)
-            data = {"snack_onerileri": snack_metni}
-            if json_match:
-                try:
-                    data = json.loads(json_match.group(0))
-                except:
-                    pass
+            if not json_match:
+                return JSONResponse(
+                    status_code=502,
+                    content={"success": False, "detail": "Atıştırmalık önerileri güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin."},
+                )
+            try:
+                raw_data = json.loads(json_match.group(0))
+                payload = SnackSuggestionsPayload.model_validate(raw_data)
+            except (json.JSONDecodeError, ValueError):
+                return JSONResponse(
+                    status_code=502,
+                    content={"success": False, "detail": "Atıştırmalık önerileri güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin."},
+                )
+            data = payload.model_dump()
             safety = _check_tool_output_safety(profil, req.kimin_icin, data)
             if safety["blocked"]:
                 return JSONResponse(
@@ -729,6 +766,8 @@ WARNING: Provide your response ONLY in the following JSON format. Do not use mar
                 )
             if safety["warning"]:
                 data["warning"] = safety["warning"]
+            data["snack_onerileri"] = _render_snack_suggestions(payload)
+            data.pop("snacks", None)
             bg_tasks.add_task(etkilesim_logla, telefon, "", "Plan-Snack", "Atıştırmalık İsteği", snack_metni, None)
             return {"success": True, "result": data}
         except Exception:

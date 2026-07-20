@@ -177,7 +177,10 @@ def test_smart_grocery_open_budget_feedback_and_close(authenticated_page) -> Non
     page.route("**/api/feedback", lambda route: _json(route, {"success": True, "message": "Geri bildirim kaydedildi."}))
 
     page.locator('[data-grocery-action="open"]').click()
-    page.locator("#smartGroceryContent").get_by_text("e2e-grocery-decision").wait_for()
+    page.locator("#smartGroceryContent").get_by_text(
+        "Sepet önerileri, profiliniz ve güvenlik kontrolleri dikkate alınarak değerlendirildi."
+    ).wait_for()
+    assert page.locator("#smartGroceryContent").get_by_text("e2e-grocery-decision").count() == 0
     assert page.locator("#smartGroceryContent").get_by_text("Ispanak").count() == 1
     page.locator('#smartGroceryModal [data-grocery-action="close"]').last.click()
     assert "hidden" in page.locator("#smartGroceryModal").get_attribute("class")
@@ -226,8 +229,11 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     page.fill("[data-cm-assistant-input]", "Aksam ne yiyebilirim?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("Profiline gore test yaniti.").wait_for()
-    page.locator("[data-cm-assistant-body]").get_by_text("e2e-chat-decision").wait_for()
+    page.locator("[data-cm-assistant-body]").get_by_text("Yanıt nasıl değerlendirildi?").wait_for()
+    assert page.locator("[data-cm-assistant-body]").get_by_text("e2e-chat-decision").count() == 0
+    assert page.locator("[data-cm-assistant-body]").get_by_text("Operasyonel güven").count() == 0
     page.locator("[data-cm-assistant-body]").get_by_text("E2E resmi kaynak").wait_for()
+    assert page.locator("[data-cm-assistant-body]").get_by_text("Test kanit parcasi").count() == 0
 
     page.unroute("**/api/chat")
     page.route(
