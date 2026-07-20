@@ -1,6 +1,6 @@
 # CureMenu Release Readiness
 
-Son güncelleme: 16 Temmuz 2026
+Son güncelleme: 20 Temmuz 2026
 
 ## Karar
 
@@ -15,8 +15,9 @@ Gerçek kullanıcı daveti gönderilmeden önce aşağıdaki release kapıları 
 2. Fiziksel telefonda kamera/QR, dosya seçici ve mobil klavye smoke testi yapılmalıdır.
 3. Hosted deployment runbook, backup/rollback ve secret yönetimi yazılmalıdır.
 4. Klinik uzmanla sınırlı pilot planı ve klinik doğrulama yöntemi tamamlanmalıdır.
-5. Dependency lock ve `pip-audit` benzeri bağımlılık güvenlik taraması ayrı bakım
-   adımında uygulanmalıdır.
+5. Temiz ortam dependency provası ve `pip-audit` tamamlandı. Sonuçlar
+   [`docs/DEPENDENCY_SECURITY.md`](docs/DEPENDENCY_SECURITY.md) içinde kayıtlıdır;
+   constraints/lock yaklaşımı ayrı ve kontrollü bir bakım adımı olarak kalır.
 6. PyMuPDF'nin AGPL/ticari çift lisansı, SaaS veya ticari kullanımdan önce ayrıca
    incelenmelidir; bu not hukuki değerlendirme yerine geçmez.
 
@@ -42,7 +43,7 @@ operasyon riskidir; eski ZIP'ler daha önce paylaşılmışsa rotasyon tamamlanm
 | Production readiness | Şartlı hazır | Security header'ları, trusted hosts, production fail-fast ayarları, `/live` ve `/ready` kontrolleri var. Gerçek yerel DB `20260715_0002 (head)` revision'ına taşındı; `/ready` içinde `migration_current=true` doğrulandı. | HTTPS/proxy, backup/rollback, hosted deployment runbook ve deployment secret yönetimi doğrulanmalıdır. SQLite yalnızca sınırlı beta yükü için değerlendirilmelidir. Harici CDN bağımlılıkları çevrimdışı kullanım riski taşır. |
 | Observability ve tracing privacy | Hazır | LangSmith development ortamında yalnızca açık opt-in ile çalışır; input, output ve metadata trace payload'ları zorunlu olarak gizlenir. Production, staging ve kapalı beta ortamlarında tracing isteği fail-fast ile reddedilir. | Gerçek kullanıcı verisiyle LangSmith tracing açılmamalıdır. Tanısal inceleme yalnızca sentetik veriyle development ortamında yapılmalıdır. |
 | Playwright E2E ve mobil | Hazır | Gerçek Edge tarayıcısında auth, profil, weekly plan/actions, Smart Grocery, CureBot SSE/governance, PDF, menü, buzdolabı, Geçmiş ve hata durumları test ediliyor. `360x800`, `390x844`, `412x915` ve `768x1024` görsel/overflow doğrulaması geçti; sonuç `MOBILE DEMO READY`. | Fiziksel QR/kamera izni ve gerçek telefon dosya seçici/klavye kontrolü HTTPS staging smoke kapsamında kalır. |
-| Otomatik test paketi | Hazır | `218 passed, 1 warning`; Playwright paketi `5 passed`; `app.js` ve tüm frontend modülleri parse kontrolünden geçti; package/source scanner sonucu `SOURCE_SAFE`. | Starlette/httpx deprecation uyarısı ve dependency lock/`pip-audit` planlı bakımda ele alınmalıdır. |
+| Otomatik test paketi | Hazır | `218 passed, 1 warning`; Playwright paketi `5 passed`; `app.js` ve tüm frontend modülleri parse kontrolünden geçti; package/source scanner sonucu `SOURCE_SAFE`. Temiz dependency provası ve audit sonucu [`docs/DEPENDENCY_SECURITY.md`](docs/DEPENDENCY_SECURITY.md) içinde belgelenmiştir. | Starlette/httpx deprecation uyarısı, ChromaDB advisory takibi ve dependency constraints/lock yaklaşımı planlı bakımda ele alınmalıdır. |
 
 ## Kapalı Beta Checklist
 
