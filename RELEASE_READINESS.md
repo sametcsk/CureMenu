@@ -17,6 +17,8 @@ Gerçek kullanıcı daveti gönderilmeden önce aşağıdaki release kapıları 
 4. Klinik uzmanla sınırlı pilot planı ve klinik doğrulama yöntemi tamamlanmalıdır.
 5. Dependency lock ve `pip-audit` benzeri bağımlılık güvenlik taraması ayrı bakım
    adımında uygulanmalıdır.
+6. PyMuPDF'nin AGPL/ticari çift lisansı, SaaS veya ticari kullanımdan önce ayrıca
+   incelenmelidir; bu not hukuki değerlendirme yerine geçmez.
 
 Not: Rate limiter süreç belleği (in-memory) tabanlıdır. Kapalı beta tek worker /
 tek instance ile çalıştırılmalıdır; çoklu worker veya çoklu instance'a geçmeden

@@ -1,27 +1,32 @@
 streamlit>=1.45.0
 pydantic>=2.0.0
-pytest>=8.0.0
 langchain-google-genai
 langchain-chroma
+chromadb==1.5.9
 langchain-huggingface
 langchain-community
 pydantic-settings
 sentence-transformers
 langchain-core
+langchain-text-splitters==1.1.2
 langgraph
+nemoguardrails==0.23.0
 python-dotenv
 requests
 beautifulsoup4
+# Server-side image processing; do not install opencv-python alongside this package.
 opencv-python-headless
 numpy
 tavily-python
 fastapi
+starlette==1.3.1
 uvicorn[standard]
 slowapi
 httpx
 PyJWT>=2.8.0
 PyYAML>=6.0.0
 alembic>=1.13.0
+SQLAlchemy==2.0.51
 
 PyMuPDF
 python-multipart

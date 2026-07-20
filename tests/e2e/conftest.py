@@ -14,10 +14,13 @@ from urllib.parse import urlparse
 
 import pytest
 
-playwright_sync = pytest.importorskip(
-    "playwright.sync_api",
-    reason="Playwright E2E dependencies are not installed. See docs/PLAYWRIGHT_E2E.md.",
-)
+try:
+    from playwright import sync_api as playwright_sync
+except ImportError:
+    message = "Playwright E2E dependencies are not installed. See docs/PLAYWRIGHT_E2E.md."
+    if os.getenv("CUREMENU_E2E_REQUIRE_BROWSER", "").lower() in {"1", "true", "yes"}:
+        raise pytest.UsageError(message)
+    pytest.skip(message, allow_module_level=True)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -123,10 +126,13 @@ def browser():
             try:
                 instance = playwright.chromium.launch(headless=True)
             except playwright_sync.Error:
-                pytest.skip(
+                message = (
                     "No Playwright browser is available. Install Chromium or set "
                     "PLAYWRIGHT_BROWSER_CHANNEL. Original error: " + str(channel_error)
                 )
+                if os.getenv("CUREMENU_E2E_REQUIRE_BROWSER", "").lower() in {"1", "true", "yes"}:
+                    pytest.fail(message, pytrace=False)
+                pytest.skip(message)
         yield instance
         instance.close()
 

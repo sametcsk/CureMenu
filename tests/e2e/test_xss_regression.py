@@ -14,6 +14,7 @@ FIXTURES = ROOT / "tests" / "fixtures"
 def frontend_page(browser):
     context = browser.new_context(locale="tr-TR")
     context.route("https://**", lambda route: route.abort())
+    context.add_init_script("window.tailwind = window.tailwind || { config: {} };")
     page = context.new_page()
     runtime_errors: list[str] = []
     page.on("pageerror", lambda error: runtime_errors.append(str(error)))
