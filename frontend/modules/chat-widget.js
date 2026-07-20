@@ -38,6 +38,12 @@ window.ChatWidget = {
                         <span class="material-symbols-outlined">close</span>
                     </button>
                 </header>
+                <div class="cm-assistant-context">
+                    <label for="chatTarget">Kimin için?</label>
+                    <select id="chatTarget" data-cm-assistant-target aria-label="CureBot hedef profili">
+                        <option value="kendim">Kendim İçin</option>
+                    </select>
+                </div>
                 <div class="cm-assistant-body" data-cm-assistant-body></div>
                 <div>
                     <div class="cm-assistant-quick" data-cm-assistant-quick>
@@ -268,13 +274,14 @@ window.ChatWidget = {
 
         try {
             const apiEndpoint = (window.API || '') + '/api/chat';
+            const target = this.root.querySelector("[data-cm-assistant-target]")?.value || "kendim";
             
             if (!window.safeFetchStream) throw new Error("API client yüklü değil.");
             
             const response = await window.safeFetchStream(apiEndpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ mesaj: message, kimin_icin: "kendim" }),
+                body: JSON.stringify({ mesaj: message, kimin_icin: target }),
                 signal: this.controller.signal
             });
 
@@ -386,7 +393,7 @@ window.ChatWidget = {
             .cm-assistant-launcher { width: 64px; height: 64px; border: 0; border-radius: 18px; background: #005c55; color: #fff; box-shadow: 0 20px 44px rgba(0, 92, 85, 0.28); display: grid; place-items: center; cursor: pointer; transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease; }
             .cm-assistant-launcher:hover { transform: translateY(-2px); background: #007168; box-shadow: 0 24px 52px rgba(0, 92, 85, 0.34); }
             .cm-assistant-launcher .material-symbols-outlined { font-size: 30px; font-variation-settings: "FILL" 1; }
-            .cm-assistant-panel { width: min(390px, calc(100vw - 28px)); height: min(620px, calc(100vh - 110px)); position: absolute; right: 0; bottom: 78px; border-radius: 18px; background: #ffffff; border: 1px solid rgba(189, 201, 198, 0.72); box-shadow: 0 24px 70px rgba(16, 32, 51, 0.2); overflow: hidden; display: none; grid-template-rows: auto 1fr auto; }
+            .cm-assistant-panel { width: min(390px, calc(100vw - 28px)); height: min(620px, calc(100vh - 110px)); position: absolute; right: 0; bottom: 78px; border-radius: 18px; background: #ffffff; border: 1px solid rgba(189, 201, 198, 0.72); box-shadow: 0 24px 70px rgba(16, 32, 51, 0.2); overflow: hidden; display: none; grid-template-rows: auto auto 1fr auto; }
             .cm-assistant-root[data-open="true"] .cm-assistant-panel { display: grid; animation: cmAssistantEnter 180ms ease both; }
             @keyframes cmAssistantEnter { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
             .cm-assistant-header { padding: 16px; background: linear-gradient(135deg, #005c55 0%, #0b1c30 100%); color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -395,6 +402,10 @@ window.ChatWidget = {
             .cm-assistant-title strong { display: block; font-size: 15px; line-height: 1.15; }
             .cm-assistant-title span { display: block; margin-top: 2px; font-size: 12px; color: rgba(255,255,255,0.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .cm-assistant-close { border: 0; width: 34px; height: 34px; border-radius: 10px; background: rgba(255,255,255,0.1); color: #fff; display: grid; place-items: center; cursor: pointer; }
+            .cm-assistant-context { padding: 10px 14px; background: #ffffff; border-bottom: 1px solid rgba(189, 201, 198, 0.55); display: flex; align-items: center; gap: 10px; }
+            .cm-assistant-context label { color: #526762; font-size: 12px; font-weight: 700; white-space: nowrap; }
+            .cm-assistant-context select { min-width: 0; flex: 1; height: 36px; border: 1px solid rgba(189, 201, 198, 0.9); border-radius: 10px; padding: 0 10px; background: #ffffff; color: #102033; font-size: 13px; outline: none; }
+            .cm-assistant-context select:focus { border-color: #005c55; box-shadow: 0 0 0 3px rgba(0, 92, 85, 0.1); }
             .cm-assistant-body { overflow-y: auto; padding: 14px; background: #f7fbfc; display: flex; flex-direction: column; gap: 10px; }
             .cm-assistant-message { max-width: 86%; border-radius: 14px; padding: 11px 12px; font-size: 13px; line-height: 1.5; border: 1px solid transparent; word-wrap: break-word; }
             .cm-assistant-message.bot { align-self: flex-start; background: #ffffff; border-color: rgba(189, 201, 198, 0.7); color: #102033; }

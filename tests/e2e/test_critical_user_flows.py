@@ -28,6 +28,76 @@ def _weekly_plan() -> dict:
     }
 
 
+def test_family_target_selectors_and_chat_payload(browser_page, e2e_base_url: str) -> None:
+    page, _context, runtime_errors = browser_page
+    chat_requests: list[dict] = []
+    profile = {
+        "ana_kullanici": {
+            "id": "main",
+            "ad": "Test Kullanıcı",
+            "hastaliklar": [],
+            "alerjiler": [],
+            "ilaclar": [],
+            "hedef": "Sağlıklı Yaşam",
+        },
+        "aile_uyeleri": [
+            {
+                "id": "member-ece",
+                "ad": "Ece",
+                "hastaliklar": [],
+                "alerjiler": [],
+                "ilaclar": [],
+                "hedef": "Sağlıklı Yaşam",
+            }
+        ],
+    }
+
+    def api_handler(route) -> None:
+        url = route.request.url
+        if "/api/profile/me" in url:
+            _json(route, {"success": True, "profil": profile})
+        elif "/api/public/metinler" in url:
+            _json(route, {"tibbi_feragat_kisa": "Test uyarısı", "ornek_sorular": [], "yaygin_ilaclar": []})
+        elif "/api/chat" in url:
+            chat_requests.append(json.loads(route.request.post_data or "{}"))
+            route.fulfill(
+                status=200,
+                content_type="text/event-stream",
+                body='event: token\ndata: {"chunk":"Ece için yanıt."}\n\nevent: done\ndata: {}\n\n',
+            )
+        else:
+            _json(route, {"success": True, "items": [], "records": []})
+
+    page.route("**/api/**", api_handler)
+    page.add_init_script(
+        "localStorage.setItem('cm_telefon', '05000000000');"
+        "localStorage.setItem('cm_kullanici_adi', 'Test Kullanıcı');"
+        "localStorage.setItem('cm_has_profile', 'true');"
+        "localStorage.setItem('cm_onboarding_done', 'true');"
+        "localStorage.setItem('cm_disclaimer_ok', 'true');"
+    )
+    page.goto(f"{e2e_base_url}/dashboard", wait_until="domcontentloaded")
+    page.wait_for_function("window.currentProfile && window.currentProfile.aile_uyeleri.length === 1")
+
+    expected_targets = ["Kendim İçin", "Ece İçin", "Tüm Aile İçin"]
+    for selector in ["#planTarget", "#chatTarget", "#menuTarget", "#fridgeTarget", "#tahlilTarget"]:
+        assert page.locator(selector).locator("option").all_text_contents() == expected_targets
+
+    for tab_name in ["dashboard", "profile", "tahlil", "plan", "tarayici", "buzdolabi", "governance", "gecmis"]:
+        page.evaluate("tab => window.switchTab(tab)", tab_name)
+        assert page.locator(f"#tab-{tab_name}").evaluate("node => node.classList.contains('active')")
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+    page.locator("[data-cm-assistant-launcher]").click()
+    page.locator("#chatTarget").select_option("Ece")
+    page.fill("[data-cm-assistant-input]", "Bugün ne yiyebilir?")
+    page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
+    page.locator("[data-cm-assistant-body]").get_by_text("Ece için yanıt.").wait_for()
+
+    assert chat_requests[-1]["kimin_icin"] == "Ece"
+    assert not runtime_errors
+
+
 def test_register_wrong_password_login_and_logout(browser_page, e2e_base_url: str) -> None:
     page, _context, runtime_errors = browser_page
     phone = next_phone()
@@ -198,8 +268,10 @@ def test_smart_grocery_open_budget_feedback_and_close(authenticated_page) -> Non
 
 def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     page, _context, runtime_errors, _user = authenticated_page
+    chat_requests: list[dict] = []
 
     def chat_stream(route) -> None:
+        chat_requests.append(json.loads(route.request.post_data or "{}"))
         body = "".join(
             [
                 'event: status\ndata: {"status":"Kontroller calisiyor"}\n\n',
@@ -226,9 +298,17 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
         ),
     )
     page.locator("[data-cm-assistant-launcher]").click()
+    page.evaluate("window.updatePlanDropdown({aile_uyeleri: [{ad: 'Ece'}]})")
+    expected_targets = ["Kendim İçin", "Ece İçin", "Tüm Aile İçin"]
+    for selector in ["#planTarget", "#chatTarget", "#menuTarget", "#fridgeTarget", "#tahlilTarget"]:
+        assert page.locator(selector).locator("option").all_text_contents() == expected_targets
+    target = page.locator("#chatTarget")
+    target.wait_for(state="visible")
+    target.select_option("Ece")
     page.fill("[data-cm-assistant-input]", "Aksam ne yiyebilirim?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("Profiline gore test yaniti.").wait_for()
+    assert chat_requests[-1]["kimin_icin"] == "Ece"
     page.locator("[data-cm-assistant-body]").get_by_text("Yanıt nasıl değerlendirildi?").wait_for()
     assert page.locator("[data-cm-assistant-body]").get_by_text("e2e-chat-decision").count() == 0
     assert page.locator("[data-cm-assistant-body]").get_by_text("Operasyonel güven").count() == 0

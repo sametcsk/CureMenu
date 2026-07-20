@@ -198,63 +198,35 @@ async function completeOnboarding() {
     }
 }
 
+function populateTargetSelect(selectId, familyMembers) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+
+    const previousValue = select.value;
+    const addOption = (value, label) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        select.appendChild(option);
+    };
+
+    select.replaceChildren();
+    addOption('kendim', 'Kendim İçin');
+    familyMembers.forEach(member => {
+        const name = String(member?.ad || '').trim();
+        if (name) addOption(name, `${name} İçin`);
+    });
+    if (familyMembers.length > 0) addOption('aile', 'Tüm Aile İçin');
+
+    if (Array.from(select.options).some(option => option.value === previousValue)) {
+        select.value = previousValue;
+    }
+}
+
 function updatePlanDropdown(profil) {
-    const sel = document.getElementById('planTarget');
-    sel.innerHTML = '<option value="kendim">Kendim İçin</option>';
-    (profil.aile_uyeleri || []).forEach(u => {
-        const ad = escapeHtml(u.ad);
-        sel.innerHTML += `<option value="${ad}">${ad} İçin</option>`;
-    });
-    if ((profil.aile_uyeleri || []).length > 0) {
-        sel.innerHTML += '<option value="aile">Tüm Aile İçin</option>';
-    }
-    // CureBot dropdown
-    const chatSel = document.getElementById('chatTarget');
-    if (chatSel) {
-    chatSel.innerHTML = '<option value="kendim">Kendim İçin</option>';
-    (profil.aile_uyeleri || []).forEach(u => {
-        chatSel.innerHTML += `<option value="${escapeHtml(u.ad)}">🧑 ${escapeHtml(u.ad)} İçin</option>`;
-    });
-    if ((profil.aile_uyeleri || []).length > 0) {
-        chatSel.innerHTML += '<option value="aile">👪 Tüm Aile İçin</option>';
-    }
-
-    // Menü Tarayıcı dropdown
-    }
-    const menuSel = document.getElementById('menuTarget');
-    if (menuSel) {
-        menuSel.innerHTML = '<option value="kendim">Kendim İçin</option>';
-        (profil.aile_uyeleri || []).forEach(u => {
-            menuSel.innerHTML += `<option value="${escapeHtml(u.ad)}">${escapeHtml(u.ad)} İçin</option>`;
-        });
-        if ((profil.aile_uyeleri || []).length > 0) {
-            menuSel.innerHTML += '<option value="aile">Tüm Aile İçin</option>';
-        }
-    }
-
-    // Buzdolabı dropdown
-    const fridgeSel = document.getElementById('fridgeTarget');
-    if (fridgeSel) {
-        fridgeSel.innerHTML = '<option value="kendim">Kendim İçin</option>';
-        (profil.aile_uyeleri || []).forEach(u => {
-            fridgeSel.innerHTML += `<option value="${escapeHtml(u.ad)}">${escapeHtml(u.ad)} İçin</option>`;
-        });
-        if ((profil.aile_uyeleri || []).length > 0) {
-            fridgeSel.innerHTML += '<option value="aile">Tüm Aile İçin</option>';
-        }
-    }
-
-    // Tahlillerim dropdown
-    const tahlilSel = document.getElementById('tahlilTarget');
-    if (tahlilSel) {
-        tahlilSel.innerHTML = '<option value="kendim">Kendim İçin</option>';
-        (profil.aile_uyeleri || []).forEach(u => {
-            tahlilSel.innerHTML += `<option value="${escapeHtml(u.ad)}">${escapeHtml(u.ad)} İçin</option>`;
-        });
-        if ((profil.aile_uyeleri || []).length > 0) {
-            tahlilSel.innerHTML += '<option value="aile">Tüm Aile İçin</option>';
-        }
-    }
+    const familyMembers = Array.isArray(profil?.aile_uyeleri) ? profil.aile_uyeleri : [];
+    ['planTarget', 'chatTarget', 'menuTarget', 'fridgeTarget', 'tahlilTarget']
+        .forEach(selectId => populateTargetSelect(selectId, familyMembers));
 }
 
 async function addMember() {

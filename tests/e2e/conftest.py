@@ -59,6 +59,11 @@ def _wait_for_server(url: str, process: subprocess.Popen[str], timeout: float = 
 
 @pytest.fixture(scope="session")
 def e2e_base_url() -> str:
+    configured_base_url = os.getenv("CUREMENU_E2E_BASE_URL", "").strip().rstrip("/")
+    if configured_base_url:
+        yield configured_base_url
+        return
+
     default_temp_root = Path("C:/tmp") if os.name == "nt" else Path(tempfile.gettempdir())
     temp_root = Path(os.getenv("CUREMENU_E2E_TMP", str(default_temp_root))).resolve()
     temp_root.mkdir(parents=True, exist_ok=True)
