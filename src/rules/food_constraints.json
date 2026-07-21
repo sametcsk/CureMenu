@@ -1,0 +1,104 @@
+{
+  "version": "food_constraints:v1",
+  "ingredient_groups": {
+    "cow_milk": {
+      "aliases": [
+        "süt",
+        "inek sütü",
+        "yoğurt",
+        "peynir",
+        "ayran",
+        "kefir",
+        "tereyağı",
+        "kaymak",
+        "whey",
+        "kazein"
+      ],
+      "allowed_prefixes": [
+        "bitkisel",
+        "badem",
+        "soya",
+        "yulaf",
+        "pirinç",
+        "hindistan cevizi"
+      ]
+    },
+    "egg": {
+      "aliases": ["yumurta", "egg"],
+      "allowed_prefixes": []
+    },
+    "peanut": {
+      "aliases": ["yer fıstığı", "yer fıstığı ezmesi", "yer fıstık", "peanut"],
+      "allowed_prefixes": []
+    },
+    "gluten": {
+      "aliases": ["gluten", "buğday", "ekmek", "makarna", "bulgur", "un", "irmik", "şehriye"],
+      "allowed_prefixes": ["glutensiz"]
+    },
+    "offal": {
+      "aliases": ["sakatat", "ciğer", "böbrek eti", "dana böbrek", "kuzu böbrek", "işkembe"],
+      "allowed_prefixes": []
+    }
+  },
+  "profile_rules": [
+    {
+      "rule_id": "allergy-cow-milk:v1",
+      "profile_field": "alerjiler",
+      "profile_aliases": ["süt", "inek sütü", "inek sütü proteini", "süt alerjisi", "dairy"],
+      "ingredient_group": "cow_milk",
+      "catalog_conditions": [{"field": "allergens", "operator": "contains", "value": "cow_milk"}],
+      "outcome": "block",
+      "message": "Alerji riski (Kesin İhlal): {profile}"
+    },
+    {
+      "rule_id": "allergy-egg:v1",
+      "profile_field": "alerjiler",
+      "profile_aliases": ["yumurta", "egg"],
+      "ingredient_group": "egg",
+      "catalog_conditions": [{"field": "allergens", "operator": "contains", "value": "egg"}],
+      "outcome": "block",
+      "message": "Alerji riski (Kesin İhlal): {profile}"
+    },
+    {
+      "rule_id": "allergy-peanut:v1",
+      "profile_field": "alerjiler",
+      "profile_aliases": ["yer fıstığı", "peanut"],
+      "ingredient_group": "peanut",
+      "catalog_conditions": [{"field": "allergens", "operator": "contains", "value": "peanut"}],
+      "outcome": "block",
+      "message": "Alerji riski (Kesin İhlal): {profile}"
+    },
+    {
+      "rule_id": "disease-celiac-gluten:v1",
+      "profile_field": "hastaliklar",
+      "profile_aliases": ["çölyak", "celiac", "gluten hassasiyeti"],
+      "ingredient_group": "gluten",
+      "catalog_conditions": [{"field": "gluten_status", "operator": "equals", "value": "contains"}],
+      "outcome": "block",
+      "message": "Çölyak veya gluten hassasiyeti kaydıyla çakışan bir içerik bulundu."
+    },
+    {
+      "rule_id": "disease-gout-offal:v1",
+      "profile_field": "hastaliklar",
+      "profile_aliases": ["gut", "gout"],
+      "ingredient_group": "offal",
+      "catalog_conditions": [
+        {"field": "tags", "operator": "contains", "value": "offal"},
+        {"field": "purine_level", "operator": "equals", "value": "high"}
+      ],
+      "outcome": "caution",
+      "message": "Gut kaydı nedeniyle sakatat ve yüksek pürin yükü dikkat gerektirir."
+    },
+    {
+      "rule_id": "disease-kidney-review:v1",
+      "profile_field": "hastaliklar",
+      "profile_aliases": ["kronik böbrek hastalığı", "böbrek hastalığı", "chronic kidney disease", "ckd"],
+      "ingredient_group": null,
+      "catalog_conditions": [],
+      "outcome": "caution",
+      "always_review": true,
+      "message": "Böbrek hastalığında kişisel porsiyon ve güncel tahliller uzmanla değerlendirilmelidir."
+    }
+  ],
+  "unknown_ingredient_message": "İçeriği katalogda doğrulanamayan bir malzeme bulundu: {ingredient}. Ürün etiketini kontrol edin ve belirsiz durumda sağlık profesyoneline danışın."
+}

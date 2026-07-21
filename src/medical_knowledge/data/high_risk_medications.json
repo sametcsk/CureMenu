@@ -7,7 +7,7 @@
       "aliases": ["coumadin", "jantoven", "kumadin"],
       "risk_terms": ["k vitamini", "vitamin k", "ispanak", "lahana", "karalahana", "brokoli", "maydanoz"],
       "severity": "caution",
-      "explanation": "Warfarin kullanırken K vitamini yüksek besinler INR dengesini etkileyebilir."
+      "explanation": "Warfarin kullanıyorsanız K vitamini içeren besinleri tamamen kesmek yerine tüketim miktarını düzenli ve tutarlı tutmanız gerekebilir."
     },
     {
       "rule_id": "atorvastatin-large-grapefruit:v2",

@@ -259,6 +259,7 @@ def denetleyici_node(state: AgentState) -> dict:
     if state.get("istek"):
         rule_inputs.append(state["istek"])
     rule_result = RuleEngine().check_rules(quality_profile, onerilen_yemek, rule_inputs)
+    rule_warnings = list(rule_result.get("found_warnings") or [])
     quality_events = [
         make_event(
             "PolicyChecked",
@@ -272,9 +273,10 @@ def denetleyici_node(state: AgentState) -> dict:
         make_event(
             "RuleChecked",
             "rule_engine",
-            status="blocked" if rule_result.get("found_risks") else "ok",
+            status="blocked" if rule_result.get("found_risks") else ("review" if rule_warnings else "ok"),
             metadata={
                 "risk_count": len(rule_result.get("found_risks", [])),
+                "warning_count": len(rule_warnings),
                 "medical_risk_score": rule_result.get("medical_risk_score", 0.0),
             },
         ),
@@ -399,9 +401,14 @@ def denetleyici_node(state: AgentState) -> dict:
         if not item.get("normalized_name")
     ]
     if medication_safety.get("severity") == "unknown" and medication_safety.get("needs_professional_review"):
-        warning = (
-            "İlaç-besin etkileşimi doğrulanamadı; kayıtlı ilacın güvenli eşleşmesini yapamadım. "
-            "Bu öneriyi uygulamadan önce doktoruna veya eczacına danış."
+        warning = " ".join(
+            [
+                *rule_warnings,
+                (
+                    "İlaç-besin etkileşimi doğrulanamadı; kayıtlı ilacın güvenli eşleşmesini yapamadım. "
+                    "Bu öneriyi uygulamadan önce doktoruna veya eczacına danış."
+                ),
+            ]
         )
         confidence = calculate_confidence(
             safe=True,
@@ -461,7 +468,7 @@ def denetleyici_node(state: AgentState) -> dict:
         )
 
     if deterministik_ilac_riskleri:
-        warning = " ".join(deterministik_ilac_riskleri)
+        warning = " ".join([*rule_warnings, *deterministik_ilac_riskleri])
         if unknown_medications:
             warning += " Bazı ilaçların etkileşimi doğrulanamadı; sağlık profesyoneline danış."
         confidence = calculate_confidence(
@@ -512,7 +519,7 @@ def denetleyici_node(state: AgentState) -> dict:
     else:
         evidence_warning = ""
     final_policy_warning = " ".join(
-        item for item in (policy_warning, evidence_warning) if item
+        item for item in (*rule_warnings, policy_warning, evidence_warning) if item
     )
     citation_scores = [
         CitationValidator().validate_citation(
@@ -596,6 +603,8 @@ def denetleyici_node(state: AgentState) -> dict:
     )
     if policy_result.get("requires_review"):
         confidence["medical_risk"] = max(float(confidence.get("medical_risk", 0.0)), 0.5)
+    if rule_warnings:
+        confidence["medical_risk"] = max(float(confidence.get("medical_risk", 0.0)), 0.4)
     if evidence_review_required:
         confidence["medical_risk"] = max(float(confidence.get("medical_risk", 0.0)), 0.5)
     return _governance_events_update(
@@ -616,9 +625,10 @@ def denetleyici_node(state: AgentState) -> dict:
             make_event(
                 "RiskClassified",
                 "auditor",
-                status="review" if evidence_review_required else "ok",
+                status="review" if evidence_review_required or rule_warnings else "ok",
                 metadata={
                     "known_rule_conflict": False,
+                    "known_rule_warning": bool(rule_warnings),
                     "risk_score": confidence["medical_risk"],
                     "clinical_review_status": evidence_review_status,
                 },

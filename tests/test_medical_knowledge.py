@@ -274,7 +274,9 @@ def test_gut_kurali_buyuk_kucuk_harften_bagimsiz_ve_spesifiktir():
 
     profile = {"alerjiler": [], "hastaliklar": ["FA25 Gout (gut)"]}
 
-    assert RuleEngine().check_rules(profile, "Sakatat yemeği", ["Sakatat"])["found_risks"]
+    offal_result = RuleEngine().check_rules(profile, "Sakatat yemeği", ["Sakatat"])
+    assert offal_result["found_risks"] == []
+    assert offal_result["found_warnings"]
     assert RuleEngine().check_rules(profile, "Az porsiyon kırmızı et", ["Kırmızı et"])["found_risks"] == []
     assert RuleEngine().check_rules(profile, "Sebzeli diyet yemeği", ["Sebzeli diyet yemeği"])["found_risks"] == []
 

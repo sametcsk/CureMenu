@@ -5,7 +5,7 @@ import unicodedata
 from src.medical_knowledge.bioportal_client import BioPortalClient
 from src.medical_knowledge.normalizer import MedicationNormalizer
 from src.medical_knowledge.safety_checker import check_medication_food_safety
-from src.quality.rule_engine import contains_positive_food_mention
+from src.quality.rule_engine import RuleEngine, contains_positive_food_mention
 
 
 @dataclass(frozen=True)
@@ -42,16 +42,6 @@ FOOD_GROUPS = {
     "processed": ("hazir", "paketli", "islenmis", "sos"),
 }
 
-ALLERGY_GROUPS = {
-    "sut": "dairy",
-    "laktoz": "dairy",
-    "dairy": "dairy",
-    "gluten": "gluten",
-    "colyak": "gluten",
-    "bugday": "gluten",
-}
-
-
 def _normalize(value: str) -> str:
     folded = unicodedata.normalize("NFKD", str(value or "").casefold())
     without_marks = "".join(char for char in folded if not unicodedata.combining(char))
@@ -74,13 +64,6 @@ def _item_matches_group(item: str, group: str) -> bool:
     )
 
 
-def _allergy_group(allergy: str) -> str | None:
-    for keyword, group in ALLERGY_GROUPS.items():
-        if keyword in allergy:
-            return group
-    return None
-
-
 def assess_item_health(
     item_name: str,
     *,
@@ -93,6 +76,7 @@ def assess_item_health(
     disease_terms = [_normalize(disease) for disease in diseases if _normalize(disease)]
     disease_text = " ".join(disease_terms)
     has_profile_data = bool(allergy_terms or disease_terms or medications)
+    medication_assessment: HealthAssessment | None = None
 
     if medications:
         medication_safety = check_medication_food_safety(
@@ -104,25 +88,29 @@ def assess_item_health(
         if matched_rules:
             explanation = " ".join(rule.get("explanation", "") for rule in matched_rules)
             severity = medication_safety.get("severity", "caution")
-            return HealthAssessment(
+            medication_assessment = HealthAssessment(
                 "avoid" if severity == "avoid" else "caution",
                 f"İlaç-besin riski ({severity}): {explanation}",
             )
-        if medication_safety.get("severity") == "unknown":
-            return HealthAssessment(
+        elif medication_safety.get("severity") == "unknown":
+            medication_assessment = HealthAssessment(
                 "unknown",
                 "Kayıtlı ilaç için bu ürünün etkileşimi doğrulanamadı; sağlık profesyoneline danışılmalı.",
             )
 
-    for allergy in allergy_terms:
-        group = _allergy_group(allergy)
-        if group and _item_matches_group(item, group):
-            return HealthAssessment("avoid", f"Alerji kaydıyla çakışıyor: {allergy}")
-        if allergy and contains_positive_food_mention(item, allergy):
-            return HealthAssessment("avoid", f"Alerji kaydıyla çakışıyor: {allergy}")
-
-    if _contains_any(disease_text, ("colyak", "celiac", "gluten")) and _item_matches_group(item, "gluten"):
-        return HealthAssessment("avoid", "Çölyak/gluten hassasiyeti için uygun olmayabilir.")
+    constraint_result = RuleEngine().check_rules(
+        {"alerjiler": allergies, "hastaliklar": diseases},
+        item_name,
+        [item_name],
+    )
+    if constraint_result["found_risks"]:
+        return HealthAssessment("avoid", constraint_result["found_risks"][0])
+    if medication_assessment and medication_assessment.status == "avoid":
+        return medication_assessment
+    if constraint_result["found_warnings"]:
+        return HealthAssessment("caution", constraint_result["found_warnings"][0])
+    if medication_assessment:
+        return medication_assessment
 
     if _contains_any(disease_text, ("laktoz", "lactose")) and _item_matches_group(item, "dairy"):
         return HealthAssessment("caution", "Laktoz hassasiyeti için alternatif gerekebilir.")
@@ -138,12 +126,6 @@ def assess_item_health(
             return HealthAssessment("caution", "Hipertansiyon kaydı nedeniyle sodyum miktarı doğrulanmalı.")
         if _item_matches_group(item, "processed"):
             return HealthAssessment("caution", "İşlenmiş ürünlerde sodyum içeriği değişebileceği için dikkat gerekir.")
-
-    if _contains_any(disease_text, ("gut", "gout")):
-        if contains_positive_food_mention(item, "sakatat"):
-            return HealthAssessment("avoid", "Gut kaydı nedeniyle yüksek pürin riski var.")
-        if _item_matches_group(item, "purine"):
-            return HealthAssessment("caution", "Gut kaydı nedeniyle pürin yükü dikkat gerektirir.")
 
     if not has_profile_data:
         return HealthAssessment("unknown", "Sağlık profili sınırlı; güvenli olduğu varsayılmadı.")

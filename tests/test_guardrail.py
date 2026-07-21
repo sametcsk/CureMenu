@@ -78,7 +78,10 @@ def test_kidney_meat_is_still_detected_for_gout():
         ["kuzu böbrek"],
     )
 
-    assert result["found_risks"] == ["Gut hastalığında yüksek pürinli sakatat riski."]
+    assert result["found_risks"] == []
+    assert result["found_warnings"] == [
+        "Gut kaydı nedeniyle sakatat ve yüksek pürin yükü dikkat gerektirir."
+    ]
 
 
 def test_plant_milk_is_not_mistaken_for_cow_milk_protein():

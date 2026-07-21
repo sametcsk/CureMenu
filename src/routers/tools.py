@@ -156,7 +156,7 @@ def _plan_action_messages(
     return [system_message, human_message]
 
 
-def _recommendation_text(output) -> str:
+def _recommendation_parts(output) -> tuple[str, list[str]]:
     if isinstance(output, dict) and isinstance(output.get("days"), list):
         meals: list[str] = []
         for day in output["days"]:
@@ -164,24 +164,25 @@ def _recommendation_text(output) -> str:
                 continue
             meals.extend(str(day.get(key) or "") for key in ("breakfast", "lunch", "dinner"))
             meals.extend(str(item) for item in day.get("snacks", []) if item)
-        return "\n".join(meals)
+        return "\n".join(meals), []
     if isinstance(output, dict) and isinstance(output.get("degisen_ogunler"), list):
         return "\n".join(
             str(item.get("yeni") or "")
             for item in output["degisen_ogunler"]
             if isinstance(item, dict)
-        )
+        ), []
     if isinstance(output, dict) and "snack_onerileri" in output:
-        return str(output.get("snack_onerileri") or "")
+        return str(output.get("snack_onerileri") or ""), []
     if isinstance(output, dict) and isinstance(output.get("snacks"), list):
-        safety_fields: list[str] = []
+        names: list[str] = []
+        ingredients: list[str] = []
         for snack in output["snacks"]:
             if not isinstance(snack, dict):
                 continue
-            safety_fields.append(str(snack.get("name") or ""))
-            safety_fields.extend(str(item) for item in snack.get("ingredients", []) if item)
-        return "\n".join(safety_fields)
-    return str(output or "")
+            names.append(str(snack.get("name") or ""))
+            ingredients.extend(str(item) for item in snack.get("ingredients", []) if item)
+        return "\n".join(names), ingredients
+    return str(output or ""), []
 
 
 def _render_snack_suggestions(payload: SnackSuggestionsPayload) -> str:
@@ -199,20 +200,22 @@ def _render_snack_suggestions(payload: SnackSuggestionsPayload) -> str:
 
 def _check_tool_output_safety(profil, kimin_icin: str, output) -> dict:
     facts = grocery_profile_facts(profil, kimin_icin)
-    recommendation = _recommendation_text(output)
+    recommendation, ingredients = _recommendation_parts(output)
+    safety_text = "\n".join([recommendation, *ingredients])
     rule_result = RuleEngine().check_rules(
         {"alerjiler": facts.allergies, "hastaliklar": facts.diseases},
         recommendation,
-        [recommendation],
+        ingredients,
+        structured_ingredients=bool(ingredients),
     )
-    medication_result = check_medication_food_safety(facts.medications, recommendation)
+    medication_result = check_medication_food_safety(facts.medications, safety_text)
     scope_reasons = profile_scope_review_reasons(profil, kimin_icin)
     matched_rules = medication_result.get("matched_rules") or []
     avoid_rules = [rule for rule in matched_rules if rule.get("severity") == "avoid"]
     caution_rules = [rule for rule in matched_rules if rule.get("severity") != "avoid"]
     blocked_reasons = list(rule_result.get("found_risks") or [])
     health_assessment = assess_item_health(
-        recommendation,
+        safety_text,
         allergies=facts.allergies,
         diseases=facts.diseases,
         medications=[],
@@ -221,13 +224,17 @@ def _check_tool_output_safety(profil, kimin_icin: str, output) -> dict:
         blocked_reasons.append(health_assessment.reason)
     blocked_reasons.extend(str(rule.get("explanation") or "") for rule in avoid_rules)
     blocked_reasons = list(dict.fromkeys(reason for reason in blocked_reasons if reason))
-    review_required = bool(medication_result.get("needs_professional_review") or scope_reasons)
-    warnings = []
+    rule_warnings = list(rule_result.get("found_warnings") or [])
+    review_required = bool(
+        rule_warnings or medication_result.get("needs_professional_review") or scope_reasons
+    )
+    warnings = [*rule_warnings]
     if health_assessment.status == "caution":
         warnings.append(health_assessment.reason)
     warnings.extend(str(rule.get("explanation") or "") for rule in caution_rules)
     warnings.extend(scope_reasons)
-    if review_required:
+    warnings = list(dict.fromkeys(warning for warning in warnings if warning))
+    if medication_result.get("needs_professional_review"):
         warnings.append(
             "İlaç-besin etkileşiminin tamamı doğrulanamadı. "
             "Öneriyi uygulamadan önce doktorunuza, eczacınıza veya diyetisyeninize danışın."

@@ -2,6 +2,9 @@ import re
 import unicodedata
 from typing import Any, Dict, List
 
+from src.quality.ingredient_catalog import IngredientCatalog, IngredientMatch
+from src.rules.registry import load_food_constraint_registry
+
 
 def _normalize(value: str) -> str:
     folded = unicodedata.normalize("NFKD", str(value or "").casefold())
@@ -47,7 +50,7 @@ def contains_positive_food_mention(
         return False
 
     pattern = re.compile(
-        rf"(?<![a-z0-9]){re.escape(needle)}(?:li|lu|lik|luk)?(?![a-z0-9])"
+        rf"(?<![a-z0-9]){re.escape(needle)}(?:i|u|li|lu|lik|luk)?(?![a-z0-9])"
     )
     for match in pattern.finditer(value):
         before = value[max(0, match.start() - 40):match.start()]
@@ -60,64 +63,142 @@ def contains_positive_food_mention(
     return False
 
 
-def _allergen_terms(allergy: str) -> set[str]:
-    """Expand only well-defined food-allergen synonyms used by the UI."""
-    normalized = _normalize(allergy)
-    terms = {str(allergy or "").strip()}
-    if "sut" in normalized:
-        terms.update({"süt", "inek sütü", "yoğurt", "peynir", "ayran", "whey", "kazein"})
-    if "yer fistigi" in normalized:
-        terms.update({"yer fıstığı", "yer fıstığı ezmesi", "peanut"})
-    if "yumurta" in normalized:
-        terms.add("yumurta")
-    return {term for term in terms if term}
-
-
-def _contains_allergen_risk(text: str, allergy: str) -> bool:
-    normalized_allergy = _normalize(allergy)
-    plant_based_prefixes = (
-        "bitkisel",
-        "badem",
-        "soya",
-        "yulaf",
-        "pirinç",
-        "hindistan cevizi",
-    )
+def _contains_profile_alias(value: str, aliases: list[str]) -> bool:
+    normalized = _normalize(value)
     return any(
-        contains_positive_food_mention(
-            text,
-            term,
-            safe_prefixes=plant_based_prefixes if "sut" in normalized_allergy and _normalize(term) == "sut" else (),
-        )
-        for term in _allergen_terms(allergy)
+        re.search(rf"(?<![a-z0-9]){re.escape(_normalize(alias))}(?![a-z0-9])", normalized)
+        for alias in aliases
+        if _normalize(alias)
     )
+
+
+def _group_matches(texts: list[str], group: dict[str, list[str]]) -> bool:
+    safe_prefixes = tuple(group.get("allowed_prefixes") or [])
+    return any(
+        contains_positive_food_mention(text, alias, safe_prefixes=safe_prefixes)
+        for text in texts
+        for alias in group.get("aliases") or []
+    )
+
+
+def _catalog_condition_matches(
+    ingredient: dict[str, Any],
+    conditions: list[dict[str, Any]],
+) -> bool:
+    if not conditions:
+        return False
+
+    for condition in conditions:
+        actual = ingredient.get(condition["field"])
+        expected = condition["value"]
+        if condition["operator"] == "contains":
+            if not isinstance(actual, list) or expected not in actual:
+                return False
+        elif actual != expected:
+            return False
+    return True
+
+
+def _positive_catalog_matches(
+    catalog: IngredientCatalog,
+    texts: list[str],
+) -> list[IngredientMatch]:
+    matches: list[IngredientMatch] = []
+    for text in texts:
+        for match in catalog.resolve_all(text):
+            if contains_positive_food_mention(text, match.matched_alias):
+                matches.append(match)
+    return matches
 
 
 class RuleEngine:
-    """Deterministic hard-rule checks for explicit food safety conflicts."""
+    """Apply deterministic, data-driven profile constraints to food content."""
 
-    def check_rules(self, profile: Dict[str, Any], meal: str, ingredients: List[str]) -> Dict[str, Any]:
+    def check_rules(
+        self,
+        profile: Dict[str, Any],
+        meal: str,
+        ingredients: List[str],
+        *,
+        structured_ingredients: bool = False,
+    ) -> Dict[str, Any]:
         found_risks: list[str] = []
+        found_warnings: list[str] = []
+        matched_rules: list[str] = []
         risk_score = 0.0
         texts = [meal or "", *(ingredients or [])]
 
+        registry = load_food_constraint_registry()
+        catalog = IngredientCatalog()
+        catalog_matches = _positive_catalog_matches(catalog, texts)
+        groups = registry["ingredient_groups"]
+        configured_allergies: set[str] = set()
+
+        for rule in registry["profile_rules"]:
+            matching_profiles = [
+                str(value)
+                for value in profile.get(rule["profile_field"], [])
+                if _contains_profile_alias(str(value), rule["profile_aliases"])
+            ]
+            if not matching_profiles:
+                continue
+            if rule["profile_field"] == "alerjiler":
+                configured_allergies.update(matching_profiles)
+            ingredient_group = rule.get("ingredient_group")
+            triggered = bool(rule.get("always_review"))
+            catalog_conditions = rule.get("catalog_conditions") or []
+            if not triggered and catalog_conditions:
+                triggered = any(
+                    _catalog_condition_matches(match.ingredient, catalog_conditions)
+                    for match in catalog_matches
+                )
+            if not triggered and ingredient_group:
+                triggered = _group_matches(texts, groups[ingredient_group])
+            if not triggered:
+                continue
+
+            message = rule["message"].format(profile=matching_profiles[0])
+            matched_rules.append(rule["rule_id"])
+            if rule["outcome"] == "block":
+                found_risks.append(message)
+                risk_score = 1.0
+            else:
+                found_warnings.append(message)
+                risk_score = max(risk_score, 0.4)
+
         for allergy in profile.get("alerjiler", []):
-            if any(_contains_allergen_risk(text, str(allergy)) for text in texts):
-                found_risks.append(f"Alerji riski (Kesin İhlal): {allergy}")
+            allergy_text = str(allergy).strip()
+            if not allergy_text or allergy_text in configured_allergies:
+                continue
+            if any(contains_positive_food_mention(text, allergy_text) for text in texts):
+                found_risks.append(f"Alerji riski (Kesin İhlal): {allergy_text}")
                 risk_score = 1.0
 
-        diseases = {_normalize(disease) for disease in profile.get("hastaliklar", [])}
-        has_gout = any("gut" in disease or "gout" in disease for disease in diseases)
-        has_high_purine_meat = any(
-            contains_positive_food_mention(text, term)
-            for text in texts
-            for term in ("sakatat", "ciğer", "böbrek eti", "dana böbrek", "kuzu böbrek", "işkembe")
-        )
-        if has_gout and has_high_purine_meat:
-            found_risks.append("Gut hastalığında yüksek pürinli sakatat riski.")
-            risk_score = max(risk_score, 0.8)
+        unknown_ingredients: list[str] = []
+        if structured_ingredients:
+            for ingredient in ingredients or []:
+                ingredient_text = str(ingredient).strip()
+                if not ingredient_text:
+                    continue
+                if _positive_catalog_matches(catalog, [ingredient_text]):
+                    continue
+                unknown_ingredients.append(ingredient_text)
+                found_warnings.append(
+                    registry["unknown_ingredient_message"].format(
+                        ingredient=ingredient_text
+                    )
+                )
+                risk_score = max(risk_score, 0.2)
 
         return {
-            "found_risks": found_risks,
+            "found_risks": list(dict.fromkeys(found_risks)),
+            "found_warnings": list(dict.fromkeys(found_warnings)),
             "medical_risk_score": risk_score,
+            "matched_rules": list(dict.fromkeys(matched_rules)),
+            "registry_version": registry["version"],
+            "catalog_version": catalog.version,
+            "catalog_matches": list(
+                dict.fromkeys(match.canonical_name for match in catalog_matches)
+            ),
+            "unknown_ingredients": list(dict.fromkeys(unknown_ingredients)),
         }
