@@ -17,6 +17,22 @@ _NON_INGREDIENT_SUFFIX = re.compile(
     r")"
 )
 
+_SHARED_ABSENCE_CLAIM = re.compile(
+    r"\b(?:icermez|icermeyen|bulunmaz|yok(?:tur)?|kullanilmadan|eklenmeden)\b"
+)
+_POSITIVE_INGREDIENT_CLAIM = re.compile(
+    r"\b(?:icerir|iceren|bulunur|kullanilir|eklenir)\b"
+)
+
+
+def _belongs_to_shared_absence_list(after_match: str) -> bool:
+    """Handle lists such as 'sut, yumurta ve fistik icermeyen' safely."""
+    clause = re.split(r"[.;:!?\n]", after_match, maxsplit=1)[0][:160]
+    absence = _SHARED_ABSENCE_CLAIM.search(clause)
+    if not absence:
+        return False
+    return _POSITIVE_INGREDIENT_CLAIM.search(clause[:absence.start()]) is None
+
 
 def contains_positive_food_mention(
     text: str,
@@ -39,7 +55,8 @@ def contains_positive_food_mention(
             continue
         after = value[match.end():match.end() + 60]
         if not _NON_INGREDIENT_SUFFIX.match(after):
-            return True
+            if not _belongs_to_shared_absence_list(value[match.end():]):
+                return True
     return False
 
 

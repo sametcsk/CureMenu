@@ -607,6 +607,8 @@ def test_weekly_plan_caution_ilac_besin_riskini_uyariyla_gosterir(mock_plan, moc
     assert body["ok"] is True
     assert body["plan"]["warnings"]
     assert "Warfarin" in body["plan"]["warnings"][0]
+    assert "kritiktir" not in body["plan"]["warnings"][0].casefold()
+    assert "INR dengesini koruyunuz" not in body["plan"]["warnings"][0]
 
 
 @patch("src.routers.tools.hafizadakini_getir", return_value=[])
@@ -849,7 +851,7 @@ def test_chat_allergensiz_alternatifi_engellemeden_sade_uyari_gosterir(client, m
 
 
 def test_ilac_uyarilari_kullaniciya_yumusak_dille_sunulur():
-    from src.presentation import user_facing_safety_guidance
+    from src.presentation import soften_generated_guidance, user_facing_safety_guidance
 
     warfarin = user_facing_safety_guidance("Warfarin için INR dengesini koruyunuz; kritiktir.")
     levothyroxine = user_facing_safety_guidance("Levothyroxine emilimi için zamanlama kritiktir.")
@@ -861,6 +863,37 @@ def test_ilac_uyarilari_kullaniciya_yumusak_dille_sunulur():
     assert "doktorunuzun veya eczacınızın önerisini" in levothyroxine
     assert "kritiktir" not in warfarin.casefold()
     assert "kritiktir" not in levothyroxine.casefold()
+
+    generated = soften_generated_guidance(
+        "**Önemli Uyarı:** Levotiroksin ilacınızı öğünden en az 60 dakika önce "
+        "aldığınızdan emin olun. Warfarin için INR dengesini korumanız kritiktir."
+    )
+    assert "60 dakika" not in generated
+    assert "emin olun" not in generated.casefold()
+    assert "kritiktir" not in generated.casefold()
+    assert "doktorunuzun veya eczacınızın önerisini" in generated
+    assert "düzenli ve tutarlı" in generated
+
+
+def test_model_cevabindaki_otoriter_urun_dili_yumusatilir():
+    from src.presentation import soften_generated_guidance
+
+    generated = soften_generated_guidance(
+        "Sizin için harika ve güvenli bir seçenek. Böbrek dostudur; "
+        "uygulanması hayati önem taşır ve kesinlikle tercih edilmelidir. "
+        "Warfarin etkileşimi yaratmayacak şekilde porsiyonlanmıştır."
+    )
+
+    for forbidden in (
+        "harika ve güvenli",
+        "böbrek dostu",
+        "hayati önem taşır",
+        "kesinlikle",
+        "etkileşimi yaratmayacak",
+    ):
+        assert forbidden not in generated.casefold()
+    assert "profilinize göre değerlendirilebilecek" in generated
+    assert "porsiyonu değerlendirilmesi gereken" in generated
 
 
 @patch("src.routers.tools.extract_ingredients_from_image_base64", side_effect=RuntimeError("gemini model not found"))

@@ -99,3 +99,45 @@ def test_egg_free_wording_is_not_mistaken_for_egg_ingredient():
     )
 
     assert result["found_risks"] == []
+
+
+def test_coordinated_allergen_absence_applies_to_the_whole_list():
+    result = RuleEngine().check_rules(
+        {
+            "alerjiler": ["İnek sütü proteini", "yumurta", "yer fıstığı"],
+            "hastaliklar": [],
+        },
+        "Süt, yumurta ve yer fıstığı içermeyen karabuğday kasesi",
+        ["Süt, yumurta ve yer fıstığı kullanılmadan hazırlanır."],
+    )
+
+    assert result["found_risks"] == []
+
+
+def test_positive_ingredient_claim_is_not_hidden_by_later_absence_claim():
+    result = RuleEngine().check_rules(
+        {
+            "alerjiler": ["İnek sütü proteini", "yumurta", "yer fıstığı"],
+            "hastaliklar": [],
+        },
+        "Süt ve yumurta içerir, yer fıstığı içermez.",
+        ["Süt ve yumurta içerir, yer fıstığı içermez."],
+    )
+
+    assert result["found_risks"] == [
+        "Alerji riski (Kesin İhlal): İnek sütü proteini",
+        "Alerji riski (Kesin İhlal): yumurta",
+    ]
+
+
+def test_almond_milk_and_gluten_free_oats_are_not_false_allergen_matches():
+    result = RuleEngine().check_rules(
+        {
+            "alerjiler": ["İnek sütü proteini", "yumurta", "yer fıstığı"],
+            "hastaliklar": ["çölyak"],
+        },
+        "Badem sütü, glutensiz yulaf, muz ve bitkisel proteinli smoothie",
+        ["Badem sütü ve glutensiz yulaf kullanılır."],
+    )
+
+    assert result["found_risks"] == []

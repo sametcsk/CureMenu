@@ -32,7 +32,12 @@ from src.grocery.profile import grocery_profile_facts
 from src.database import profil_getir_db
 from src.messages import PROFIL_BULUNAMADI
 from src.medical_knowledge.normalizer import extract_medication_mentions, normalize_text
-from src.presentation import friendly_source_title, format_rule_risks_for_user, user_facing_safety_guidance
+from src.presentation import (
+    friendly_source_title,
+    format_rule_risks_for_user,
+    soften_generated_guidance,
+    user_facing_safety_guidance,
+)
 from src.rate_limit import authenticated_user_or_ip, limiter
 
 logger = get_logger(__name__)
@@ -283,13 +288,13 @@ def _safety_outcome(result: dict) -> tuple[bool, bool]:
 
 def _final_cevap_metni(result: dict, streamed_text: str = "") -> str:
     warning = str(result.get("uyari_mesaji") or "").strip()
-    base_answer = str(
+    base_answer = soften_generated_guidance(str(
         result.get("tarif_metni")
         or result.get("uzman_onerisi")
         or result.get("adime_raporu")
         or streamed_text
         or ""
-    ).strip()
+    ).strip())
     blocked, review_required = _safety_outcome(result)
     if blocked:
         return user_facing_safety_guidance(warning, blocked=True)
@@ -424,7 +429,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
         bg_tasks.add_task(etkilesim_logla, telefon, "", "CureBot", req.mesaj, simple_answer[:500], None)
         async def simple_stream():
-            yield _sse("status", {"message": "Yanıt hazırlanıyor"})
+            yield _sse("status", {"status": "Yanıt hazırlanıyor..."})
             yield _sse("message", {"chunk": simple_answer})
             yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "fast_path": True})
             yield _sse("done")
@@ -476,7 +481,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             log_failure(logger, "guardrails_request", e, component="chat")
 
     async def event_generator():
-        yield _sse("heartbeat")
+        yield _sse("status", {"status": "Profil bilgilerin kontrol ediliyor..."})
         final_state = dict(initial_state)
         try:
             async with asyncio.timeout(75):

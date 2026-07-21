@@ -5,6 +5,9 @@ window.ChatWidget = {
     controller: null,
     answerNode: null,
     typingNode: null,
+    requestInFlight: false,
+    progressTimers: [],
+    CHAT_RESPONSE_TIMEOUT_MS: 85000,
     STORAGE_OPEN: "cm_assistant_open",
 
     quickPrompts: [
@@ -207,6 +210,34 @@ window.ChatWidget = {
         this.resetState();
     },
 
+    setBusy(isBusy) {
+        if (!this.root) return;
+        const sendBtn = this.root.querySelector("[data-cm-assistant-send]");
+        const input = this.root.querySelector("[data-cm-assistant-input]");
+        if (sendBtn) {
+            sendBtn.disabled = isBusy;
+            sendBtn.setAttribute("aria-busy", isBusy ? "true" : "false");
+        }
+        if (input) input.disabled = isBusy;
+    },
+
+    clearProgressTimers() {
+        this.progressTimers.forEach(timerId => clearTimeout(timerId));
+        this.progressTimers = [];
+    },
+
+    scheduleProgressUpdates() {
+        this.clearProgressTimers();
+        this.progressTimers = [
+            setTimeout(() => {
+                if (this.requestInFlight) this.setStatus("Öneri sağlık kısıtlarıyla karşılaştırılıyor...");
+            }, 7000),
+            setTimeout(() => {
+                if (this.requestInFlight) this.setStatus("Yanıt hazırlanıyor...");
+            }, 22000)
+        ];
+    },
+
     showGovernance(data) {
         if (!data?.decision_id || !window.ChatGovernancePanel) return;
         const card = this.addMessage('', 'soft', true);
@@ -215,14 +246,15 @@ window.ChatWidget = {
 
     resetState() {
         this.hideTyping();
+        this.clearProgressTimers();
         this.setStatus("Her sayfada yanında");
         this.answerNode = null;
+        this.requestInFlight = false;
         if (this.controller) {
             this.controller.abort();
             this.controller = null;
         }
-        const sendBtn = this.root.querySelector("[data-cm-assistant-send]");
-        if (sendBtn) sendBtn.disabled = false;
+        this.setBusy(false);
     },
 
     stopGeneration() {
@@ -245,7 +277,7 @@ window.ChatWidget = {
         if (!this.root) this.init();
         
         const sendBtn = this.root.querySelector("[data-cm-assistant-send]");
-        if (sendBtn.disabled) return;
+        if (this.requestInFlight || sendBtn.disabled) return;
         
         if (window.AuthManager && !window.AuthManager.getUser().telefon) {
             this.addMessage("Bunu sana özel yanıtlayabilmem için önce kısa profilini oluşturalım.", "soft");
@@ -256,8 +288,10 @@ window.ChatWidget = {
         this.root.querySelector("[data-cm-assistant-quick]")?.classList.add("is-hidden");
         this.addMessage(message, "user");
         
-        sendBtn.disabled = true;
-        this.setStatus("Sistem hazırlanıyor...");
+        this.requestInFlight = true;
+        this.setBusy(true);
+        this.setStatus("Profil bilgilerin kontrol ediliyor...");
+        this.scheduleProgressUpdates();
         this.showTyping();
         this.answerNode = null;
         
@@ -267,10 +301,10 @@ window.ChatWidget = {
         
         const timeoutId = setTimeout(() => {
             if (!doneSeen) {
-                this.stopGeneration();
-                this.showError("Yanıt beklenenden uzun sürdü. Lütfen tekrar deneyin.");
+                this.controller?.abort();
+                this.showError("Yanıt hazırlanması beklenenden uzun sürdü. Bağlantı veya model yanıtı gecikmiş olabilir; birazdan tekrar deneyebilirsiniz.");
             }
-        }, 60000);
+        }, this.CHAT_RESPONSE_TIMEOUT_MS);
 
         try {
             const apiEndpoint = (window.API || '') + '/api/chat';
@@ -316,7 +350,9 @@ window.ChatWidget = {
                     } catch (_) {}
 
                     if (eventName === "status") {
-                        this.setStatus(payload.status || "Çalışıyor...");
+                        this.setStatus(payload.status || payload.message || "Yanıt hazırlanıyor...");
+                    } else if (eventName === "heartbeat") {
+                        this.setStatus("Öneri sağlık kısıtlarıyla karşılaştırılıyor...");
                     } else if (eventName === "message" || eventName === "token") {
                         this.setStatus("CureBot yazıyor...");
                         fullAnswer += (payload.chunk || "");
@@ -376,7 +412,7 @@ window.ChatWidget = {
         const html = `
             <div>Buradan hızlıca başlayabilirsin:</div>
             <div class="cm-assistant-actions">
-                <button type="button" data-cm-feature="dashboard">Haftalık plan</button>
+                <button type="button" data-cm-feature="plan">Haftalık plan</button>
                 <button type="button" data-cm-feature="tahlil">Tahlil yükle</button>
                 <button type="button" data-cm-feature="profile">Profilim</button>
             </div>

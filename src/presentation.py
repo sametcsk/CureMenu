@@ -24,9 +24,15 @@ WARFARIN_GUIDANCE = (
     "doktorunuza veya eczacınıza danışın."
 )
 
+YOUTH_GUIDANCE = (
+    "18 yaş altındaki kullanıcılar için öğün ve porsiyon önerileri büyüme ve gelişim "
+    "gereksinimleriyle birlikte değerlendirilmelidir. Ebeveyn ve çocuk sağlığı alanında "
+    "çalışan bir doktor veya diyetisyen görüşü alınması uygun olur."
+)
+
 
 def _normalize(value: str) -> str:
-    folded = unicodedata.normalize("NFKD", str(value or "").casefold())
+    folded = unicodedata.normalize("NFKD", str(value or "").casefold().replace("ı", "i"))
     return "".join(char for char in folded if not unicodedata.combining(char))
 
 
@@ -65,6 +71,8 @@ def user_facing_safety_guidance(raw_warning: str, *, blocked: bool = False) -> s
         messages.append(WARFARIN_GUIDANCE)
     if "levothyroxine" in normalized or "levotiroksin" in normalized:
         messages.append(LEVOTHYROXINE_GUIDANCE)
+    if "18 yas alti" in normalized or "cocuk" in normalized or "ergen" in normalized:
+        messages.append(YOUTH_GUIDANCE)
 
     needs_general_guidance = blocked or any(
         term in normalized
@@ -81,3 +89,43 @@ def user_facing_safety_guidance(raw_warning: str, *, blocked: bool = False) -> s
         messages.append(GENERAL_REVIEW_GUIDANCE)
 
     return "\n\n".join(dict.fromkeys(messages))
+
+
+def soften_generated_guidance(raw_text: str) -> str:
+    """Remove authoritative clinical wording from model-generated user copy."""
+    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", str(raw_text or "")) if part.strip()]
+    softened: list[str] = []
+
+    for paragraph in paragraphs:
+        normalized = _normalize(paragraph)
+        medication_guidance: list[str] = []
+        if "levothyroxine" in normalized or "levotiroksin" in normalized:
+            if any(term in normalized for term in ("60 dakika", "ac karnina", "emin olun", "unutmay")):
+                medication_guidance.append(LEVOTHYROXINE_GUIDANCE)
+        if "warfarin" in normalized or "inr" in normalized:
+            if any(term in normalized for term in ("kritik", "koruyunuz", "emin olun", "unutmay")):
+                medication_guidance.append(WARFARIN_GUIDANCE)
+        if medication_guidance:
+            softened.extend(medication_guidance)
+            continue
+
+        paragraph = re.sub(r"(?i)\*\*Önemli (?:Not|Uyarı):\*\*", "**Dikkat:**", paragraph)
+        paragraph = re.sub(r"(?i)\bharika ve güvenli\b", "profilinize göre değerlendirilebilecek", paragraph)
+        paragraph = re.sub(
+            r"(?i)\bböbrek dostu(?:dur)?\b",
+            "böbrek durumunuz açısından porsiyonu değerlendirilmesi gereken",
+            paragraph,
+        )
+        paragraph = re.sub(r"(?i)\ben güvenli\b", "değerlendirilebilecek", paragraph)
+        paragraph = re.sub(r"(?i)\bgüvenli\b", "profil kısıtlarıyla karşılaştırılmış", paragraph)
+        paragraph = re.sub(
+            r"(?i)\bwarfarin etkileşimi yaratmayacak şekilde\b",
+            "Warfarin kullanımı açısından uzmanla değerlendirilmek üzere",
+            paragraph,
+        )
+        paragraph = re.sub(r"(?i)\bhayati önem taşır\b", "dikkat gerektirir", paragraph)
+        paragraph = re.sub(r"(?i)\bkritiktir\b", "uzmanla değerlendirilmelidir", paragraph)
+        paragraph = re.sub(r"(?i)\bkesinlikle\b", "", paragraph)
+        softened.append(re.sub(r" {2,}", " ", paragraph).strip())
+
+    return "\n\n".join(dict.fromkeys(item for item in softened if item))

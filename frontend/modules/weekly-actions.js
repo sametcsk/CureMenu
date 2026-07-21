@@ -45,15 +45,29 @@
                 closeActionModal();
             } else if (action === 'snack') {
                 event.preventDefault();
-                requestSnack();
+                runActionOnce(trigger, requestSnack);
             } else if (action === 'recipe') {
                 event.preventDefault();
-                askRecipeForWeeklyPlan(trigger.dataset.meal || '');
+                runActionOnce(trigger, () => askRecipeForWeeklyPlan(trigger.dataset.meal || ''));
             } else if (action === 'alternative') {
                 event.preventDefault();
-                requestAlternativeMeal(trigger.dataset.meal || '');
+                runActionOnce(trigger, () => requestAlternativeMeal(trigger.dataset.meal || ''));
             }
         });
+    }
+
+    function runActionOnce(trigger, actionCallback) {
+        if (!trigger || trigger.dataset.weeklyPending === 'true') return;
+        trigger.dataset.weeklyPending = 'true';
+        trigger.disabled = true;
+        trigger.setAttribute('aria-busy', 'true');
+        Promise.resolve()
+            .then(actionCallback)
+            .finally(() => {
+                trigger.dataset.weeklyPending = 'false';
+                trigger.disabled = false;
+                trigger.setAttribute('aria-busy', 'false');
+            });
     }
 
     function loadingHtml(colorClass, text) {

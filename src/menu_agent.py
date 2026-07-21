@@ -44,7 +44,7 @@ def menu_danismani(ham_metin: str, profil_ozeti: str) -> str:
     ### 🟡 Porsiyon Kontrolüyle Tüketin
     - [Yemek Adı]: [Neden dikkatli olunması gerektiği - tek cümle]
 
-    ### 🔴 Kesinlikle Uzak Durun
+    ### 🔴 Profilinizle Uyuşmayan Seçenekler
     - [Yemek Adı]: [Neden zararlı veya riskli olduğu - tek cümle]
     """
     
@@ -145,7 +145,7 @@ def menu_danismani(ham_metin: str, profil_ozeti: str) -> str:
         ### 🟡 Porsiyon Kontrolüyle Tüketin
         - [Yemek Adı]: [Sebep]
 
-        ### 🔴 Kesinlikle Uzak Durun
+        ### 🔴 Profilinizle Uyuşmayan Seçenekler
         - [Yemek Adı]: [Sebep]
 
         ---

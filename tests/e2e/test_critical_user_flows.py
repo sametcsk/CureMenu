@@ -143,11 +143,13 @@ def test_register_wrong_password_login_and_logout(browser_page, e2e_base_url: st
 def test_weekly_plan_actions_and_gamification(authenticated_page) -> None:
     page, _context, runtime_errors, _user = authenticated_page
     plan = _weekly_plan()
+    action_requests: list[dict] = []
 
     page.route("**/api/weekly-plan", lambda route: _json(route, {"ok": True, "plan": plan}))
 
     def plan_action(route) -> None:
         request = json.loads(route.request.post_data or "{}")
+        action_requests.append(request)
         action = request.get("action_type")
         if action == "recipe":
             _json(route, {"success": True, "result": "Test tarifi: kontrollu porsiyon."})
@@ -173,17 +175,27 @@ def test_weekly_plan_actions_and_gamification(authenticated_page) -> None:
     page.locator("#planResult").get_by_text("Pazartesi").wait_for()
     assert page.locator('[data-weekly-action="recipe"]').count() == 3
 
-    page.locator('[data-weekly-action="recipe"]').first.click()
+    page.locator('[data-weekly-action="recipe"]').first.evaluate("button => { button.click(); button.click(); }")
     page.locator("#actionModalContent").get_by_text("Test tarifi").wait_for()
+    recipe_requests = [item for item in action_requests if item.get("action_type") == "recipe"]
+    assert len(recipe_requests) == 1
+    assert recipe_requests[0]["meal_text"] == "Yulaf ve elma"
+    assert recipe_requests[0]["kimin_icin"] == "kendim"
     page.locator('#actionModal [data-weekly-action="close"]').last.click()
     assert "hidden" in page.locator("#actionModal").get_attribute("class")
 
     page.locator('[data-weekly-action="alternative"]').first.click()
     page.locator("#actionModalContent").get_by_text("Sebzeli omlet").wait_for()
+    alternative_request = next(item for item in action_requests if item.get("action_type") == "alternative")
+    assert alternative_request["meal_text"] == "Yulaf ve elma"
+    assert alternative_request["plan_text"]
     page.locator('#actionModal [data-weekly-action="close"]').last.click()
 
     page.locator('[data-weekly-action="snack"]').click()
     page.locator("#actionModalContent").get_by_text("Bir porsiyon elma").wait_for()
+    snack_request = next(item for item in action_requests if item.get("action_type") == "snack")
+    assert snack_request["plan_text"]
+    assert snack_request["kimin_icin"] == "kendim"
     page.locator('#actionModal [data-weekly-action="close"]').last.click()
 
     checkbox = page.locator('#planResult input[type="checkbox"]').first
@@ -298,6 +310,8 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
         ),
     )
     page.locator("[data-cm-assistant-launcher]").click()
+    page.locator('[data-cm-feature="plan"]').click()
+    assert page.locator("#tab-plan").evaluate("element => element.classList.contains('active')")
     page.evaluate("window.updatePlanDropdown({aile_uyeleri: [{ad: 'Ece'}]})")
     expected_targets = ["Kendim İçin", "Ece İçin", "Tüm Aile İçin"]
     for selector in ["#planTarget", "#chatTarget", "#menuTarget", "#fridgeTarget", "#tahlilTarget"]:
@@ -309,11 +323,30 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("Profiline gore test yaniti.").wait_for()
     assert chat_requests[-1]["kimin_icin"] == "Ece"
-    page.locator("[data-cm-assistant-body]").get_by_text("Yanıt nasıl değerlendirildi?").wait_for()
     assert page.locator("[data-cm-assistant-body]").get_by_text("e2e-chat-decision").count() == 0
     assert page.locator("[data-cm-assistant-body]").get_by_text("Operasyonel güven").count() == 0
-    page.locator("[data-cm-assistant-body]").get_by_text("E2E resmi kaynak").wait_for()
+    citation_panel = page.locator("[data-chat-governance-citations]")
+    assert citation_panel.count() == 0 or citation_panel.is_hidden()
+    assert page.locator("[data-cm-assistant-body]").get_by_text("E2E resmi kaynak").count() == 0
     assert page.locator("[data-cm-assistant-body]").get_by_text("Test kanit parcasi").count() == 0
+
+    page.route(
+        "**/api/clinical-decisions/e2e-no-citations",
+        lambda route: _json(route, {"success": True, "decision": {"citations": []}}),
+    )
+    page.evaluate(
+        """
+        const root = document.createElement('div');
+        root.id = 'e2e-no-citations';
+        document.body.appendChild(root);
+        window.ChatGovernancePanel.renderChatGovernanceSummary(
+            {decision_id: 'e2e-no-citations', risk_score: 0.9},
+            root
+        );
+        """
+    )
+    page.wait_for_function("document.getElementById('e2e-no-citations').hidden === true")
+    assert page.locator("#e2e-no-citations").text_content() == ""
 
     page.unroute("**/api/chat")
     page.route(
@@ -393,6 +426,52 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
         {"name": "broken.txt", "mimeType": "text/plain", "buffer": b"not-an-image"},
     )
     page.locator("#fridgeScanResult").get_by_text("E2E gecersiz buzdolabi gorseli.").wait_for()
+    assert not runtime_errors
+
+
+def test_curebot_progress_and_duplicate_request_guard(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    page.locator("[data-cm-assistant-launcher]").click()
+    page.evaluate(
+        """
+        () => {
+            window.__e2eChatFetchCalls = 0;
+            window.safeFetchStream = async () => {
+                window.__e2eChatFetchCalls += 1;
+                const encoder = new TextEncoder();
+                return new Response(new ReadableStream({
+                    start(controller) {
+                        setTimeout(() => controller.enqueue(encoder.encode(
+                            'event: status\\ndata: {"status":"Öneri sağlık kısıtlarıyla karşılaştırılıyor..."}\\n\\n'
+                        )), 750);
+                        setTimeout(() => {
+                            controller.enqueue(encoder.encode(
+                                'event: message\\ndata: {"chunk":"Güvenli test yanıtı."}\\n\\n' +
+                                'event: done\\ndata: {}\\n\\n'
+                            ));
+                            controller.close();
+                        }, 1500);
+                    }
+                }), {status: 200, headers: {'Content-Type': 'text/event-stream'}});
+            };
+        }
+        """
+    )
+    page.fill("[data-cm-assistant-input]", "Hızlı kahvaltı öner")
+    page.locator("[data-cm-assistant-form]").evaluate(
+        "form => { form.requestSubmit(); form.requestSubmit(); }"
+    )
+
+    assert page.locator("[data-cm-assistant-input]").is_disabled()
+    assert page.locator("[data-cm-assistant-send]").get_attribute("aria-busy") == "true"
+    page.locator("#cm-assistant-status").get_by_text("Profil bilgilerin kontrol ediliyor").wait_for()
+    page.locator("[data-cm-assistant-body]").get_by_text("Güvenli test yanıtı.").wait_for()
+    page.wait_for_function("window.ChatWidget.requestInFlight === false")
+
+    assert page.evaluate("window.__e2eChatFetchCalls") == 1
+    assert not page.locator("[data-cm-assistant-input]").is_disabled()
+    assert page.locator("[data-cm-assistant-send]").get_attribute("aria-busy") == "false"
+    assert page.locator("[data-cm-assistant-body]").get_by_text("Yanıt beklenenden uzun sürdü").count() == 0
     assert not runtime_errors
 
 

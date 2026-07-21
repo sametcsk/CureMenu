@@ -27,6 +27,7 @@ from src.quality.rule_engine import RuleEngine
 from src.quality.scope_policy import profile_scope_review_reasons
 from src.rate_limit import authenticated_user_or_ip, limiter
 from src.logger import get_logger, log_failure
+from src.presentation import user_facing_safety_guidance
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
@@ -231,7 +232,8 @@ def _check_tool_output_safety(profil, kimin_icin: str, output) -> dict:
             "İlaç-besin etkileşiminin tamamı doğrulanamadı. "
             "Öneriyi uygulamadan önce doktorunuza, eczacınıza veya diyetisyeninize danışın."
         )
-    warning = " ".join(warnings)
+    raw_warning = " ".join(warnings)
+    warning = user_facing_safety_guidance(raw_warning) if raw_warning else ""
     events = [
         make_event(
             "RuleChecked",

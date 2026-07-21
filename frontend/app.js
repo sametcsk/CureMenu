@@ -178,7 +178,7 @@ function switchTab(tab) {
     tabContent.classList.add('active');
 
     const titles = {
-        dashboard: 'Dashboard',
+        dashboard: 'Ana Sayfa',
         curebot: 'CureBot',
         profile: 'Sağlık Profilim',
         meds: 'İlaçlarım',
@@ -191,7 +191,7 @@ function switchTab(tab) {
     };
     const subtitles = {
         dashboard: 'Kanıta dayalı öneri, güvenlik kontrolü ve izlenebilir karar kaydı.',
-        curebot: 'Yanıtla birlikte operasyonel güven, tahmini risk ve kaynak özetini takip et.',
+        curebot: 'Sorularını profil bilgilerin ve uygun kaynaklarla birlikte değerlendir.',
         profile: 'Hastalık, alerji, ilaç ve hedef bilgilerini yönet.',
         meds: 'Kayıtlı ilaçlar ve riskli etkileşim sinyalleri.',
         governance: 'Denetim, teknik inceleme ve yatırımcı sunumu için karar kayıtları.'
@@ -199,7 +199,7 @@ function switchTab(tab) {
     const pageTitle = document.getElementById('pageTitle');
     if (pageTitle) pageTitle.textContent = titles[tab] || '';
     const subtitle = document.getElementById('pageSubtitle');
-    if (subtitle) subtitle.textContent = subtitles[tab] || 'CureMenu klinik beslenme karar destek konsolu.';
+    if (subtitle) subtitle.textContent = subtitles[tab] || 'Günlük beslenme kararların için profil destekli rehberlik.';
 
     const navLink = document.querySelector(`#sideNav .tab-btn[data-tab="${tab}"]`);
     if (navLink) {

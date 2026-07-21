@@ -393,8 +393,10 @@ function renderDailySummary(profile, kpis = {}, histories = []) {
         },
         {
             icon: 'verified_user',
-            title: 'İzlenebilirlik özeti',
-            text: `${Number(kpis.average_confidence || 0).toFixed(2)} operasyonel güven, ${formatPercent(kpis.evidence_coverage_rate)} kaynak kaydı.`,
+            title: 'Değerlendirme geçmişi',
+            text: Number(kpis.total_decisions || 0)
+                ? `${Number(kpis.total_decisions)} değerlendirme kaydı gerektiğinde yeniden incelenebilir.`
+                : 'Henüz kayıtlı bir değerlendirme bulunmuyor.',
             tone: Number(kpis.total_decisions || 0) ? 'status-ok' : 'status-info'
         },
     ];
