@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from src.models import AileUyesi, KullaniciProfili
-from src.profil_utils import aile_profil_ozeti_olustur
+from src.profil_utils import aile_profil_ozeti_olustur, hedef_profili_bul
 
 
 @dataclass(frozen=True)
@@ -63,9 +63,7 @@ def grocery_profile_facts(profil: KullaniciProfili, kimin_icin: str) -> GroceryP
             medications=facts.medications,
         )
 
-    target = profil.ana_kullanici
-    if kimin_icin != "kendim":
-        target = next((uye for uye in profil.aile_uyeleri if uye.ad.lower() == kimin_icin.lower()), None)
+    target = hedef_profili_bul(profil, kimin_icin)
     if target is None:
         raise ValueError("profile_target_not_found")
 

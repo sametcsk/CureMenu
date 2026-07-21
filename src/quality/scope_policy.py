@@ -5,6 +5,7 @@ from __future__ import annotations
 import unicodedata
 
 from src.models import AileUyesi, KullaniciProfili
+from src.profil_utils import hedef_profili_bul
 
 
 def _normalize(value: str) -> str:
@@ -17,11 +18,8 @@ def _target_members(profile: KullaniciProfili, target: str) -> list[AileUyesi]:
         return profile.tum_uyeler()
     if target == "kendim":
         return [profile.ana_kullanici] if profile.ana_kullanici else []
-    return [
-        member
-        for member in profile.aile_uyeleri
-        if _normalize(member.ad) == _normalize(target)
-    ]
+    member = hedef_profili_bul(profile, target)
+    return [member] if member else []
 
 
 def profile_scope_review_reasons(profile: KullaniciProfili, target: str) -> list[str]:

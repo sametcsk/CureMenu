@@ -27,6 +27,16 @@ function startAgentLoading(loadingId) {
 const HASTALIK_SECENEKLERI = ['diyabet', 'hipertansiyon', 'çölyak', 'kolesterol', 'böbrek', 'gut'];
 const ILAC_SECENEKLERI_FALLBACK = ['metformin', 'insülin', 'warfarin', 'atorvastatin', 'levotiroksin', 'lisinopril', 'omeprazol', 'aspirin'];
 window.publicMetinler = window.publicMetinler || null;
+const ACTIVE_TAB_STORAGE_KEY = 'cm_active_tab';
+const VALID_DASHBOARD_TABS = [
+    'dashboard', 'profile', 'meds', 'plan', 'tarayici', 'buzdolabi',
+    'gecmis', 'tahlil', 'governance', 'curebot'
+];
+
+function getStoredDashboardTab() {
+    const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
+    return VALID_DASHBOARD_TABS.includes(stored) ? stored : 'dashboard';
+}
 
 async function loadPublicMetinler() {
     if (window.publicMetinler) return window.publicMetinler;
@@ -56,8 +66,7 @@ function initApp() {
     loadPublicMetinler();
     loadProfile().then(() => {
         checkOnboarding();
-        loadDashboardOverview(true);
-        loadLabHistory();
+        switchTab(getStoredDashboardTab());
     });
 }
 
@@ -116,11 +125,16 @@ async function loadLabHistory() {
     return window.LabUpload?.loadLabHistory?.();
 }
 
+async function loadFridgeHistory() {
+    return window.MenuScanner?.loadFridgeHistory?.();
+}
+
 async function loadHistory(reset = false) {
     return window.LabUpload?.loadHistory?.(reset);
 }
 
 window.loadLabHistory = loadLabHistory;
+window.loadFridgeHistory = loadFridgeHistory;
 window.loadHistory = loadHistory;
 // -- Geçmiş İşlemlerim (History) --
 async function openDecisionTimeline(decisionId) {
@@ -160,9 +174,29 @@ window.renderChatGovernanceSummary = renderChatGovernanceSummary;
 window.hydrateChatGovernanceDetails = hydrateChatGovernanceDetails;
 
 function switchTab(tab) {
+    if (!VALID_DASHBOARD_TABS.includes(tab)) tab = 'dashboard';
+    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tab);
     const tabContent = document.getElementById('tab-' + tab);
     if (!tabContent) {
-        if (tab === 'curebot') openCureBotWidget();
+        if (tab === 'curebot') {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('active');
+                el.classList.add('text-on-surface-variant');
+            });
+            document.querySelectorAll('.mobile-tab-btn').forEach(el => {
+                el.classList.remove('text-primary');
+                el.classList.add('text-on-surface-variant');
+            });
+            const mobileBtn = document.querySelector('.mobile-tab-btn[data-tab="curebot"]');
+            mobileBtn?.classList.add('text-primary');
+            mobileBtn?.classList.remove('text-on-surface-variant');
+            const pageTitle = document.getElementById('pageTitle');
+            if (pageTitle) pageTitle.textContent = 'CureBot';
+            const subtitle = document.getElementById('pageSubtitle');
+            if (subtitle) subtitle.textContent = 'Sorularını profil bilgilerin ve uygun kaynaklarla birlikte değerlendir.';
+            openCureBotWidget();
+        }
         return;
     }
 
@@ -220,6 +254,8 @@ function switchTab(tab) {
         loadClinicalKpis(true);
     } else if (tab === 'tahlil') {
         loadLabHistory();
+    } else if (tab === 'buzdolabi') {
+        loadFridgeHistory();
     } else if (tab === 'plan') {
         window.WeeklyPlanManager?.loadExistingPlan?.();
     }

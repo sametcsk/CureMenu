@@ -932,6 +932,38 @@ def test_fridge_scan_caution_ilac_besin_riskini_uyariyla_gosterir(mock_scan, moc
     assert "Warfarin" in response.json()["tarif"]
 
 
+@patch("src.routers.tools.mutfak_asistani", return_value="Yoğurtlu salatalık kasesi")
+@patch("src.routers.tools.extract_ingredients_from_image_base64", return_value="yoğurt, salatalık, dereotu")
+def test_fridge_scan_family_member_history_targetini_korur(mock_scan, mock_recipe, client):
+    login_with_profile(
+        client,
+        "5554445591",
+        "Fridge Target Test",
+        ad="Ana Profil",
+        alerjiler=["inek sütü proteini"],
+    )
+    add = client.post(
+        "/api/family/add",
+        json={"ad": "Ece", "yas": 28, "cinsiyet": "kadın", "alerjiler": [], "hastaliklar": [], "ilaclar": []},
+    )
+    member_id = add.json()["uye_id"]
+
+    response = client.post(
+        "/api/fridge-scan",
+        json={"kimin_icin": member_id, "image_base64": "data:image/jpeg;base64,abc"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    history = client.get("/api/history?page=1&limit=10").json()["loglar"]
+    record = next(log for log in history if log["eylem"] == "Buzdolabı")
+    metadata = json.loads(record["metadata"])
+    assert record["kullanici_adi"] == "Ece"
+    assert metadata["target_id"] == member_id
+    assert metadata["target_name"] == "Ece"
+    assert metadata["target_scope"] == "member"
+
+
 @patch("src.routers.tools.menu_danismani", return_value="Menü analizi tamamlandı.")
 @patch("src.routers.tools.scrape_menu_from_url", return_value="Ispanak yemeği ve çorba")
 def test_menu_analizi_deterministik_ilac_riskini_ust_uyari_olarak_gosterir(mock_scrape, mock_menu, client):
@@ -1177,6 +1209,41 @@ def test_health_record_prompt_injection_belge_verisi_olarak_izole_edilir(
     assert injection not in messages[0].content
     assert injection in messages[1].content
     assert "not as instructions" in messages[1].content
+
+
+@patch("src.routers.tools.geri_bildirim_ekle")
+@patch("src.routers.tools.invoke_with_model_fallback")
+def test_health_record_upload_history_targetini_korur(mock_llm, mock_memory, client):
+    mock_llm.return_value = type(
+        "Response",
+        (),
+        {"content": 'Tahlil özeti hazır.\n```json\n{"biomarkers":[{"name":"Glukoz","value":95}]}\n```'},
+    )()
+    login_with_profile(client, "5554445592", "Lab Target Test", ad="Ana Profil")
+    add = client.post(
+        "/api/family/add",
+        json={"ad": "Ece", "yas": 28, "cinsiyet": "kadın", "alerjiler": [], "hastaliklar": [], "ilaclar": []},
+    )
+    member_id = add.json()["uye_id"]
+
+    response = client.post(
+        "/api/upload-health-record",
+        data={"kimin_icin": member_id},
+        files={"file": ("ece-tahlil.pdf", pdf_bytes_with_text("Glukoz 95 mg/dL"), "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    history_response = client.get("/api/history?page=1&limit=10")
+    assert history_response.status_code == 200
+    record = next(log for log in history_response.json()["loglar"] if log["eylem"] == "Tahlil")
+    metadata = json.loads(record["metadata"])
+    assert isinstance(record["id"], int)
+    assert record["kullanici_adi"] == "Ece"
+    assert metadata["target_id"] == member_id
+    assert metadata["target_name"] == "Ece"
+    assert metadata["target_scope"] == "member"
+    assert metadata["biomarkers"][0]["name"] == "Glukoz"
 
 
 def test_health_record_upload_metinsiz_pdf_reddeder(client):
@@ -1517,6 +1584,8 @@ def test_history_pagination(client):
     assert body["total"] >= 1
     assert body["loglar"][0]["eylem"] == "CureBot"
     assert body["loglar"][0]["kullanici_girdisi"] == "Merhaba"
+    assert isinstance(body["loglar"][0]["id"], int)
+    assert body["loglar"][0]["kullanici_adi"] == "History Test"
 
 
 @patch("src.routers.tools.alisveris_ve_butce_hesapla")

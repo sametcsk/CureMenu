@@ -1,4 +1,21 @@
 (function() {
+const HISTORY_LIMIT = 10;
+
+function parseHistoryMetadata(value) {
+    if (!value) return {};
+    if (typeof value === 'object') return value;
+    try {
+        return JSON.parse(value);
+    } catch (_error) {
+        return {};
+    }
+}
+
+function historyTargetName(log) {
+    const metadata = parseHistoryMetadata(log?.metadata);
+    return metadata.target_name || log?.kullanici_adi || 'Hedef belirtilmemiş';
+}
+
 async function scanMenu() {
     const user = getUser();
     const url = document.getElementById('menuUrlInput').value.trim();
@@ -147,8 +164,44 @@ async function scanFridge(imageBase64) {
                     <div class="prose prose-sm max-w-none text-on-surface">${tarif ? formatMarkdownSafe(tarif) : 'Tarif oluşturulamadı. Fotoğrafı yeniden yükleyebilirsin.'}</div>
                 </section>
             </div>`;
+        await loadFridgeHistory();
     } catch (e) {
         renderTextState(result, baglantiHatasi(e), 'card border-error-container bg-error-container p-6 text-center text-on-error-container');
+    }
+}
+
+async function loadFridgeHistory() {
+    const root = document.getElementById('fridgeHistoryList');
+    if (!root) return;
+    root.innerHTML = '<p class="text-on-surface-variant">Buzdolabı geçmişi yükleniyor...</p>';
+    try {
+        const { res, data } = await safeFetchJson(`${API}/api/history?page=1&limit=${HISTORY_LIMIT}`);
+        if (!res.ok || !data?.success) {
+            console.warn('[CureMenu] Buzdolabı geçmişi API hatası.', {
+                status: res.status,
+                success: Boolean(data?.success),
+            });
+            root.innerHTML = '<p class="text-on-surface-variant">Buzdolabı geçmişi şu anda yüklenemedi. Birazdan tekrar deneyebilirsin.</p>';
+            return;
+        }
+        const records = (data.loglar || []).filter(log => {
+            const action = String(log.eylem || '').toLocaleLowerCase('tr-TR');
+            return action.includes('buzdolabı') || action.includes('buzdolabi');
+        });
+        if (!records.length) {
+            root.innerHTML = '<p class="text-on-surface-variant">Henüz buzdolabı analizi yok. Yeni bir fotoğraf yüklediğinde sonuç burada görünür.</p>';
+            return;
+        }
+        root.innerHTML = records.slice(0, 3).map(log => `
+            <article class="rounded-lg border border-outline-variant bg-surface-container-lowest p-4">
+                <p class="text-xs text-on-surface-variant mb-2"><span class="font-medium text-primary">${escapeHtml(historyTargetName(log))} İçin</span> • ${escapeHtml(formatDecisionDate(log.tarih))}</p>
+                <p class="font-medium text-on-surface">${escapeHtml(log.kullanici_girdisi || 'Buzdolabı analizi')}</p>
+                <div class="prose prose-sm max-w-none text-on-surface-variant mt-2">${formatMarkdownSafe(log.asistan_ciktisi || log.ai_yanit || 'Analiz özeti bulunamadı.')}</div>
+            </article>
+        `).join('');
+    } catch (error) {
+        console.warn('[CureMenu] Buzdolabı geçmişine bağlanılamadı.', { name: error?.name || 'Error' });
+        root.innerHTML = '<p class="text-on-surface-variant">Bağlantı kurulamadı. Birazdan tekrar deneyebilirsin.</p>';
     }
 }
     window.MenuScanner = {
@@ -160,7 +213,8 @@ async function scanFridge(imageBase64) {
         onScanSuccess,
         onScanFailure,
         handleFridgeImage,
-        scanFridge
+        scanFridge,
+        loadFridgeHistory
     };
 
     window.scanMenu = scanMenu;
@@ -170,5 +224,6 @@ async function scanFridge(imageBase64) {
     window.onScanFailure = onScanFailure;
     window.handleFridgeImage = handleFridgeImage;
     window.scanFridge = scanFridge;
+    window.loadFridgeHistory = loadFridgeHistory;
     window.html5QrcodeScanner = null; // Used by QR scanner
 })();

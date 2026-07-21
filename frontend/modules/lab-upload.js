@@ -2,6 +2,21 @@
 const HISTORY_LIMIT = 10;
 let currentHistoryPage = 1;
 
+function parseHistoryMetadata(value) {
+    if (!value) return {};
+    if (typeof value === 'object') return value;
+    try {
+        return JSON.parse(value);
+    } catch (_error) {
+        return {};
+    }
+}
+
+function historyTargetName(log) {
+    const metadata = parseHistoryMetadata(log?.metadata);
+    return metadata.target_name || log?.kullanici_adi || 'Hedef belirtilmemiş';
+}
+
 async function uploadHealthRecord(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -39,6 +54,7 @@ async function uploadHealthRecord(event) {
             if (uploadMessage) {
                 uploadMessage.textContent = data.message || 'Tahlil notların kaydedildi. CureBot sonraki yanıtlarda bu bilgileri dikkate alabilir.';
             }
+            await loadLabHistory();
         } else {
             renderTextState(result, apiHataMesaji(data, 'PDF yüklenemedi.'), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
         }
@@ -53,13 +69,25 @@ async function loadLabHistory() {
     if (!root) return;
     root.innerHTML = '<p class="text-on-surface-variant">Tahlil geçmişi yükleniyor...</p>';
     try {
-        const { res, data } = await safeFetchJson(API + '/api/history?page=1&limit=50');
-        if (!res.ok || !data?.success) throw new Error('history');
+        const { res, data } = await safeFetchJson(`${API}/api/history?page=1&limit=${HISTORY_LIMIT}`);
+        if (!res.ok || !data?.success) {
+            console.warn('[CureMenu] Tahlil geçmişi API hatası.', {
+                status: res.status,
+                success: Boolean(data?.success),
+            });
+            root.innerHTML = emptyState('error', 'Tahlil geçmişi şu anda yüklenemedi', 'Birazdan tekrar deneyebilirsin.');
+            return;
+        }
 
         const labs = (data.loglar || []).filter(log => String(log.eylem || '').toLowerCase().includes('tahlil'));
 
         // Draw Chart
-        drawTahlilChart(labs);
+        try {
+            drawTahlilChart(labs);
+        } catch (error) {
+            // A chart failure must not hide the persisted lab history.
+            console.warn('[CureMenu] Tahlil grafiği oluşturulamadı; liste gösteriliyor.', error?.name || 'ChartError');
+        }
 
         if (!labs.length) {
             root.innerHTML = emptyState('vaccines', 'Yüklenen tahlil yok', 'PDF yüklediğinde özet burada görünür. Biyomarker listesi otomatik çekilerek grafiğe yansır.');
@@ -75,7 +103,7 @@ async function loadLabHistory() {
                         <div>
                             <p class="font-bold text-on-surface">${escapeHtml(log.kullanici_girdisi || 'Tahlil Raporu')}</p>
                             <p class="text-xs text-on-surface-variant mt-0.5">
-                                <span class="font-medium text-primary">${escapeHtml(log.kullanici_adi || 'Kendim')} İçin</span> •
+                                <span class="font-medium text-primary">${escapeHtml(historyTargetName(log))} İçin</span> •
                                 ${escapeHtml(formatDecisionDate(log.tarih))}
                             </p>
                         </div>
@@ -88,6 +116,7 @@ async function loadLabHistory() {
             </article>`;
         }).join('');
     } catch (e) {
+        console.warn('[CureMenu] Tahlil geçmişine bağlanılamadı.', { name: e?.name || 'Error' });
         root.innerHTML = emptyState('error', 'Tahlil geçmişi alınamadı', 'Bağlantı kurulamadı. Birazdan tekrar deneyebilirsin.');
     }
 }

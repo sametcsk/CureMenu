@@ -27,7 +27,7 @@ from src.quality.policy_engine import PolicyEngine
 from src.quality.rule_engine import RuleEngine
 from src.logger import get_logger, log_failure
 from src.config import settings
-from src.profil_utils import hedef_ilaclari, profil_ozeti_olustur, aile_profil_ozeti_olustur
+from src.profil_utils import aile_profil_ozeti_olustur, hedef_ilaclari, hedef_profili_bul, profil_ozeti_olustur
 from src.grocery.profile import grocery_profile_facts
 from src.database import profil_getir_db
 from src.messages import PROFIL_BULUNAMADI
@@ -62,9 +62,7 @@ def _get_profil_ve_hedef(telefon: str, kimin_icin: str, db: sqlite3.Connection):
     if kimin_icin == "aile":
         return profil, None
 
-    hedef = profil.ana_kullanici
-    if kimin_icin != "kendim":
-        hedef = next((uye for uye in profil.aile_uyeleri if uye.ad.lower() == kimin_icin.lower()), None)
+    hedef = hedef_profili_bul(profil, kimin_icin)
 
     if hedef is None:
         raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)

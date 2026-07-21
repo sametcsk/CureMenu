@@ -143,6 +143,25 @@ def aile_profil_ozeti_olustur(profil: KullaniciProfili) -> str:
     return "\n".join(satirlar)
 
 
+def hedef_profili_bul(profil: KullaniciProfili, kimin_icin: str) -> AileUyesi | None:
+    """Resolve a profile target by stable member id while accepting legacy name values."""
+    hedef_anahtari = str(kimin_icin or "kendim").strip()
+    if hedef_anahtari == "aile":
+        return None
+    if hedef_anahtari == "kendim":
+        return profil.ana_kullanici
+
+    katlanmis_anahtar = hedef_anahtari.casefold()
+    return next(
+        (
+            uye
+            for uye in profil.aile_uyeleri
+            if uye.id == hedef_anahtari or uye.ad.casefold() == katlanmis_anahtar
+        ),
+        None,
+    )
+
+
 def hedef_ilaclari(profil: KullaniciProfili, kimin_icin: str) -> list[str]:
     """Seçilen hedef için ilaç listesini döndürür (aile modunda birleşik)."""
     if kimin_icin == "aile":
@@ -151,12 +170,7 @@ def hedef_ilaclari(profil: KullaniciProfili, kimin_icin: str) -> list[str]:
             ilaclar.extend(getattr(uye, "ilaclar", []) or [])
         return ilaclar
 
-    hedef = profil.ana_kullanici
-    if kimin_icin != "kendim":
-        hedef = next(
-            (u for u in profil.aile_uyeleri if u.ad.lower() == kimin_icin.lower()),
-            hedef,
-        )
+    hedef = hedef_profili_bul(profil, kimin_icin)
     if hedef is None:
         return []
     return getattr(hedef, "ilaclar", []) or []

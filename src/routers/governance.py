@@ -52,7 +52,8 @@ async def get_history(
     formatted_logs = []
     for log in log_kayitlari:
         formatted_logs.append({
-            "id": log["kullanici_adi"], # Aslında ID değil ama frontend bu keyi kullanmayabilir
+            "id": log["id"],
+            "kullanici_adi": log["kullanici_adi"],
             "tarih": log["tarih"],
             "eylem": log["sayfa"],
             "kullanici_girdisi": log["istek"],

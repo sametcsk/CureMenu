@@ -305,7 +305,7 @@ def loglari_getir_db(telefon: str, limit: int = 10, offset: int = 0, conn: sqlit
     with get_connection(conn) as _conn:
         cursor = _conn.cursor()
         cursor.execute("""
-            SELECT kullanici_adi, sayfa, istek, cevap, metadata, tarih
+            SELECT id, kullanici_adi, sayfa, istek, cevap, metadata, tarih
             FROM interaction_logs
             WHERE telefon = ?
             ORDER BY id DESC

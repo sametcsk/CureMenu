@@ -13,7 +13,7 @@ from src.nodes import haftalik_plan_olustur, mutfak_asistani
 from src.scanner import ImageValidationError, scrape_menu_from_url, extract_text_from_image_base64, extract_ingredients_from_image_base64
 from src.menu_agent import menu_danismani
 from src.economist_agent import alisveris_ve_butce_hesapla
-from src.profil_utils import profil_ozeti_olustur, aile_profil_ozeti_olustur, hedef_ilaclari
+from src.profil_utils import aile_profil_ozeti_olustur, hedef_ilaclari, hedef_profili_bul, profil_ozeti_olustur
 from src.memory import build_memory_namespace, hafizadakini_getir, geri_bildirim_ekle
 from src.llm import invoke_with_model_fallback, parse_llm_response
 import fitz
@@ -287,14 +287,35 @@ def _get_profil_ve_hedef(telefon: str, kimin_icin: str, db: sqlite3.Connection):
     if kimin_icin == "aile":
         return profil, None
 
-    hedef = profil.ana_kullanici
-    if kimin_icin != "kendim":
-        hedef = next((uye for uye in profil.aile_uyeleri if uye.ad.lower() == kimin_icin.lower()), None)
+    hedef = hedef_profili_bul(profil, kimin_icin)
 
     if hedef is None:
         raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
 
     return profil, hedef
+
+
+def _history_target_context(profil, kimin_icin: str) -> tuple[str, dict]:
+    """Return a stable, user-visible target identity for persisted interaction logs."""
+    if kimin_icin == "aile":
+        return "Tüm Aile", {
+            "target_key": "aile",
+            "target_id": "family",
+            "target_name": "Tüm Aile",
+            "target_scope": "family",
+        }
+
+    hedef = hedef_profili_bul(profil, kimin_icin)
+    if hedef is None:
+        raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
+    is_self = kimin_icin == "kendim"
+    return hedef.ad, {
+        "target_key": "kendim" if is_self else hedef.id,
+        "target_id": hedef.id,
+        "target_name": hedef.ad,
+        "target_scope": "self" if is_self else "member",
+    }
+
 
 def _profil_baglamini_hazirla(telefon: str, kimin_icin: str, db: sqlite3.Connection):
     profil, hedef = _get_profil_ve_hedef(telefon, kimin_icin, db=db)
@@ -497,6 +518,7 @@ async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks:
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
 async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
     profil, profil_ozeti, _ = _profil_baglamini_hazirla(telefon, req.kimin_icin, db=db)
+    hedef_adi, history_metadata = _history_target_context(profil, req.kimin_icin)
     
     try:
         malzemeler = await run_in_threadpool(extract_ingredients_from_image_base64, req.image_base64)
@@ -527,7 +549,15 @@ async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: Backgr
         
         decision_record = build_decision_record(state, telefon=telefon, kimin_icin=req.kimin_icin, final_answer=tarif)
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, "", "Buzdolabı", malzemeler[:100], tarif, None)
+        etkilesim_logla(
+            telefon,
+            hedef_adi,
+            "Buzdolabı",
+            malzemeler[:100],
+            tarif,
+            json.dumps(history_metadata, ensure_ascii=False),
+            conn=db,
+        )
         
         return {"success": True, "malzemeler": malzemeler, "tarif": tarif}
     except ImageValidationError:
@@ -550,12 +580,11 @@ async def upload_health_record(
     db: sqlite3.Connection = Depends(get_db)
 ):
     profil, hedef = _get_profil_ve_hedef(telefon, kimin_icin, db=db)
+    hedef_adi, history_metadata = _history_target_context(profil, kimin_icin)
     if kimin_icin == "aile":
         kullanici_id = build_memory_namespace(telefon, "family")
-        ad_soyad = profil.ana_kullanici.ad if profil.ana_kullanici else ""
     else:
         kullanici_id = build_memory_namespace(telefon, f"member:{hedef.id}")
-        ad_soyad = hedef.ad
     
     try:
         filename = (file.filename or "").lower()
@@ -578,7 +607,7 @@ async def upload_health_record(
         ozet = parse_llm_response(cevap)
         
         import re, json
-        metadata_json = None
+        metadata_payload = dict(history_metadata)
         
         # Locate potential JSON blocks / Olası JSON bloklarını tespit et
         json_start_match = re.search(r'```json\s*\{|\{\s*"biomarkers"', ozet)
@@ -604,12 +633,20 @@ async def upload_health_record(
                     clean_json_text = '{' + clean_json_text
                     
                 parsed_json = json.loads(clean_json_text)
-                metadata_json = json.dumps(parsed_json, ensure_ascii=False)
+                metadata_payload.update(parsed_json)
             except Exception:
                 pass
         
         geri_bildirim_ekle(kullanici_id, f"{file.filename} Özeti: {ozet}")
-        bg_tasks.add_task(etkilesim_logla, telefon, ad_soyad, "Tahlil", file.filename, ozet, metadata_json)
+        etkilesim_logla(
+            telefon,
+            hedef_adi,
+            "Tahlil",
+            file.filename,
+            ozet,
+            json.dumps(metadata_payload, ensure_ascii=False),
+            conn=db,
+        )
         
         return {"success": True, "ozet": ozet}
     except PdfValidationError as exc:

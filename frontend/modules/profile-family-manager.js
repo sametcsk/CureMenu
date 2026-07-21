@@ -198,11 +198,14 @@ async function completeOnboarding() {
     }
 }
 
+const TARGET_STORAGE_PREFIX = 'cm_target_';
+
 function populateTargetSelect(selectId, familyMembers) {
     const select = document.getElementById(selectId);
     if (!select) return;
 
-    const previousValue = select.value;
+    const storageKey = `${TARGET_STORAGE_PREFIX}${selectId}`;
+    const previousValue = select.value || localStorage.getItem(storageKey) || 'kendim';
     const addOption = (value, label) => {
         const option = document.createElement('option');
         option.value = value;
@@ -214,12 +217,28 @@ function populateTargetSelect(selectId, familyMembers) {
     addOption('kendim', 'Kendim İçin');
     familyMembers.forEach(member => {
         const name = String(member?.ad || '').trim();
-        if (name) addOption(name, `${name} İçin`);
+        const memberId = String(member?.id || '').trim();
+        if (name && memberId) addOption(memberId, `${name} İçin`);
     });
     if (familyMembers.length > 0) addOption('aile', 'Tüm Aile İçin');
 
-    if (Array.from(select.options).some(option => option.value === previousValue)) {
-        select.value = previousValue;
+    let resolvedValue = previousValue;
+    if (!Array.from(select.options).some(option => option.value === resolvedValue)) {
+        const legacyMember = familyMembers.find(member => String(member?.ad || '').trim() === resolvedValue);
+        resolvedValue = String(legacyMember?.id || 'kendim');
+    }
+    select.value = Array.from(select.options).some(option => option.value === resolvedValue)
+        ? resolvedValue
+        : 'kendim';
+    localStorage.setItem(storageKey, select.value);
+
+    if (select.dataset.targetPersistenceBound !== 'true') {
+        select.addEventListener('change', () => {
+            localStorage.setItem(storageKey, select.value);
+            if (selectId === 'tahlilTarget') window.loadLabHistory?.();
+            if (selectId === 'fridgeTarget') window.loadFridgeHistory?.();
+        });
+        select.dataset.targetPersistenceBound = 'true';
     }
 }
 

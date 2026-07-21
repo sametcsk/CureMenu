@@ -252,6 +252,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
   <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">Buzdolabı</h2><p class="mt-2 text-on-surface-variant">Evdeki malzemeleri yükle, profil bilgilerine uygun tarif fikri al.</p></div>
   <section class="card p-5"><select id="fridgeTarget" class="w-full rounded-lg border-outline-variant bg-surface-container-low px-4 py-3"></select><label class="mt-4 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-primary/30 bg-primary-container/30 px-6 py-10 text-center text-primary transition hover:bg-primary-container"><span class="material-symbols-outlined text-5xl">add_a_photo</span><span class="font-bold">Fotoğraf yükle</span><input type="file" id="fridgeImageInput" accept="image/*" class="hidden" onchange="window.MenuScanner.handleFridgeImage(event)"/></label></section>
   <div id="fridgeScanResult" class="mt-6"></div>
+  <section class="card mt-6 p-5"><h3 class="font-display text-2xl font-bold">Son buzdolabı analizleri</h3><div id="fridgeHistoryList" class="mt-4 space-y-3"></div></section>
 </div>
 
 <div id="tab-governance" class="tab-content">
@@ -361,11 +362,11 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 <script src="/static/modules/smart-grocery.js?v=12"></script>
 <script src="/static/modules/weekly-actions.js"></script>
 <script src="/static/modules/profile-goals.js?v=12"></script>
-<script src="/static/modules/profile-family-manager.js?v=12"></script>
-<script src="/static/modules/menu-scanner.js"></script>
-<script src="/static/modules/lab-upload.js"></script>
+<script src="/static/modules/profile-family-manager.js?v=13"></script>
+<script src="/static/modules/menu-scanner.js?v=13"></script>
+<script src="/static/modules/lab-upload.js?v=13"></script>
 <script src="/static/modules/governance-dashboard.js"></script>
-<script src="/static/app.js?v=11"></script>
+<script src="/static/app.js?v=13"></script>
 <script>
 function toggleSidebar() {
     document.body.classList.toggle('is-collapsed');
