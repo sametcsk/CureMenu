@@ -1,0 +1,11 @@
+# Suggested commands (Windows PowerShell)
+- Create/activate environment: `python -m venv .venv`; `.\.venv\Scripts\Activate.ps1`.
+- Install: `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`.
+- Run locally: `.\.venv\Scripts\python.exe run.py` (http://localhost:8000).
+- Unit/integration: `.\.venv\Scripts\python.exe -m pytest -q --ignore=tests\e2e`.
+- E2E: `.\.venv\Scripts\python.exe -m pytest -q tests\e2e`.
+- Full suite: `.\.venv\Scripts\python.exe -m pytest -q`.
+- Migration status: `.\.venv\Scripts\alembic.exe current`.
+- Source safety: `.\.venv\Scripts\python.exe scripts\check_package_safety.py --source-root .`.
+- Evidence integrity: `.\.venv\Scripts\python.exe scripts\sync_clinical_evidence.py --check-only`.
+- Prefer PowerShell `Get-ChildItem`, `Get-Content`, and `Select-String` on Windows; `rg` is available for fast search.
