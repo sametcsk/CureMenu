@@ -162,7 +162,7 @@ safetensors==0.8.0
 scikit-learn==1.9.0
 scipy==1.17.1; python_version < "3.12"
 scipy==1.18.0; python_version >= "3.12"
-sentence-transformers==5.6.0
+sentence-transformers==5.6.1
 setuptools==81.0.0
 shellingham==1.5.4
 simpleeval==1.0.7
