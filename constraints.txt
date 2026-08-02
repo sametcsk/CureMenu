@@ -99,7 +99,7 @@ narwhals==2.22.1
 nemoguardrails==0.23.0
 nest-asyncio==1.6.0
 networkx==3.6.1
-numpy==2.4.6
+numpy==2.2.6
 oauthlib==3.3.1
 onnxruntime==1.27.0
 opencv-python==4.13.0.92
