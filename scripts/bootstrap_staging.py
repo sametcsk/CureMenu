@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import chromadb
+from chromadb.errors import NotFoundError
 
 from scripts.sync_clinical_evidence import sync_evidence
 from src.config import settings
@@ -29,7 +30,7 @@ def _official_evidence_is_ready() -> bool:
         client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
         collection = client.get_collection(settings.CLINICAL_OFFICIAL_RAG_COLLECTION)
         return int(collection.count()) > 0
-    except (ValueError, OSError):
+    except (NotFoundError, ValueError, OSError):
         return False
 
 

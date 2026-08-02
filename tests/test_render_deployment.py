@@ -19,7 +19,7 @@ def test_render_blueprint_uses_persistent_single_instance_staging():
     assert service["autoDeployTrigger"] == "off"
     assert service["disk"]["mountPath"] == "/var/data"
     assert service["healthCheckPath"] == "/live"
-    assert "bootstrap_staging.py" in service["startCommand"]
+    assert "python -m scripts.bootstrap_staging" in service["startCommand"]
     assert env["APP_ENV"]["value"] == "staging"
     assert env["CUREMENU_DB_PATH"]["value"].startswith("/var/data/")
     assert env["CHROMA_PERSIST_DIR"]["value"].startswith("/var/data/")
@@ -41,6 +41,20 @@ def test_staging_bootstrap_skips_evidence_rebuild_when_collection_exists(monkeyp
     )
     assert bootstrap_staging.main() == 0
     assert calls == ["migration"]
+
+
+def test_missing_evidence_collection_is_not_ready(monkeypatch):
+    class MissingCollectionClient:
+        def get_collection(self, _name):
+            raise bootstrap_staging.NotFoundError("missing")
+
+    monkeypatch.setattr(
+        bootstrap_staging.chromadb,
+        "PersistentClient",
+        lambda **_kwargs: MissingCollectionClient(),
+    )
+
+    assert bootstrap_staging._official_evidence_is_ready() is False
 
 
 def test_staging_bootstrap_fails_closed_when_evidence_sync_fails(monkeypatch):
