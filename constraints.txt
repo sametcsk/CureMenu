@@ -7,7 +7,7 @@ aiohttp==3.14.1
 aiohttp-retry==2.9.1
 aiosignal==1.4.0
 alembic==1.18.5
-altair==6.2.1
+altair==6.2.2
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.14.0
