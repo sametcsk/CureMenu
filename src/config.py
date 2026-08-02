@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     CUREMENU_DB_PATH: str = "healmenu.db"
     CUREMENU_DB_TIMEOUT: int = 30
+    CUREMENU_INSTANCE_COUNT: int = 1
+    RATE_LIMIT_STORAGE_URI: Optional[str] = None
     DEBUG: bool = False
     ALLOWED_HOSTS: str = "localhost,127.0.0.1,testserver"
     TRUST_PROXY_HEADERS: bool = False
@@ -80,6 +82,7 @@ class Settings(BaseSettings):
 
     # Chroma / log
     CHROMA_PERSIST_DIR: str = "./chroma_db"
+    CUREMENU_RETENTION_DAYS: int = 365
     CLINICAL_RAG_COLLECTION: str = "klinik_kutuphane_v2"
     CLINICAL_OFFICIAL_RAG_COLLECTION: str = "clinical_official_evidence_v1"
     EMBEDDINGS_LOCAL_ONLY: bool = True
@@ -154,6 +157,10 @@ class Settings(BaseSettings):
         self.configure_langsmith_tracing()
         if not self.GOOGLE_API_KEY:
             raise ValueError("GOOGLE_API_KEY must be set.")
+        if self.CUREMENU_INSTANCE_COUNT < 1:
+            raise ValueError("CUREMENU_INSTANCE_COUNT must be at least 1.")
+        if self.CUREMENU_RETENTION_DAYS < 1:
+            raise ValueError("CUREMENU_RETENTION_DAYS must be at least 1.")
         if self.is_production:
             if not self.JWT_SECRET_KEY:
                 raise ValueError("JWT_SECRET_KEY must be set in production.")
@@ -171,6 +178,14 @@ class Settings(BaseSettings):
                 raise ValueError("ALLOWED_HOSTS must be configured for production hosts.")
             if self.CUREMENU_DB_PATH.strip() in {"", "healmenu.db"}:
                 raise ValueError("CUREMENU_DB_PATH must be explicit in production.")
+            if self.CUREMENU_INSTANCE_COUNT > 1:
+                if not str(self.RATE_LIMIT_STORAGE_URI or "").strip():
+                    raise ValueError(
+                        "RATE_LIMIT_STORAGE_URI is required for multi-instance production deployments."
+                    )
+                raise ValueError(
+                    "Multi-instance production is not supported while CureMenu uses SQLite."
+                )
 
     @property
     def text_model_name(self) -> str:

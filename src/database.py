@@ -501,3 +501,177 @@ def klinik_kpi_getir(telefon: str, conn: sqlite3.Connection = None) -> dict:
             events.append(event)
 
         return calculate_clinical_kpis(decisions, events)
+
+
+def account_export_db(telefon: str, conn: sqlite3.Connection = None) -> dict | None:
+    """Return one account's persisted data without password material."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        profile_row = _conn.execute(
+            """
+            SELECT telefon, kullanici_adi, profil_data, kayit_tarihi, son_guncelleme
+            FROM profiles WHERE telefon = ?
+            """,
+            (telefon,),
+        ).fetchone()
+        if not profile_row:
+            return None
+
+        profile_columns = ["telefon", "kullanici_adi", "profil_data", "kayit_tarihi", "son_guncelleme"]
+        profile = dict(zip(profile_columns, profile_row))
+        try:
+            profile["profil_data"] = json.loads(profile["profil_data"] or "{}")
+        except json.JSONDecodeError:
+            profile["profil_data"] = {}
+
+        interactions = loglari_getir_db(telefon, limit=100_000, offset=0, conn=_conn)
+        for interaction in interactions:
+            try:
+                interaction["metadata"] = json.loads(interaction.get("metadata") or "{}")
+            except json.JSONDecodeError:
+                interaction["metadata"] = {}
+
+        decision_cursor = _conn.execute(
+            """
+            SELECT decision_id, kimin_icin, istek, final_answer, final_action,
+                   risk_score, confidence_score, confidence_data, component_versions,
+                   citations, created_at, completed_at
+            FROM clinical_decisions WHERE telefon = ? ORDER BY completed_at DESC
+            """,
+            (telefon,),
+        )
+        decision_columns = [column[0] for column in decision_cursor.description]
+        decisions = [dict(zip(decision_columns, row)) for row in decision_cursor.fetchall()]
+        decision_ids = [decision["decision_id"] for decision in decisions]
+        events: list[dict] = []
+        if decision_ids:
+            placeholders = ",".join("?" for _ in decision_ids)
+            event_cursor = _conn.execute(
+                f"""
+                SELECT decision_id, sequence_no, event_type, component, status, metadata, created_at
+                FROM decision_events WHERE decision_id IN ({placeholders})
+                ORDER BY decision_id, sequence_no
+                """,
+                decision_ids,
+            )
+            event_columns = [column[0] for column in event_cursor.description]
+            events = [dict(zip(event_columns, row)) for row in event_cursor.fetchall()]
+
+        return {
+            "schema_version": "1",
+            "exported_at": datetime.now().isoformat(),
+            "profile": profile,
+            "interactions": interactions,
+            "clinical_decisions": decisions,
+            "decision_events": events,
+        }
+
+
+def account_memory_metadata_db(telefon: str, conn: sqlite3.Connection = None) -> list[dict]:
+    """Return lifecycle metadata needed to remove historical user-memory namespaces."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        rows = _conn.execute(
+            "SELECT metadata FROM interaction_logs WHERE telefon = ? AND metadata IS NOT NULL",
+            (telefon,),
+        ).fetchall()
+    result: list[dict] = []
+    for (raw_metadata,) in rows:
+        try:
+            metadata = json.loads(raw_metadata or "{}")
+        except json.JSONDecodeError:
+            continue
+        if isinstance(metadata, dict):
+            result.append(metadata)
+    return result
+
+
+def delete_account_relational_db(telefon: str, conn: sqlite3.Connection = None) -> dict[str, int]:
+    """Delete one account's relational records in a single SQLite transaction."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        try:
+            _conn.execute("BEGIN")
+            decision_ids = [
+                row[0]
+                for row in _conn.execute(
+                    "SELECT decision_id FROM clinical_decisions WHERE telefon = ?",
+                    (telefon,),
+                ).fetchall()
+            ]
+            event_count = 0
+            if decision_ids:
+                placeholders = ",".join("?" for _ in decision_ids)
+                event_count = _conn.execute(
+                    f"DELETE FROM decision_events WHERE decision_id IN ({placeholders})",
+                    decision_ids,
+                ).rowcount
+            decision_count = _conn.execute(
+                "DELETE FROM clinical_decisions WHERE telefon = ?", (telefon,)
+            ).rowcount
+            interaction_count = _conn.execute(
+                "DELETE FROM interaction_logs WHERE telefon = ?", (telefon,)
+            ).rowcount
+            profile_count = _conn.execute(
+                "DELETE FROM profiles WHERE telefon = ?", (telefon,)
+            ).rowcount
+            _conn.commit()
+        except Exception:
+            _conn.rollback()
+            raise
+    return {
+        "profiles": profile_count,
+        "interactions": interaction_count,
+        "clinical_decisions": decision_count,
+        "decision_events": event_count,
+    }
+
+
+def retention_summary_db(
+    cutoff_iso: str,
+    *,
+    apply: bool = False,
+    conn: sqlite3.Connection = None,
+) -> dict[str, int]:
+    """Count or delete expired interaction and decision records without touching profiles."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        interaction_count = _conn.execute(
+            "SELECT COUNT(*) FROM interaction_logs WHERE tarih < ?", (cutoff_iso,)
+        ).fetchone()[0]
+        decision_ids = [
+            row[0]
+            for row in _conn.execute(
+                "SELECT decision_id FROM clinical_decisions WHERE completed_at < ?",
+                (cutoff_iso,),
+            ).fetchall()
+        ]
+        event_count = 0
+        if decision_ids:
+            placeholders = ",".join("?" for _ in decision_ids)
+            event_count = _conn.execute(
+                f"SELECT COUNT(*) FROM decision_events WHERE decision_id IN ({placeholders})",
+                decision_ids,
+            ).fetchone()[0]
+        if apply:
+            try:
+                _conn.execute("BEGIN")
+                if decision_ids:
+                    placeholders = ",".join("?" for _ in decision_ids)
+                    _conn.execute(
+                        f"DELETE FROM decision_events WHERE decision_id IN ({placeholders})",
+                        decision_ids,
+                    )
+                _conn.execute(
+                    "DELETE FROM clinical_decisions WHERE completed_at < ?", (cutoff_iso,)
+                )
+                _conn.execute("DELETE FROM interaction_logs WHERE tarih < ?", (cutoff_iso,))
+                _conn.commit()
+            except Exception:
+                _conn.rollback()
+                raise
+    return {
+        "interactions": interaction_count,
+        "clinical_decisions": len(decision_ids),
+        "decision_events": event_count,
+    }

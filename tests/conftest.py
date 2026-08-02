@@ -1,6 +1,13 @@
 import pytest
 
 
+def pytest_configure():
+    """Keep password-flow tests fast without weakening runtime defaults."""
+    import src.routers.auth as auth
+
+    auth.PASSWORD_HASH_ITERATIONS = auth.LEGACY_PASSWORD_HASH_ITERATIONS
+
+
 @pytest.fixture()
 def test_db_path(tmp_path, monkeypatch):
     db_file = tmp_path / "test_healmenu.db"

@@ -2,7 +2,12 @@ import json
 import pytest
 
 from src.models import AileUyesi, Cinsiyet
-from src.memory import build_memory_namespace, geri_bildirim_ekle, hafizadakini_getir
+from src.memory import (
+    build_account_memory_key,
+    build_memory_namespace,
+    geri_bildirim_ekle,
+    hafizadakini_getir,
+)
 
 
 class FakeDocument:
@@ -98,3 +103,16 @@ def test_chroma_persistence_redacts_text_and_nested_metadata(monkeypatch):
     assert "[REDACTED_EMAIL]" in stored_text
     assert "[REDACTED_IBAN]" in stored_text
     assert "[REDACTED_SECRET]" in stored_metadata["context_json"]
+
+
+def test_chroma_user_memory_has_opaque_account_lifecycle_key(monkeypatch):
+    fake_db = FakeVectorDB()
+    monkeypatch.setattr("src.memory._get_vector_db", lambda: fake_db)
+    account_id = "05551112233"
+    namespace = build_memory_namespace(account_id, "member:member-a")
+
+    geri_bildirim_ekle(namespace, "guvenli tercih", account_id=account_id)
+
+    _, metadata = fake_db.rows[0]
+    assert metadata["account_key"] == build_account_memory_key(account_id)
+    assert account_id not in metadata["account_key"]

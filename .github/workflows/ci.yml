@@ -22,7 +22,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Bağımlılıkları yükle
-        run: pip install -r requirements-dev.txt
+        run: pip install -c constraints.txt -r requirements-dev.txt
 
       - name: Playwright Chromium'u kur
         run: python -m playwright install --with-deps chromium

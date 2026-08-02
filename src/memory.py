@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import os
 import re
+import time
 from typing import Any
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -24,6 +25,7 @@ MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 CHROMA_DIR = settings.CHROMA_PERSIST_DIR
 MEMORY_NAMESPACE_VERSION = "v1"
 MEMORY_NAMESPACE_RE = re.compile(r"^memory_v1_[0-9a-f]{64}$")
+ACCOUNT_MEMORY_KEY_RE = re.compile(r"^account_v1_[0-9a-f]{64}$")
 
 
 def build_memory_namespace(account_id: str, subject_id: str) -> str:
@@ -40,6 +42,19 @@ def build_memory_namespace(account_id: str, subject_id: str) -> str:
         hashlib.sha256,
     ).hexdigest()
     return f"memory_{MEMORY_NAMESPACE_VERSION}_{digest}"
+
+
+def build_account_memory_key(account_id: str) -> str:
+    """Return a stable opaque key used only for account-scoped memory lifecycle operations."""
+    account = (account_id or "").strip()
+    if not account:
+        raise ValueError("account_id is required")
+    digest = hmac.new(
+        settings.jwt_secret_key.encode("utf-8"),
+        f"{MEMORY_NAMESPACE_VERSION}|account:{account}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"account_{MEMORY_NAMESPACE_VERSION}_{digest}"
 
 
 def _is_memory_namespace(value: str) -> bool:
@@ -68,12 +83,23 @@ def _get_vector_db() -> Chroma:
     )
     return _vector_db
 
-def geri_bildirim_ekle(kullanici_id: str, mesaj: str, metadata: dict[str, Any] | None = None):
+def geri_bildirim_ekle(
+    kullanici_id: str,
+    mesaj: str,
+    metadata: dict[str, Any] | None = None,
+    *,
+    account_id: str | None = None,
+):
     if not _is_memory_namespace(kullanici_id):
         raise ValueError("opaque memory namespace is required")
     try:
         vector_db = _get_vector_db()
-        safe_metadata = {"kullanici_id": kullanici_id}
+        safe_metadata = {
+            "kullanici_id": kullanici_id,
+            "created_at_epoch": int(time.time()),
+        }
+        if account_id:
+            safe_metadata["account_key"] = build_account_memory_key(account_id)
         if metadata:
             safe_metadata["context_json"] = dumps_redacted_json(metadata)
         vector_db.add_texts(
@@ -83,6 +109,48 @@ def geri_bildirim_ekle(kullanici_id: str, mesaj: str, metadata: dict[str, Any] |
         logger.info("Hafızaya eklendi")
     except RuntimeError as e:
         log_failure(logger, "memory_write", e, component="memory")
+
+
+def delete_account_memory(account_id: str, namespaces: set[str] | None = None) -> int:
+    """Delete only user-memory records owned by one account; clinical collections are untouched."""
+    import chromadb
+
+    account_key = build_account_memory_key(account_id)
+    client = chromadb.PersistentClient(path=CHROMA_DIR)
+    collection_names = {
+        getattr(collection, "name", str(collection))
+        for collection in client.list_collections()
+    }
+    if "kullanici_hafizasi" not in collection_names:
+        return 0
+
+    collection = client.get_collection("kullanici_hafizasi")
+    before = collection.count()
+    collection.delete(where={"account_key": account_key})
+    for namespace in namespaces or set():
+        if _is_memory_namespace(namespace):
+            collection.delete(where={"kullanici_id": namespace})
+    return max(0, before - collection.count())
+
+
+def delete_expired_user_memory(cutoff_epoch: int, *, apply: bool = False) -> int:
+    """Count or delete timestamped user-memory records older than the retention cutoff."""
+    import chromadb
+
+    client = chromadb.PersistentClient(path=CHROMA_DIR)
+    collection_names = {
+        getattr(collection, "name", str(collection))
+        for collection in client.list_collections()
+    }
+    if "kullanici_hafizasi" not in collection_names:
+        return 0
+    collection = client.get_collection("kullanici_hafizasi")
+    where = {"created_at_epoch": {"$lt": int(cutoff_epoch)}}
+    matches = collection.get(where=where, include=["metadatas"])
+    count = len(matches.get("ids") or [])
+    if apply and count:
+        collection.delete(where=where)
+    return count
 
 def hafizadakini_getir(kullanici_id: str, mesaj: str, k_adet: int = 3) -> list[str]:
     if not _is_memory_namespace(kullanici_id):

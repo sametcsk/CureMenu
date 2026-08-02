@@ -101,6 +101,8 @@ def _set_safe_production_config(monkeypatch):
     monkeypatch.setattr(settings, "DEBUG", False)
     monkeypatch.setattr(settings, "ALLOWED_HOSTS", "app.example")
     monkeypatch.setattr(settings, "CUREMENU_DB_PATH", "C:/data/curemenu.db")
+    monkeypatch.setattr(settings, "CUREMENU_INSTANCE_COUNT", 1)
+    monkeypatch.setattr(settings, "RATE_LIMIT_STORAGE_URI", None)
 
 
 def test_production_config_accepts_explicit_safe_values(monkeypatch):
@@ -125,6 +127,30 @@ def test_production_config_rejects_unsafe_values(monkeypatch, field, value, erro
     monkeypatch.setattr(settings, field, value)
 
     with pytest.raises(ValueError, match=error_match):
+        settings.validate_startup_security()
+
+
+def test_multi_instance_production_requires_shared_rate_limit_storage(monkeypatch):
+    _set_safe_production_config(monkeypatch)
+    monkeypatch.setattr(settings, "CUREMENU_INSTANCE_COUNT", 2)
+
+    with pytest.raises(ValueError, match="RATE_LIMIT_STORAGE_URI"):
+        settings.validate_startup_security()
+
+
+def test_multi_instance_production_rejects_sqlite_even_with_shared_rate_limit_storage(monkeypatch):
+    _set_safe_production_config(monkeypatch)
+    monkeypatch.setattr(settings, "CUREMENU_INSTANCE_COUNT", 2)
+    monkeypatch.setattr(settings, "RATE_LIMIT_STORAGE_URI", "redis://rate-limit.internal:6379/0")
+
+    with pytest.raises(ValueError, match="SQLite"):
+        settings.validate_startup_security()
+
+
+def test_invalid_retention_period_is_rejected(monkeypatch):
+    monkeypatch.setattr(settings, "CUREMENU_RETENTION_DAYS", 0)
+
+    with pytest.raises(ValueError, match="CUREMENU_RETENTION_DAYS"):
         settings.validate_startup_security()
 
 

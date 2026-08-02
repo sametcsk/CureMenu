@@ -1,10 +1,22 @@
 import sqlite3
+import hashlib
 
 import pytest
 from fastapi.testclient import TestClient
 
 from src.config import settings
 from src.database import refresh_token_jti_is_revoked_db
+from src.database import sifre_hash_getir, sifre_hash_kaydet
+from src.routers.auth import (
+    DEFAULT_PASSWORD_HASH_ITERATIONS,
+    PASSWORD_HASH_ITERATIONS,
+    hash_password,
+    verify_password,
+)
+
+
+def test_runtime_password_hash_default_is_hardened():
+    assert DEFAULT_PASSWORD_HASH_ITERATIONS == 600_000
 
 
 def _register(client, telefon="5557000001", password="123456"):
@@ -34,6 +46,31 @@ def test_successful_login_cookie_security_contract(client):
     assert "HttpOnly" in cookie_header
     assert "SameSite=lax" in cookie_header
     assert "Secure" in cookie_header
+
+
+def test_password_hash_is_versioned_and_wrong_password_is_rejected():
+    password_hash = hash_password("123456")
+
+    assert password_hash.startswith(f"pbkdf2_sha256${PASSWORD_HASH_ITERATIONS}$")
+    assert verify_password("123456", password_hash) is True
+    assert verify_password("wrong-password", password_hash) is False
+
+
+def test_legacy_password_hash_is_upgraded_after_successful_login(client):
+    telefon = "5557000005"
+    _register(client, telefon=telefon)
+    salt = "legacy-test-salt"
+    legacy_key = hashlib.pbkdf2_hmac(
+        "sha256", b"123456", salt.encode("utf-8"), 100_000
+    ).hex()
+    sifre_hash_kaydet(telefon, f"{salt}${legacy_key}")
+
+    response = client.post("/api/login", json={"telefon": telefon, "sifre": "123456"})
+
+    assert response.status_code == 200
+    upgraded_hash = sifre_hash_getir(telefon)
+    assert upgraded_hash.startswith(f"pbkdf2_sha256${PASSWORD_HASH_ITERATIONS}$")
+    assert verify_password("123456", upgraded_hash) is True
 
 
 def test_login_rate_limit_returns_429(client):

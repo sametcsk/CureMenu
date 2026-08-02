@@ -13,7 +13,7 @@ Gerçek kullanıcı daveti gönderilmeden önce aşağıdaki release kapıları 
 1. Gerçek HTTPS staging ortamı kurulmalı; secure cookie, trusted host, CORS,
    reverse proxy body limitleri ve timeout değerleri doğrulanmalıdır.
 2. Fiziksel telefonda kamera/QR, dosya seçici ve mobil klavye smoke testi yapılmalıdır.
-3. Hosted deployment runbook, backup/rollback ve secret yönetimi yazılmalıdır.
+3. Hosted ortam seçildikten sonra runbook'lardaki deployment, backup/rollback ve secret yönetimi gerçek altyapıda prova edilmelidir.
 4. Klinik uzmanla sınırlı pilot planı ve klinik doğrulama yöntemi tamamlanmalıdır.
 5. Temiz ortam dependency provası ve `pip-audit` tamamlandı. Sonuçlar
    [`docs/DEPENDENCY_SECURITY.md`](docs/DEPENDENCY_SECURITY.md) içinde kayıtlıdır;
@@ -23,7 +23,8 @@ Gerçek kullanıcı daveti gönderilmeden önce aşağıdaki release kapıları 
 
 Not: Rate limiter süreç belleği (in-memory) tabanlıdır. Kapalı beta tek worker /
 tek instance ile çalıştırılmalıdır; çoklu worker veya çoklu instance'a geçmeden
-önce ortak bir rate-limit deposu (ör. Redis) zorunludur. Yerel demo için blocker
+önce PostgreSQL ve ortak bir rate-limit deposu (ör. Redis) zorunludur; SQLite ile
+çoklu instance başlangıcı fail-fast reddedilir. Yerel demo için blocker
 değildir.
 
 Eski `.env` içeren dört ZIP silinmeden `security_quarantine/` altına taşınmış ve Git
@@ -40,10 +41,10 @@ operasyon riskidir; eski ZIP'ler daha önce paylaşılmışsa rotasyon tamamlanm
 | Upload, PDF, URL ve görsel güvenliği | Hazır | PDF byte/sayfa/metin/süre limitleri, şifreli ve bozuk PDF reddi; SSRF, redirect/private IP ve response limitleri; görsel base64, magic byte, format, byte ve piksel kontrolleri mevcut. | Reverse proxy body limiti ve timeout uygulama limitleriyle uyumlu ayarlanmalıdır. Gerçek cihaz/dosya smoke testi yapılmalıdır. |
 | RAG, evidence ve klinik iddia sınırı | Şartlı hazır | Sağlık iddialarında registry kapsamındaki resmi/onaylı kaynaklar önceliklidir. Approved evidence yoksa kesin öneri yerine belirsizlik ve uzman yönlendirmesi kullanılır. Pending review durumu klinik doğrulama gibi gösterilmez. | Registry kaynaklarının uzman değerlendirmesi halen `pending`. Klinik doğruluk iddiası ancak uzman pilotu ve tanımlı validasyon sürecinden sonra kullanılabilir. |
 | Runtime log privacy | Hazır | Model yanıtı, prompt, sağlık profili, ilaç/alerji/tahlil içeriği ve kişisel tanımlayıcıların ham loglanması engellendi. Başarı ve hata yolları sentetik marker'larla test edildi. | Hosted log erişimi, retention ve silme prosedürü tanımlanmalıdır. |
-| Production readiness | Şartlı hazır | Security header'ları, trusted hosts, production fail-fast ayarları, `/live` ve `/ready` kontrolleri var. Gerçek yerel DB `20260715_0002 (head)` revision'ına taşındı; `/ready` içinde `migration_current=true` doğrulandı. | HTTPS/proxy, backup/rollback, hosted deployment runbook ve deployment secret yönetimi doğrulanmalıdır. SQLite yalnızca sınırlı beta yükü için değerlendirilmelidir. Harici CDN bağımlılıkları çevrimdışı kullanım riski taşır. |
+| Production readiness | Şartlı hazır | Security header'ları, trusted hosts, production fail-fast ayarları, `/live` ve `/ready` kontrolleri var. Constraints tabanlı kurulum, tek/çoklu instance rate-limit kontrolü ve deployment/data lifecycle/backup/secret runbook'ları eklendi. Gerçek yerel DB `20260715_0002 (head)` revision'ına taşındı. | HTTPS/proxy ve runbook'lar gerçek hosted ortamda doğrulanmalıdır. SQLite yalnız sınırlı tek-instance beta içindir. Harici CDN bağımlılıkları çevrimdışı kullanım riski taşır. |
 | Observability ve tracing privacy | Hazır | LangSmith development ortamında yalnızca açık opt-in ile çalışır; input, output ve metadata trace payload'ları zorunlu olarak gizlenir. Production, staging ve kapalı beta ortamlarında tracing isteği fail-fast ile reddedilir. | Gerçek kullanıcı verisiyle LangSmith tracing açılmamalıdır. Tanısal inceleme yalnızca sentetik veriyle development ortamında yapılmalıdır. |
 | Playwright E2E ve mobil | Hazır | Gerçek Edge tarayıcısında auth, profil, weekly plan/actions, Smart Grocery, CureBot SSE/governance, PDF, menü, buzdolabı, Geçmiş ve hata durumları test ediliyor. `360x800`, `390x844`, `412x915` ve `768x1024` görsel/overflow doğrulaması geçti; sonuç `MOBILE DEMO READY`. | Fiziksel QR/kamera izni ve gerçek telefon dosya seçici/klavye kontrolü HTTPS staging smoke kapsamında kalır. |
-| Otomatik test paketi | Hazır | `270 passed, 1 warning`; Playwright paketi `5 passed`; `app.js` ve tüm frontend modülleri parse kontrolünden geçti; package/source scanner sonucu `SOURCE_SAFE`. Temiz dependency provası ve audit sonucu [`docs/DEPENDENCY_SECURITY.md`](docs/DEPENDENCY_SECURITY.md) içinde belgelenmiştir. | Starlette/httpx deprecation uyarısı, ChromaDB advisory takibi ve dependency constraints/lock yaklaşımı planlı bakımda ele alınmalıdır. |
+| Otomatik test paketi | Hazır | `310 passed, 1 warning`; Playwright paketi `22 passed`; `app.js` ve tüm frontend modülleri parse kontrolünden geçti; package/source scanner sonucu `SOURCE_SAFE`. Temiz dependency provası ve audit sonucu [`docs/DEPENDENCY_SECURITY.md`](docs/DEPENDENCY_SECURITY.md) içinde belgelenmiştir. | Starlette/httpx deprecation uyarısı ve fixed version yayımlanmamış ChromaDB advisory takibi planlı bakımda ele alınmalıdır. |
 
 ## Kapalı Beta Checklist
 
@@ -83,8 +84,8 @@ operasyon riskidir; eski ZIP'ler daha önce paylaşılmışsa rotasyon tamamlanm
 
 ### Test ve Gerçek Servis Kontrolü
 
-- [x] `python -m pytest -q`: `270 passed, 1 warning`.
-- [x] `python -m pytest -q tests/e2e`: `5 passed`.
+- [x] `python -m pytest -q --ignore=tests/e2e`: `310 passed, 1 warning`.
+- [x] `python -m pytest -q tests/e2e`: `22 passed`.
 - [x] Frontend JavaScript parse kontrolleri başarılı.
 - [x] Package/source safety kontrolü `SOURCE_SAFE`.
 - [ ] Gerçek sağlayıcı staging smoke planı bir kez tamamlandı.

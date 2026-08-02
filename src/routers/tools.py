@@ -288,9 +288,9 @@ def _prepend_menu_safety_alerts(analysis: str, safety: dict) -> str:
     alert_lines = "\n".join(f"- {reason}" for reason in alerts)
     return f"### Profil İçin Zorunlu Güvenlik Uyarıları\n{alert_lines}\n\n{analysis}"
 
-def _geri_bildirimi_hafizaya_ekle(kullanici_id: str, mesaj: str) -> None:
+def _geri_bildirimi_hafizaya_ekle(account_id: str, kullanici_id: str, mesaj: str) -> None:
     try:
-        geri_bildirim_ekle(kullanici_id, mesaj)
+        geri_bildirim_ekle(kullanici_id, mesaj, account_id=account_id)
     except Exception as exc:
         # Vector memory is supplementary; the persisted interaction log remains canonical.
         log_failure(logger, "feedback_memory_write", exc, component="tools")
@@ -309,7 +309,7 @@ async def feedback(
         raise HTTPException(status_code=400, detail="Geri bildirim icin gecerli bir profil secin.")
 
     mesaj = f"Bu yemek tercih edilmedi: {req.yemek_adi}"
-    bg_tasks.add_task(_geri_bildirimi_hafizaya_ekle, snapshot.memory_namespace, mesaj)
+    bg_tasks.add_task(_geri_bildirimi_hafizaya_ekle, telefon, snapshot.memory_namespace, mesaj)
     bg_tasks.add_task(
         etkilesim_logla,
         telefon,
@@ -639,7 +639,11 @@ async def upload_health_record(
             except Exception:
                 pass
         
-        geri_bildirim_ekle(snapshot.memory_namespace, f"{file.filename} Özeti: {ozet}")
+        geri_bildirim_ekle(
+            snapshot.memory_namespace,
+            f"{file.filename} Özeti: {ozet}",
+            account_id=telefon,
+        )
         etkilesim_logla(
             telefon,
             snapshot.target_name,

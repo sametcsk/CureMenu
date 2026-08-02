@@ -71,6 +71,11 @@ class RegisterRequest(BaseModel):
     kullanici_adi: str = Field(..., min_length=2, max_length=40, pattern=r"^[A-Za-zÇçĞğİıÖöŞşÜü\s]+$", description="Kullanıcı adı sadece harflerden oluşmalı ve çok uzun olmamalıdır.")
     sifre: str = Field(..., min_length=6, description="Kullanıcı şifresi")
 
+
+class AccountDeletionRequest(BaseModel):
+    sifre: str = Field(..., min_length=6, max_length=256)
+    confirmation: Literal["DELETE"]
+
 class ProfilKaydetRequest(BaseModel):
     kullanici_adi: str = Field(..., min_length=2, max_length=40, pattern=r"^[A-Za-zÇçĞğİıÖöŞşÜü\s]+$")
     ad: str = Field(..., min_length=2, max_length=40, pattern=r"^[A-Za-zÇçĞğİıÖöŞşÜü\s]+$")

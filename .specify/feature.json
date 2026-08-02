@@ -1,6 +1,6 @@
 {
-  "feature_number": "001",
-  "slug": "structured-meal-contract",
-  "spec_path": "specs/001-structured-meal-contract/spec.md",
-  "status": "implemented"
+  "feature_number": "002",
+  "slug": "beta-production-hardening",
+  "spec_path": "specs/002-beta-production-hardening/spec.md",
+  "status": "complete"
 }

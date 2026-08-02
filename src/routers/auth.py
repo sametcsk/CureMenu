@@ -13,20 +13,57 @@ router = APIRouter()
 
 from src.config import settings
 
+PASSWORD_HASH_SCHEME = "pbkdf2_sha256"
+DEFAULT_PASSWORD_HASH_ITERATIONS = 600_000
+PASSWORD_HASH_ITERATIONS = DEFAULT_PASSWORD_HASH_ITERATIONS
+LEGACY_PASSWORD_HASH_ITERATIONS = 100_000
+
 def hash_password(password: str) -> str:
     salt = os.urandom(16).hex()
-    key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
-    return f"{salt}${key}"
+    key = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        PASSWORD_HASH_ITERATIONS,
+    ).hex()
+    return f"{PASSWORD_HASH_SCHEME}${PASSWORD_HASH_ITERATIONS}${salt}${key}"
 
 def verify_password(password: str, hashed: str) -> bool:
     if not hashed or "$" not in hashed:
         return False
     try:
-        salt, key = hashed.split("$", 1)
-    except ValueError:
+        parts = hashed.split("$")
+        if len(parts) == 4 and parts[0] == PASSWORD_HASH_SCHEME:
+            iterations = int(parts[1])
+            salt, key = parts[2], parts[3]
+        elif len(parts) == 2:
+            iterations = LEGACY_PASSWORD_HASH_ITERATIONS
+            salt, key = parts
+        else:
+            return False
+        if iterations < LEGACY_PASSWORD_HASH_ITERATIONS or iterations > 2_000_000:
+            return False
+    except (TypeError, ValueError):
         return False
-    new_key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
+    new_key = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        iterations,
+    ).hex()
     return hmac.compare_digest(key, new_key)
+
+
+def password_needs_rehash(hashed: str | None) -> bool:
+    if not hashed:
+        return True
+    parts = hashed.split("$")
+    if len(parts) != 4 or parts[0] != PASSWORD_HASH_SCHEME:
+        return True
+    try:
+        return int(parts[1]) < PASSWORD_HASH_ITERATIONS
+    except ValueError:
+        return True
 
 
 DUMMY_PASSWORD_HASH = hash_password("curemenu-dummy-password")
@@ -93,6 +130,8 @@ async def login(request: Request, response: Response, req: LoginRequest, bg_task
     password_valid = verify_password(req.sifre, stored_hash or DUMMY_PASSWORD_HASH)
     if profil is None or not password_valid:
         raise HTTPException(status_code=401, detail="Telefon veya şifre hatalı.")
+    if password_needs_rehash(stored_hash):
+        sifre_hash_kaydet(req.telefon, hash_password(req.sifre), conn=db)
     
     access_token, refresh_token = create_tokens(user_id=req.telefon)
     _set_auth_cookies(request, response, access_token, refresh_token)
