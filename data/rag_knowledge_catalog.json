@@ -1,0 +1,1192 @@
+{
+  "schema_version": "rag_knowledge_catalog:v1",
+  "source_policy_version": "rag_source_policy:v1",
+  "library_file_count": 43,
+  "usage_policy": {
+    "clinical_background": "Arka plan araştırması; hasta düzeyinde kesin klinik iddia üretemez.",
+    "product_research": "Ürün, mimari, güvenlik ve Ar-Ge kararlarını gerekçelendirir; runtime klinik kanıt değildir.",
+    "technical_reference": "Mevzuat ve birlikte çalışabilirlik yol haritasını destekler; klinik veya hukuki onay değildir.",
+    "quarantine": "OCR, kaynak kimliği veya belge ayrıştırması tamamlanana kadar indekslenmez."
+  },
+  "official_evidence": {
+    "registry": "data/clinical_evidence_registry.json",
+    "collection": "clinical_official_evidence_v1",
+    "source_count": 8,
+    "clinical_review_required": true
+  },
+  "sources": [
+    {
+      "filename": "14.pdf",
+      "sha256": "92b4a137e4d232d5921d83d5e4117d92c48b1ccf9f0f75c0d531fb2a1a1c1a99",
+      "title": "İlaç-Besin, İlaç-Alkol ve İlaç-Bitkisel Kökenli Ürün Etkileşimleri",
+      "author": null,
+      "year": null,
+      "pages": 18,
+      "document_type": "article_or_other",
+      "topics": [],
+      "authorities_mentioned": [],
+      "usage_lane": "quarantine",
+      "research_theme": "ocr_required",
+      "runtime_status": "not_indexed",
+      "clinical_claim_eligible": false,
+      "product_use": "İlaç-besin, ilaç-alkol ve bitkisel ürün etkileşimleri hakkında taranmış eğitim yazısı.",
+      "limitation": "Metin katmanı yok; kaynak kimliği ve OCR çıktısı doğrulanmadan indekslenmemeli.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": [
+        "Metin cikarimi yok denecek kadar az; OCR gerekebilir.",
+        "18 sayfada anlamli metin cikarilamadi."
+      ]
+    },
+    {
+      "filename": "20260623-168580-9qoc3l.pdf",
+      "sha256": "f1ed50f176702c907e2eb167d6606e685924dd0b997ec95096d92803cb3be3b6",
+      "title": "AI Chatbots and Health Behaviour Change Review",
+      "author": null,
+      "year": 2026,
+      "pages": 15,
+      "document_type": "systematic_review",
+      "topics": [
+        "diabetes",
+        "hypertension_cardiovascular",
+        "kidney",
+        "clinical_ai_safety",
+        "behavior_change",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [
+        "WHO"
+      ],
+      "usage_lane": "product_research",
+      "research_theme": "behavior_change",
+      "runtime_status": "research_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Sağlık sohbet botlarında davranış değişikliği, değerlendirme ve kullanıcı desteği tasarımı.",
+      "limitation": "Ürün ve Ar-Ge gerekçesi sağlar; hasta düzeyinde beslenme kararını tek başına taşımaz.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "ai_chatbots_health_behavior_change.pdf",
+      "sha256": "67aea5934b3e50341f48132184f9af83ee05c62c39c0afe824a37e3418a1d70c",
+      "title": "AI Chatbots for Health Behavior Change",
+      "author": "Unknown",
+      "year": 2026,
+      "pages": 20,
+      "document_type": "systematic_review",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "celiac_gluten",
+        "behavior_change",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [
+        "WHO"
+      ],
+      "usage_lane": "product_research",
+      "research_theme": "behavior_change",
+      "runtime_status": "research_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Sohbet botlarında kişiselleştirme, davranış değişikliği teknikleri ve değerlendirme çerçevesi.",
+      "limitation": "Ürün ve Ar-Ge gerekçesi sağlar; hasta düzeyinde beslenme kararını tek başına taşımaz.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "ai_chronic_disease_self_management.pdf",
+      "sha256": "ba4915fc3ea963a48cb8eec7b96d91a0031e236cab26e422a1665decbafe1086",
+      "title": "Artificial intelligence in chronic disease self-management: current applications and future directions",
+      "author": "﻿Ying﻿ ﻿Du﻿",
+      "year": 2025,
+      "pages": 11,
+      "document_type": "systematic_review",
+      "topics": [
+        "diabetes",
+        "hypertension_cardiovascular",
+        "kidney",
+        "gastrointestinal",
+        "clinical_ai_safety",
+        "interoperability",
+        "behavior_change",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [
+        "WHO",
+        "KDIGO",
+        "FDA"
+      ],
+      "usage_lane": "product_research",
+      "research_theme": "self_management",
+      "runtime_status": "research_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Kronik hastalıklarda öz yönetim, süreklilik, insan gözetimi ve uygulama sınırlılıkları.",
+      "limitation": "Ürün ve Ar-Ge gerekçesi sağlar; hasta düzeyinde beslenme kararını tek başına taşımaz.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "applsci-15-09283-v2.pdf",
+      "sha256": "ba070023b1882132a38245bb59cbf76643df2d0d2ccc6b4f89af5cd0dd88fde4",
+      "title": "An Integrated AI Framework for Personalized Nutrition Using Machine Learning and Natural Language Processing for Dietary Recommendations",
+      "author": "Sena Karamanlı Aydın, Raja Hashim Ali, Shan Faiz and Talha Ali Khan",
+      "year": 2025,
+      "pages": 18,
+      "document_type": "systematic_review",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "celiac_gluten",
+        "clinical_ai_safety",
+        "behavior_change",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [
+        "WHO"
+      ],
+      "usage_lane": "product_research",
+      "research_theme": "personalized_nutrition_architecture",
+      "runtime_status": "research_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Makine öğrenmesi, NLP ve kural tabanlı filtreleri birleştiren modüler beslenme mimarisi.",
+      "limitation": "Ürün ve Ar-Ge gerekçesi sağlar; hasta düzeyinde beslenme kararını tek başına taşımaz.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "besin_ilac_etkilesimleri.pdf",
+      "sha256": "3ef390a3f657e4ed67bbbd94044119f9a20d48fd968ef630a7a7c187da8710c4",
+      "title": "Besin-İlaçEtkileşimleri:………… …….. Dicle Üniv Vet Fak Derg 2017;10(1):38-55",
+      "author": "Duygu Durna",
+      "year": 2017,
+      "pages": 18,
+      "document_type": "review",
+      "topics": [
+        "diabetes",
+        "kidney",
+        "gastrointestinal",
+        "thyroid",
+        "drug_nutrient"
+      ],
+      "authorities_mentioned": [
+        "FDA"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "beslenme_temelleri_hafta_1_2.pdf",
+      "sha256": "4486614d99454473885b6baed44ca7afa3defab56d34cbd769c634f23271e11f",
+      "title": "BESİN-İLAÇ ETKİLEŞİMİ",
+      "author": "Yüksel",
+      "year": null,
+      "pages": 40,
+      "document_type": "review",
+      "topics": [
+        "general_nutrition",
+        "drug_nutrient"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": [
+        "6 sayfada anlamli metin cikarilamadi."
+      ]
+    },
+    {
+      "filename": "biomedicines-13-00647.pdf",
+      "sha256": "536355313776653589d6e81d0068c197505397324a5dfe96c8a35cc7c8a9b0fe",
+      "title": "Personalized Nutrition in Chronic Kidney Disease",
+      "author": "Nishigandha Pradhan, Jennifer Kerner, Luciana A. Campos and Mirela Dobre",
+      "year": 2025,
+      "pages": 17,
+      "document_type": "clinical_guideline",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "celiac_gluten",
+        "kidney",
+        "gastrointestinal",
+        "women_health",
+        "behavior_change"
+      ],
+      "authorities_mentioned": [
+        "ESPEN",
+        "ADA",
+        "AHA/ACC",
+        "KDIGO"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "cardiovascular_menopause_precision_nutrition.pdf",
+      "sha256": "d8150a766abe7934360edfb72066c618bbc1d0f03f2722a60e493b4d8cd8d8af",
+      "title": "Precision Nutrition for Management of Cardiovascular Disease Risk During Menopause",
+      "author": "Hannah E. Cabre, Emily K. Woolf, Leanne M. Redman",
+      "year": 2025,
+      "pages": 14,
+      "document_type": "clinical_guideline",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "kidney",
+        "women_health"
+      ],
+      "authorities_mentioned": [
+        "AHA/ACC"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "colyak_hastalari_guvenli_beslenme.pdf",
+      "sha256": "fa9d6e4dd1cbce1464bef63786f6248c5bb4544947bc07f6e4a16ab3e6f74ff7",
+      "title": "Çölyak Hastaları İçin Güvenli Beslenme",
+      "author": null,
+      "year": 2026,
+      "pages": 3,
+      "document_type": "thesis",
+      "topics": [
+        "celiac_gluten"
+      ],
+      "authorities_mentioned": [
+        "T.C. Saglik Bakanligi"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "DIYABET_TANI_ve_TEDAVI_REHBERI_16x23_2025.pdf",
+      "sha256": "6d26b8868af174ddd82560f85e28950d0d3d7c75daf5c7037a7b318a76905919",
+      "title": "DIYABET TANI ve TEDAVI REHBERI 16x23-2025.indd",
+      "author": null,
+      "year": 2025,
+      "pages": 292,
+      "document_type": "clinical_guideline",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "celiac_gluten",
+        "kidney",
+        "gastrointestinal",
+        "thyroid",
+        "women_health",
+        "clinical_ai_safety",
+        "behavior_change"
+      ],
+      "authorities_mentioned": [
+        "WHO",
+        "TEMD",
+        "ADA",
+        "AHA/ACC",
+        "KDIGO"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": [
+        "19 sayfada anlamli metin cikarilamadi."
+      ]
+    },
+    {
+      "filename": "drug_nutrient_interaction_dietary_supplement.pdf",
+      "sha256": "3c8f77a9a599690ac14156029f5225f3a0ce992657bd3fdf8d6bd19589c9840e",
+      "title": "OA-24-00062 1..11",
+      "author": null,
+      "year": 2024,
+      "pages": 11,
+      "document_type": "systematic_review",
+      "topics": [],
+      "authorities_mentioned": [],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "ehr_rag_bridging_long_horizon_records.pdf",
+      "sha256": "1dbadf199fa2c350f0c32ae25e3af2e11e9942ece18b840da4911c18fbb97bc3",
+      "title": "EHR-RAG: Bridging Long-Horizon Structured Electronic Health Records and Large Language Models via Enhanced Retrieval-Augmented Generation",
+      "author": "Lang Cao; Qingyu Chen; Yue Guo",
+      "year": 2025,
+      "pages": 24,
+      "document_type": "systematic_review",
+      "topics": [
+        "diabetes",
+        "hypertension_cardiovascular",
+        "kidney",
+        "clinical_ai_safety",
+        "rag_retrieval",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "product_research",
+      "research_theme": "longitudinal_rag",
+      "runtime_status": "research_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Uzun dönem sağlık kayıtlarında zaman ve olay farkındalıklı retrieval tasarımı.",
+      "limitation": "Ürün ve Ar-Ge gerekçesi sağlar; hasta düzeyinde beslenme kararını tek başına taşımaz.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "enhancing_guardrails_safe_healthcare_ai.pdf",
+      "sha256": "1fa5fb21c5ca3588fcf53813ba1a9ea11184461d3140ff5cf7aa0659a7b378c7",
+      "title": "Enhancing Guardrails for Safe and Secure Healthcare",
+      "author": null,
+      "year": 2024,
+      "pages": 10,
+      "document_type": "article_or_other",
+      "topics": [
+        "diabetes",
+        "clinical_ai_safety",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "product_research",
+      "research_theme": "health_ai_guardrails",
+      "runtime_status": "research_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Sağlık yapay zekâsında halüsinasyon, yanlış bilgi ve alan odaklı guardrail gereksinimleri.",
+      "limitation": "Ürün ve Ar-Ge gerekçesi sağlar; hasta düzeyinde beslenme kararını tek başına taşımaz.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "estudam_halk_sagligi_perspektifi.pdf",
+      "sha256": "d0f8c645932fe3a3b202e725334829fea643795ad76904255c2c00aade430354",
+      "title": "© Copyright ESTÜDAM Halk Sağlığı Dergisi. 2024;9(2)",
+      "author": null,
+      "year": 2024,
+      "pages": 11,
+      "document_type": "systematic_review",
+      "topics": [
+        "diabetes",
+        "hypertension_cardiovascular",
+        "kidney",
+        "women_health",
+        "drug_nutrient"
+      ],
+      "authorities_mentioned": [
+        "FDA"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "eu-ai-act-high-risk-compliance-pharma-medical-devices.pdf",
+      "sha256": "c868b106cd74fdf0edebbd9f1064bc8ba5ea12d536595814b1d5e2fc70f05c3d",
+      "title": "EU AI Act High-Risk Compliance: Pharma & Medical Devices",
+      "author": "IntuitionLabs",
+      "year": 2026,
+      "pages": 16,
+      "document_type": "article_or_other",
+      "topics": [
+        "clinical_ai_safety",
+        "interoperability",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "technical_reference",
+      "research_theme": "regulatory_orientation",
+      "runtime_status": "reference_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Risk sınıflandırması, izlenebilirlik ve insan gözetimi için ikincil mevzuat araştırması.",
+      "limitation": "Teknik yol haritası içindir; klinik öneri veya hukuki uygunluk kanıtı değildir.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "evidence_drug_nutrient_interactions.pdf",
+      "sha256": "af575b25025ad4cc2175d55fc42902bf4e39afad003313e38fe080f4a7c64692",
+      "title": "Evidence of Drug–Nutrient Interactions with Chronic Use of Commonly Prescribed Medications: An Update",
+      "author": "Emily S. Mohn, Hua J. Kern, Edward Saltzman, Susan H. Mitmesser and Diane L. McKay",
+      "year": 2018,
+      "pages": 45,
+      "document_type": "systematic_review",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "kidney",
+        "gastrointestinal",
+        "thyroid",
+        "women_health"
+      ],
+      "authorities_mentioned": [
+        "ADA",
+        "FDA"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "food_drug_interactions_bushra.pdf",
+      "sha256": "9a215a3e6eb46ed1f61233cfbb096e7f1250fddc644967925d1673d6897e6d4f",
+      "title": "Oman Medical Specialty Board",
+      "author": null,
+      "year": 2011,
+      "pages": 7,
+      "document_type": "review",
+      "topics": [
+        "diabetes",
+        "hypertension_cardiovascular",
+        "gastrointestinal",
+        "thyroid",
+        "women_health",
+        "drug_nutrient"
+      ],
+      "authorities_mentioned": [
+        "FDA"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "froh-07-1748346.pdf",
+      "sha256": "f13311df91b34b3bf9840da2b8c606c385873de7a43b4b638cb0ab543dd4c1c0",
+      "title": "Role of artificial intelligence in determining nutritional risk factors among post-periodontal surgical patients. A scoping review",
+      "author": null,
+      "year": 2026,
+      "pages": 11,
+      "document_type": "systematic_review",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "kidney",
+        "gastrointestinal",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "gastro_celiac_misc_sariyer.pdf",
+      "sha256": "550de338dd294831fd25f2629df354f6390b11cc87e7ae545c1d9c26d67c4381",
+      "title": "*Corresponding author: esratansu.sariyer@uskudar.edu.tr",
+      "author": "Windows Kullanıcısı",
+      "year": 2021,
+      "pages": 9,
+      "document_type": "systematic_review",
+      "topics": [
+        "diabetes",
+        "hypertension_cardiovascular",
+        "gastrointestinal",
+        "thyroid",
+        "women_health"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "halic_uni_health_sci_misc.pdf",
+      "sha256": "88f7cfad391405f1e44e0279ed7c0ab73919f965f06042038ded4a12ce43e9e6",
+      "title": "ISSN: 2618-625X",
+      "author": null,
+      "year": 2026,
+      "pages": 12,
+      "document_type": "clinical_guideline",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "kidney",
+        "gastrointestinal"
+      ],
+      "authorities_mentioned": [
+        "ESPEN"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": [
+        "1 sayfada anlamli metin cikarilamadi."
+      ]
+    },
+    {
+      "filename": "hashimoto_thyroiditis_nutritional_management.pdf",
+      "sha256": "0ae3fb6b516f809cf689b64b9a1d8c070b20d8121fce37b25b36c641689994d7",
+      "title": "Nutritional Management of Thyroiditis of Hashimoto",
+      "author": "Yana Danailova, Tsvetelina Velikova, Georgi Nikolaev, Zorka Mitova, Alexander Shinkov, Hristo Gagov and Rossitza Konakchieva",
+      "year": 2022,
+      "pages": 23,
+      "document_type": "systematic_review",
+      "topics": [
+        "diabetes",
+        "hypertension_cardiovascular",
+        "celiac_gluten",
+        "kidney",
+        "gastrointestinal",
+        "thyroid",
+        "women_health"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "hipertansiyonda-beslenme.pdf",
+      "sha256": "a97ed5e519eb8052e3d14ee2c7396d77f791e21475ac848aea6e76ce44641292",
+      "title": "untitled",
+      "author": null,
+      "year": null,
+      "pages": 8,
+      "document_type": "article_or_other",
+      "topics": [
+        "hypertension_cardiovascular",
+        "kidney"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": [
+        "2 sayfada anlamli metin cikarilamadi."
+      ]
+    },
+    {
+      "filename": "hl7-fhir-guide-to-esource-epro-interoperability.pdf",
+      "sha256": "2eec7777e87ea31ac3b256a83271e6b6e4d4b710a247346bf70589593f096cd0",
+      "title": "HL7 FHIR Guide to eSource & ePRO Interoperability",
+      "author": "IntuitionLabs",
+      "year": 2025,
+      "pages": 16,
+      "document_type": "clinical_guideline",
+      "topics": [
+        "diabetes",
+        "women_health",
+        "interoperability",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "technical_reference",
+      "research_theme": "fhir_interoperability",
+      "runtime_status": "reference_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Gelecekteki veri değişimi ve birlikte çalışabilirlik yol haritası için teknik referans.",
+      "limitation": "Teknik yol haritası içindir; klinik öneri veya hukuki uygunluk kanıtı değildir.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "ibs_dietary_interventions.pdf",
+      "sha256": "98e21fcb947b562a44abfa83b7ec3187968a4ae75c08df847becb66bea6ff001",
+      "title": "* Corresponding Author: diyetisyenzeynepturker@gmail.com",
+      "author": "Windows User",
+      "year": 2025,
+      "pages": 15,
+      "document_type": "clinical_guideline",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "celiac_gluten",
+        "gastrointestinal"
+      ],
+      "authorities_mentioned": [
+        "AHA/ACC",
+        "ACG"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "icd11factsheet_en.pdf",
+      "sha256": "d84bfd79b03819f301e2bfd0571dd8ade48ac9cac265ece334e6de75d6f2589d",
+      "title": "ICD–11 Fact Sheet",
+      "author": "TOMASKA, Nola",
+      "year": null,
+      "pages": 3,
+      "document_type": "factsheet_or_presentation",
+      "topics": [
+        "diabetes",
+        "hypertension_cardiovascular",
+        "interoperability"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "technical_reference",
+      "research_theme": "icd11_reference",
+      "runtime_status": "reference_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Sağlık durumlarının standart adlandırılması ve kodlama yaklaşımı için genel referans.",
+      "limitation": "Teknik yol haritası içindir; klinik öneri veya hukuki uygunluk kanıtı değildir.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "journal.pdig.0000758.pdf",
+      "sha256": "26c38a80358ccab2711403334e93296ecf658b1879c40716003b8a13ebcaac61",
+      "title": "AI-driven personalized nutrition: RAG-based digital health solution for obesity and type 2 diabetes",
+      "author": "Anand K. Gavai",
+      "year": 2025,
+      "pages": 16,
+      "document_type": "article_or_other",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "rag_retrieval",
+        "behavior_change",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [
+        "ADA"
+      ],
+      "usage_lane": "product_research",
+      "research_theme": "explainable_personalized_nutrition",
+      "runtime_status": "research_only",
+      "clinical_claim_eligible": false,
+      "product_use": "RAG, açıklanabilirlik ve tanımlı beslenme ölçütleriyle kişiselleştirilmiş öneri yaklaşımı.",
+      "limitation": "Ürün ve Ar-Ge gerekçesi sağlar; hasta düzeyinde beslenme kararını tek başına taşımaz.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "Kalp-Damar_Hastaliklarinda_Beslenm.pdf",
+      "sha256": "0c5dd2ba9e3e7287190cb02b09bef5b66ebebd20322e996f4c3c74ec6f456fc3",
+      "title": "HASTALIKLARINDA",
+      "author": null,
+      "year": 2012,
+      "pages": 20,
+      "document_type": "article_or_other",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "kidney",
+        "women_health"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": [
+        "1 sayfada anlamli metin cikarilamadi."
+      ]
+    },
+    {
+      "filename": "karbonhidratlar_kronik_hastaliklar.pdf",
+      "sha256": "fffde60062a51e88f6e9e9c5fde24726c15f8dd6b3a139412567e3ea2170f57a",
+      "title": "Türkiye Sağlık Araştırmaları Dergisi Turkish Journal of Health Research",
+      "author": "TOSHIBA",
+      "year": 2021,
+      "pages": 15,
+      "document_type": "clinical_guideline",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "kidney",
+        "gastrointestinal",
+        "women_health"
+      ],
+      "authorities_mentioned": [
+        "WHO",
+        "TEMD",
+        "ESPEN",
+        "ADA",
+        "AHA/ACC"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "kepan_2025.pdf",
+      "sha256": "a5c55575b3e38e63f20121a1ed3ee9497821d73723c019e5856487ff12895cbe",
+      "title": "BESİN-İLAÇ ETKİLEŞİMİ",
+      "author": null,
+      "year": 2025,
+      "pages": 1265,
+      "document_type": "systematic_review",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "celiac_gluten",
+        "kidney",
+        "gastrointestinal",
+        "thyroid",
+        "women_health",
+        "drug_nutrient",
+        "clinical_ai_safety",
+        "rag_retrieval",
+        "interoperability",
+        "behavior_change",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [
+        "WHO",
+        "T.C. Saglik Bakanligi",
+        "TEMD",
+        "ESPEN",
+        "ADA",
+        "AHA/ACC",
+        "KDIGO",
+        "EFSA",
+        "FDA"
+      ],
+      "usage_lane": "quarantine",
+      "research_theme": "merged_document",
+      "runtime_status": "not_indexed",
+      "clinical_claim_eligible": false,
+      "product_use": "Çok sayıda beslenme ve sağlık belgesini bir araya getiren yerel derleme.",
+      "limitation": "Tek bir eser gibi güvenilir biçimde atıf yapılamıyor; alt belgeler ayrıştırılmalı.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": [
+        "67 sayfada anlamli metin cikarilamadi."
+      ]
+    },
+    {
+      "filename": "Kronik_Bobrek_Yetmezligi_ve_Beslenme.pdf",
+      "sha256": "e4dad9873a1f65a592f2395521bd8ea68add3a0809eb2281fcb2dedc27d346e0",
+      "title": "KRONİK BÖBREK",
+      "author": null,
+      "year": 2012,
+      "pages": 16,
+      "document_type": "article_or_other",
+      "topics": [
+        "diabetes",
+        "hypertension_cardiovascular",
+        "kidney"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": [
+        "4 sayfada anlamli metin cikarilamadi."
+      ]
+    },
+    {
+      "filename": "Mayank+-LKO-lpc-+26-01-2026.pdf",
+      "sha256": "1d24ae4df6d2fbe9eb8983154a44c072fb58a0e0727bd75664d52e072dc938db",
+      "title": "International Journal of Economic Practices and Theories (IJEPT)",
+      "author": "Dr.Ashish Arya",
+      "year": 2026,
+      "pages": 12,
+      "document_type": "systematic_review",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "behavior_change"
+      ],
+      "authorities_mentioned": [
+        "WHO"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "medical_journal_bakirkoy.pdf",
+      "sha256": "43705b4fa79c95b44506c21765d13ef2887387110b6c8542f3ab2e99720bbffe",
+      "title": "©Copyright 2019 by Medical Journal of Bakırköy published by Galenos Yayınevi.",
+      "author": null,
+      "year": 2019,
+      "pages": 10,
+      "document_type": "clinical_guideline",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "kidney",
+        "gastrointestinal",
+        "women_health",
+        "behavior_change"
+      ],
+      "authorities_mentioned": [
+        "AHA/ACC",
+        "FDA"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "nutrients-17-01260-v2.pdf",
+      "sha256": "3b3026b7c886a42669696b238d26890df914686d842fee17ed1f205a59e3a9a1",
+      "title": "The Influence of an AI-Driven Personalized Nutrition Program on the Human Gut Microbiome and Its Health Implications",
+      "author": "Konstantinos Rouskas, Mary Guela, Marianna Pantoura, Ioannis Pagkalos, Maria Hassapidou, Elena Lalama, Andreas F. H. Pfeiffer, Elise Decorte, Veronique Cornelissen, Saskia Wilson-Barnes, Kathryn Hart, Eugenio Mantovani, Sofia Balula Dias, Leontios Hadjileontiadis, Lazaros P. Gymnopoulos, Kosmas Dimitropoulos and Anagnostis Argiriou",
+      "year": 2025,
+      "pages": 23,
+      "document_type": "systematic_review",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "celiac_gluten",
+        "gastrointestinal",
+        "behavior_change"
+      ],
+      "authorities_mentioned": [
+        "EFSA"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "nutrients-17-03471.pdf",
+      "sha256": "55deba3da987592d4a65b5445c7240a6d9f557cdd2714af8c57f412a1f883b1b",
+      "title": "Food in Migraine Management: Dietary Interventions in the Pathophysiology and Prevention of Headaches—A Narrative Review",
+      "author": "Tomasz Poboży, Kacper Janowski, Klaudia Michalak, Kamil Poboży, Julia Domańska-Poboża, Wojeciech Konarski and Iga Chuść",
+      "year": 2025,
+      "pages": 15,
+      "document_type": "systematic_review",
+      "topics": [
+        "diabetes",
+        "hypertension_cardiovascular",
+        "celiac_gluten",
+        "kidney",
+        "gastrointestinal",
+        "women_health"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "nutrients-18-00938-v2.pdf",
+      "sha256": "f1cc8d7cd0cedefd160876726ef3ad9911b1c7dede932662dd379b3b4b9d6fbb",
+      "title": "Generative AI in Precision Nutrition: A Review of Current Developments and Future Directions",
+      "author": "Lubnaa Abdur Rahman, Vasileios Dedousis, Ioannis Papathanail, Rooholla Poursoleymani, Maria Kafyra, Stavroula Georgia Mougiakakou, Ioanna Panagiota Kalafati",
+      "year": 2026,
+      "pages": 31,
+      "document_type": "systematic_review",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "celiac_gluten",
+        "kidney",
+        "women_health",
+        "clinical_ai_safety",
+        "rag_retrieval",
+        "interoperability",
+        "behavior_change",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [
+        "ADA"
+      ],
+      "usage_lane": "product_research",
+      "research_theme": "precision_nutrition_review",
+      "runtime_status": "research_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Üretken yapay zekânın hassas beslenmedeki kullanım alanları, doğrulama ve gizlilik açıkları.",
+      "limitation": "Ürün ve Ar-Ge gerekçesi sağlar; hasta düzeyinde beslenme kararını tek başına taşımaz.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "nutrients-18-01014-v2.pdf",
+      "sha256": "010bdfa4e72af8e78b89e3488d36feb188c6d5e2110dd00bfadebd11bea6448f",
+      "title": "Physiological Regulation of Nutritional and Metabolic Biomarkers in Obesity: Implications for Precision Nutrition",
+      "author": "Girolamo Di Maio, Maria Giovanna Tafuri, Maria Casillo, Antonietta Messina, Salvatore Allocca, Ines Villano, Fiorenzo Moscatelli, Antonietta Monda, Marco La Marra and Vincenzo Monda",
+      "year": 2026,
+      "pages": 26,
+      "document_type": "clinical_guideline",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "celiac_gluten",
+        "kidney",
+        "gastrointestinal"
+      ],
+      "authorities_mentioned": [
+        "ADA"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    },
+    {
+      "filename": "nutriorion_multi_agent_personalized_nutrition.pdf",
+      "sha256": "e8c23def78954f95bbb0baea830f6067db6f0019740a8c8b9e8d0742b931a08a",
+      "title": "NutriOrion: A Hierarchical Multi-Agent Framework for Personalized Nutrition Intervention Grounded in Clinical Guidelines",
+      "author": "Junwei Wu; Runze Yan; Hanqi Luo; Darren Liu; Minxiao Wang; Kimberly L. Townsend; Lydia S. Hartwig; Derek Milketinas; Xiao Hu; Carl Yang",
+      "year": 2026,
+      "pages": 14,
+      "document_type": "systematic_review",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "kidney",
+        "clinical_ai_safety",
+        "rag_retrieval",
+        "interoperability"
+      ],
+      "authorities_mentioned": [
+        "ADA"
+      ],
+      "usage_lane": "product_research",
+      "research_theme": "multi_agent_nutrition",
+      "runtime_status": "research_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Çoklu hastalık ve ilaç bağlamında uzman ajanlar, önceliklendirme ve güvenlik kısıtları.",
+      "limitation": "Ürün ve Ar-Ge gerekçesi sağlar; hasta düzeyinde beslenme kararını tek başına taşımaz.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "presentation-fhir-and-eu-common-standard-epi-g-rodriguez_en.pdf",
+      "sha256": "d6b7540b53ff7b6708419089c910ff0418d9d1937ee371aa8605001cfc39b52c",
+      "title": "FHIR and the EU common standard for ePI",
+      "author": "European Medicines Agency",
+      "year": null,
+      "pages": 14,
+      "document_type": "article_or_other",
+      "topics": [
+        "interoperability"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "technical_reference",
+      "research_theme": "fhir_epi_reference",
+      "runtime_status": "reference_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Elektronik ürün bilgisi ve FHIR tabanlı veri değişimi için resmî sunum referansı.",
+      "limitation": "Teknik yol haritası içindir; klinik öneri veya hukuki uygunluk kanıtı değildir.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "rag_type_2_diabetes_mellitus_care.pdf",
+      "sha256": "998f0db771fa55aa54fc0138426bf16a279e333220f447125ce6fd0e63c1f37c",
+      "title": "Personal Multi-Source RAG for Type 2 Diabetes Care",
+      "author": "staszek",
+      "year": null,
+      "pages": 27,
+      "document_type": "systematic_review",
+      "topics": [
+        "diabetes",
+        "hypertension_cardiovascular",
+        "kidney",
+        "clinical_ai_safety",
+        "rag_retrieval",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [
+        "ADA"
+      ],
+      "usage_lane": "product_research",
+      "research_theme": "personalized_rag",
+      "runtime_status": "research_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Kişisel kayıtlar, kurum bağlamı ve rehberleri birleştiren çok kaynaklı RAG araştırması.",
+      "limitation": "Ürün ve Ar-Ge gerekçesi sağlar; hasta düzeyinde beslenme kararını tek başına taşımaz.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": [
+        "2 sayfada anlamli metin cikarilamadi."
+      ]
+    },
+    {
+      "filename": "s44325-025-00101-6.pdf",
+      "sha256": "b12933e80b8edebcf638c7bf85e7a6c895dfcacc77736038ba59458abe1ce690",
+      "title": "Can AI help with the hardest thing: pro health behavior change",
+      "author": "D. Douglas Miller",
+      "year": 2026,
+      "pages": 7,
+      "document_type": "systematic_review",
+      "topics": [
+        "general_nutrition",
+        "diabetes",
+        "hypertension_cardiovascular",
+        "behavior_change",
+        "regulation_privacy"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "product_research",
+      "research_theme": "behavior_change",
+      "runtime_status": "research_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Yapay zekâ destekli sağlık davranışı değişikliğinin fırsatları ve kanıt sınırları.",
+      "limitation": "Ürün ve Ar-Ge gerekçesi sağlar; hasta düzeyinde beslenme kararını tek başına taşımaz.",
+      "policy_excluded_from_general_rag": true,
+      "warnings": []
+    },
+    {
+      "filename": "turkiye-beslenme-rehberi-2022.pdf",
+      "sha256": "20275d43e08f330f86e494e10bd82ac4043373e7c1d31494ab4d99ab1b9366a9",
+      "title": "Microsoft PowerPoint - 1_SB_DYT E˚0T0M0_TÜBER_2022_25112024_AGPEKCAN",
+      "author": null,
+      "year": 2022,
+      "pages": 52,
+      "document_type": "clinical_guideline",
+      "topics": [
+        "general_nutrition",
+        "diabetes"
+      ],
+      "authorities_mentioned": [
+        "EFSA"
+      ],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": [
+        "Sayfa basina metin dusuk; taranmis veya gorsel agirlikli olabilir.",
+        "27 sayfada anlamli metin cikarilamadi."
+      ]
+    },
+    {
+      "filename": "wjgs-17-8-106170.pdf",
+      "sha256": "aff80b6b4781f5cbaa4da2d1122da6c7567d56a756ba7828f2abdfddd1c0ab5f",
+      "title": "Postoperative care for patients undergoing cholecystectomy: A comprehensive nursing review",
+      "author": "Jing-Jia Tu, Zhu Chen, Zhi-Qin Zhou, Fang-Yan Lu",
+      "year": 2025,
+      "pages": 10,
+      "document_type": "clinical_guideline",
+      "topics": [
+        "diabetes",
+        "gastrointestinal"
+      ],
+      "authorities_mentioned": [],
+      "usage_lane": "clinical_background",
+      "research_theme": "nutrition_background",
+      "runtime_status": "indexed_background_only",
+      "clinical_claim_eligible": false,
+      "product_use": "Literatür araştırması ve arka plan açıklaması; hasta düzeyinde kesin klinik iddia için kullanılamaz.",
+      "limitation": "Genel literatür katmanıdır; resmî scoped kanıt veya uzman onayı yerine geçmez.",
+      "policy_excluded_from_general_rag": false,
+      "warnings": []
+    }
+  ]
+}

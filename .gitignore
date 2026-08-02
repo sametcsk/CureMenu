@@ -33,6 +33,7 @@ blob-report/
 security_quarantine/
 outputs/
 temp_extract/
+data/rag_candidates/
 *.download
 *.tmp
 *.bak

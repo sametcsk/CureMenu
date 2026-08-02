@@ -9,9 +9,21 @@
 - Seventeen local PDFs are intentionally not active clinical evidence. They are OCR-only, merged/uncitable, or concern AI architecture, interoperability, regulation, or product research rather than patient-level nutrition decisions.
 - `14.pdf` has no usable text layer and requires OCR plus source identification before it can be considered.
 - `kepan_2025.pdf` is a merged multi-document file. It must not be cited as one clinical source.
+- Those seventeen files are no longer treated as an unused remainder. Eleven are cataloged as product/AI research, four as technical references, and two as quarantine items in `data/rag_knowledge_catalog.json`.
 
 Detailed per-file reports are under `outputs/rag_audit/`.
 The automatically inferred topic, year, and document-type labels are triage hints only. They do not replace bibliographic verification or clinical approval.
+
+## Knowledge utilization model
+
+The library has four deliberately separated uses:
+
+1. **Official scoped evidence:** eight hash-pinned FDA, KDIGO, and EAACI documents support source traceability for current deterministic rules. Expert clinical review remains pending.
+2. **Clinical background:** twenty-six local PDFs remain indexed for literature research, but the health-claim retrieval filter does not accept them as patient-level evidence.
+3. **Product and technical research:** fifteen documents inform product design, behavior-change framing, multi-agent/RAG architecture, safety guardrails, interoperability, and regulatory planning. They are not part of runtime clinical evidence.
+4. **Quarantine:** `14.pdf` requires OCR and bibliographic verification; `kepan_2025.pdf` requires document-level separation before either can be cited reliably.
+
+The readable map of how these sources influenced CureMenu is maintained in `docs/RAG_KNOWLEDGE_ASSET_MAP.md`. The complete machine-readable inventory, including SHA-256, topic, document type, use lane, and limitation, is in `data/rag_knowledge_catalog.json`.
 
 ## Scoped official evidence collection
 
