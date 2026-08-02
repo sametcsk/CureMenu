@@ -57,6 +57,21 @@ def test_nested_metadata_redaction_secret_ve_identifier_maskeler():
     assert redacted["notes"][0] == "TC [REDACTED_ID]"
 
 
+def test_profile_fingerprint_sha256_is_preserved_without_weakening_other_redaction():
+    fingerprint = "a" * 10 + "12345678901" + "b" * 43
+
+    redacted = redact_data(
+        {
+            "profile_fingerprint": fingerprint,
+            "notes": f"TC {fingerprint}",
+        }
+    )
+
+    assert redacted["profile_fingerprint"] == fingerprint
+    assert "12345678901" not in redacted["notes"]
+    assert "[REDACTED_ID]" in redacted["notes"]
+
+
 def test_interaction_log_persistence_identifier_redacted(test_db_path):
     metadata = json.dumps(
         {

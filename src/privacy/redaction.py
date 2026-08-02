@@ -30,6 +30,8 @@ URL_SECRET_RE = re.compile(
     re.IGNORECASE,
 )
 BEARER_SECRET_RE = re.compile(r"\b(Bearer\s+)[A-Z0-9._~+/=-]+", re.IGNORECASE)
+SHA256_HEX_RE = re.compile(r"[0-9a-f]{64}", re.IGNORECASE)
+SAFE_OPAQUE_METADATA_KEYS = {"profile_fingerprint"}
 
 
 def redact_text(value: str, max_length: int = DEFAULT_MAX_TEXT_LENGTH) -> str:
@@ -51,6 +53,15 @@ def _is_secret_key(key: str) -> bool:
     return any(hint in normalized for hint in SECRET_KEY_HINTS)
 
 
+def _is_safe_opaque_metadata_value(key: str, value: Any) -> bool:
+    normalized = key.lower().replace("-", "_")
+    return (
+        normalized in SAFE_OPAQUE_METADATA_KEYS
+        and isinstance(value, str)
+        and SHA256_HEX_RE.fullmatch(value) is not None
+    )
+
+
 def redact_data(value: Any, max_text_length: int = DEFAULT_MAX_TEXT_LENGTH) -> Any:
     """Recursively redact nested metadata before persistence."""
     if isinstance(value, str):
@@ -60,6 +71,8 @@ def redact_data(value: Any, max_text_length: int = DEFAULT_MAX_TEXT_LENGTH) -> A
         for key, item in value.items():
             if isinstance(key, str) and _is_secret_key(key):
                 redacted[key] = "[REDACTED_SECRET]"
+            elif isinstance(key, str) and _is_safe_opaque_metadata_value(key, item):
+                redacted[key] = item
             else:
                 redacted[key] = redact_data(item, max_text_length)
         return redacted
