@@ -70,7 +70,7 @@ langchain-chroma==1.1.0
 langchain-classic==1.0.8
 langchain-community==0.4.2
 langchain-core==1.4.8
-langchain-google-genai==4.2.5
+langchain-google-genai==4.3.2
 langchain-huggingface==1.2.2
 langchain-protocol==0.0.18
 langchain-tavily==0.2.18
