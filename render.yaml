@@ -1,0 +1,58 @@
+services:
+  - type: web
+    name: curemenu-samet-closed-beta
+    runtime: python
+    plan: standard
+    region: frankfurt
+    branch: main
+    autoDeployTrigger: "off"
+    numInstances: 1
+    buildCommand: >-
+      pip install -c constraints.txt -r requirements.txt &&
+      python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"
+    startCommand: >-
+      python scripts/bootstrap_staging.py &&
+      python -m uvicorn api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /live
+    maxShutdownDelaySeconds: 60
+    disk:
+      name: curemenu-beta-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.13
+      - key: APP_ENV
+        value: staging
+      - key: DEBUG
+        value: "false"
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: CUREMENU_DB_PATH
+        value: /var/data/healmenu.db
+      - key: CHROMA_PERSIST_DIR
+        value: /var/data/chroma_db
+      - key: CUREMENU_INSTANCE_COUNT
+        value: "1"
+      - key: CUREMENU_COOKIE_SECURE
+        value: "true"
+      - key: TRUST_PROXY_HEADERS
+        value: "true"
+      - key: ALLOWED_HOSTS
+        value: curemenu-samet-closed-beta.onrender.com
+      - key: CORS_ORIGINS
+        value: https://curemenu-samet-closed-beta.onrender.com
+      - key: LANGCHAIN_TRACING
+        value: "false"
+      - key: LANGCHAIN_TRACING_V2
+        value: "false"
+      - key: LANGSMITH_TRACING
+        value: "false"
+      - key: LANGSMITH_TRACING_V2
+        value: "false"
+      - key: EMBEDDINGS_LOCAL_ONLY
+        value: "true"
+      - key: LOG_LEVEL
+        value: INFO
