@@ -1,6 +1,30 @@
 (function() {
 const HISTORY_LIMIT = 10;
 let currentHistoryPage = 1;
+let tahlilChartInstance = null;
+const BIOMARKER_ALIAS_MAP = new Map([
+    ['hba1c', 'HbA1c'],
+    ['hemoglobin a1c', 'HbA1c'],
+    ['hemoglobin-a1c', 'HbA1c'],
+    ['glycated hemoglobin', 'HbA1c'],
+    ['b12', 'B12'],
+    ['vitamin b12', 'B12'],
+    ['vitamin-b12', 'B12'],
+    ['ferritin', 'Ferritin'],
+    ['hemoglobin', 'Hemoglobin'],
+    ['hgb', 'Hemoglobin'],
+    ['mcv', 'MCV'],
+    ['tsh', 'TSH'],
+    ['tiroid stimulan hormon', 'TSH'],
+    ['tiroid stimule edici hormon', 'TSH'],
+    ['thyroid stimulating hormone', 'TSH'],
+    ['toplam kolesterol', 'Total Kolesterol'],
+    ['total kolesterol', 'Total Kolesterol'],
+    ['total cholesterol', 'Total Kolesterol'],
+    ['kolesterol total', 'Total Kolesterol'],
+    ['kreatinin', 'Kreatinin'],
+    ['creatinine', 'Kreatinin'],
+]);
 
 function parseHistoryMetadata(value) {
     if (!value) return {};
@@ -15,6 +39,123 @@ function parseHistoryMetadata(value) {
 function historyTargetName(log) {
     const metadata = parseHistoryMetadata(log?.metadata);
     return metadata.target_name || log?.kullanici_adi || 'Hedef belirtilmemiş';
+}
+
+function normalizeTargetLabel(value) {
+    return String(value || '')
+        .replace(/\s+İçin$/i, '')
+        .replace(/\s+Icin$/i, '')
+        .trim()
+        .toLocaleLowerCase('tr-TR');
+}
+
+function selectedTargetLabel(selectId) {
+    const select = document.getElementById(selectId);
+    return select?.selectedOptions?.[0]?.textContent || '';
+}
+
+function currentTargetDisplayName(context, selectId) {
+    if (context.targetScope === 'self') {
+        return window.currentProfile?.ana_kullanici?.ad || window.AuthManager?.getUser?.()?.ad || '';
+    }
+    return selectedTargetLabel(selectId);
+}
+
+function legacyHistoryMatchesCurrentTarget(log, context, selectId) {
+    if (context.targetScope === 'family') return true;
+    const selectedName = normalizeTargetLabel(currentTargetDisplayName(context, selectId));
+    const recordName = normalizeTargetLabel(log?.kullanici_adi);
+    if (selectedName && recordName) return selectedName === recordName;
+    return context.targetScope === 'self';
+}
+
+function historyMatchesCurrentTarget(log, selectId) {
+    const context = window.ProfileManager?.getTargetCacheContext?.(selectId);
+    if (!context) return true;
+    const metadata = parseHistoryMetadata(log?.metadata);
+    if (!metadata.target_id && !metadata.target_scope) {
+        return legacyHistoryMatchesCurrentTarget(log, context, selectId);
+    }
+    if (!metadata.target_id || !metadata.target_scope) return false;
+    return String(metadata.target_id) === String(context.targetId)
+        && String(metadata.target_scope) === String(context.targetScope);
+}
+
+function normalizeBiomarkerName(name) {
+    const raw = String(name || '').trim();
+    if (!raw) return null;
+    const compact = raw
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+    return BIOMARKER_ALIAS_MAP.get(compact) || raw;
+}
+
+function toNumericValue(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    const normalized = String(value ?? '')
+        .replace(',', '.')
+        .match(/-?\d+(?:\.\d+)?/);
+    if (!normalized) return null;
+    const parsed = Number.parseFloat(normalized[0]);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildLabChartModel(labs) {
+    const validLabs = (Array.isArray(labs) ? labs : [])
+        .filter(l => l?.metadata)
+        .sort((a, b) => new Date(a.tarih) - new Date(b.tarih));
+    const labels = validLabs.map(l => formatDecisionDate(l.tarih).split(' ')[0]);
+    const biomarkerMap = {};
+    let numericObservationCount = 0;
+
+    validLabs.forEach((log, index) => {
+        try {
+            const parsed = JSON.parse(log.metadata);
+            if (!Array.isArray(parsed?.biomarkers)) {
+                return;
+            }
+            parsed.biomarkers.forEach((biomarker) => {
+                const normalizedName = normalizeBiomarkerName(biomarker?.name);
+                const numericValue = toNumericValue(biomarker?.value);
+                if (!normalizedName || numericValue === null) {
+                    return;
+                }
+                numericObservationCount += 1;
+                if (!biomarkerMap[normalizedName]) {
+                    biomarkerMap[normalizedName] = new Array(validLabs.length).fill(null);
+                }
+                biomarkerMap[normalizedName][index] = numericValue;
+            });
+        } catch (_error) {
+            // Invalid metadata should not break the chart or history list.
+        }
+    });
+
+    const datasets = Object.keys(biomarkerMap)
+        .filter((key) => biomarkerMap[key].filter((value) => value !== null).length >= 2)
+        .map((key, i) => {
+            const hue = (i * 137.508) % 360;
+            return {
+                label: key,
+                data: biomarkerMap[key],
+                borderColor: `hsl(${hue}, 70%, 40%)`,
+                backgroundColor: `hsl(${hue}, 70%, 40%, 0.1)`,
+                tension: 0.3,
+                spanGaps: true
+            };
+        });
+
+    let emptyMessage = '';
+    if (!datasets.length) {
+        emptyMessage = numericObservationCount > 0
+            ? 'Grafik için aynı biyomarkerın en az iki sayısal sonucu gerekiyor.'
+            : 'Grafik çizilebilecek sayısal veri (biyomarker) bulunamadı. Lütfen kantitatif sonuçları olan yeni bir PDF yükleyin.';
+    }
+
+    return { labels, datasets, emptyMessage };
 }
 
 async function uploadHealthRecord(event) {
@@ -69,17 +210,20 @@ async function loadLabHistory() {
     if (!root) return;
     root.innerHTML = '<p class="text-on-surface-variant">Tahlil geçmişi yükleniyor...</p>';
     try {
-        const { res, data } = await safeFetchJson(`${API}/api/history?page=1&limit=${HISTORY_LIMIT}`);
-        if (!res.ok || !data?.success) {
+        const history = await fetchHistoryRecords({ limit: 25, maxPages: 4 });
+        if (!history.ok) {
             console.warn('[CureMenu] Tahlil geçmişi API hatası.', {
-                status: res.status,
-                success: Boolean(data?.success),
+                status: history.status,
+                success: Boolean(history.data?.success),
             });
             root.innerHTML = emptyState('error', 'Tahlil geçmişi şu anda yüklenemedi', 'Birazdan tekrar deneyebilirsin.');
             return;
         }
 
-        const labs = (data.loglar || []).filter(log => String(log.eylem || '').toLowerCase().includes('tahlil'));
+        const labs = (history.records || []).filter(log =>
+            String(log.eylem || '').toLocaleLowerCase('tr-TR').includes('tahlil')
+            && historyMatchesCurrentTarget(log, 'tahlilTarget')
+        );
 
         // Draw Chart
         try {
@@ -125,69 +269,33 @@ async function loadLabHistory() {
 function drawTahlilChart(labs) {
     const ctx = document.getElementById('tahlilChart');
     if (!ctx) return;
+    const emptyStateEl = document.getElementById('noChartData');
+    if (emptyStateEl) emptyStateEl.remove();
 
     if (!window.Chart) {
         ctx.style.display = 'none';
-        const existing = document.getElementById('noChartData');
-        if (!existing) {
-            ctx.parentElement.insertAdjacentHTML('afterbegin', '<div id="noChartData" class="absolute inset-0 grid place-items-center text-sm text-on-surface-variant font-medium">Grafik bileşeni yüklenemedi. Tahlil geçmişi metin olarak kullanılabilir.</div>');
-        }
+        ctx.parentElement.insertAdjacentHTML('afterbegin', '<div id="noChartData" class="absolute inset-0 grid place-items-center text-sm text-on-surface-variant font-medium">Grafik bileşeni yüklenemedi. Tahlil geçmişi metin olarak kullanılabilir.</div>');
         console.warn("[CureMenu] Chart dependency unavailable.");
         return;
     }
-
-    // Yalnızca metadata barındıran lab'leri eski tarihten yeni tarihe sırala
-    const validLabs = labs
-        .filter(l => l.metadata)
-        .sort((a, b) => new Date(a.tarih) - new Date(b.tarih));
-
-    const biomarkerMap = {};
-    const dates = validLabs.map(l => formatDecisionDate(l.tarih).split(' ')[0]);
-
-    validLabs.forEach((log, index) => {
-        try {
-            const parsed = JSON.parse(log.metadata);
-            if (parsed.biomarkers && Array.isArray(parsed.biomarkers)) {
-                parsed.biomarkers.forEach(b => {
-                    const name = b.name.toUpperCase();
-                    if (!biomarkerMap[name]) biomarkerMap[name] = new Array(validLabs.length).fill(null);
-                    biomarkerMap[name][index] = parseFloat(b.value);
-                });
-            }
-        } catch(e) {}
-    });
-
-    const datasets = Object.keys(biomarkerMap).map((key, i) => {
-        const hue = (i * 137.508) % 360;
-        return {
-            label: key,
-            data: biomarkerMap[key],
-            borderColor: `hsl(${hue}, 70%, 40%)`,
-            backgroundColor: `hsl(${hue}, 70%, 40%, 0.1)`,
-            tension: 0.3,
-            spanGaps: true
-        };
-    });
+    const chartModel = buildLabChartModel(labs);
 
     if (tahlilChartInstance) {
         tahlilChartInstance.destroy();
     }
 
-    if (datasets.length === 0) {
+    if (!chartModel.datasets.length) {
         ctx.style.display = 'none';
-        ctx.parentElement.insertAdjacentHTML('afterbegin', '<div id="noChartData" class="absolute inset-0 grid place-items-center text-sm text-on-surface-variant font-medium">Grafik çizilebilecek sayısal veri (biyomarker) bulunamadı. Lütfen kantitatif sonuçları olan yeni bir PDF yükleyin.</div>');
+        ctx.parentElement.insertAdjacentHTML('afterbegin', `<div id="noChartData" class="absolute inset-0 grid place-items-center text-sm text-on-surface-variant font-medium">${escapeHtml(chartModel.emptyMessage)}</div>`);
         return;
-    } else {
-        ctx.style.display = 'block';
-        const emptyStateEl = document.getElementById('noChartData');
-        if (emptyStateEl) emptyStateEl.remove();
     }
+    ctx.style.display = 'block';
 
     tahlilChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: dates,
-            datasets: datasets
+            labels: chartModel.labels,
+            datasets: chartModel.datasets
         },
         options: {
             responsive: true,
@@ -295,6 +403,8 @@ function loadMoreHistory() {
         uploadHealthRecord,
         loadLabHistory,
         drawTahlilChart,
+        buildLabChartModel,
+        normalizeBiomarkerName,
         loadHistory,
         loadMoreHistory
     };

@@ -93,43 +93,18 @@ def _resolve_numeric_meal_selection(selection: str, state: AgentState) -> str | 
     return None
 
 
-def _profile_field(profil_ozeti: str, field: str) -> str:
-    marker = f"{field}:"
-    if marker not in profil_ozeti:
-        return ""
-    rest = profil_ozeti.split(marker, 1)[1]
-    for next_marker in [
-        "Hastalıklar",
-        "Genetik Geçmiş",
-        "Tıbbi Geçmiş",
-        "Alerjiler",
-        "Kullandığı İlaçlar",
-    ]:
-        token = f", {next_marker}:"
-        if token in rest:
-            rest = rest.split(token, 1)[0]
-            break
-    return rest.strip()
-
-
-def _quality_profile_from_summary(profil_ozeti: str) -> dict:
-    allergies = [
-        item.strip()
-        for item in _profile_field(profil_ozeti, "Alerjiler").split(",")
-        if item.strip() and item.strip().lower() != "yok"
-    ]
-    diseases = [
-        item.strip()
-        for item in _profile_field(profil_ozeti, "Hastalıklar (ICD-11 Standart)").split(",")
-        if item.strip() and item.strip().lower() != "yok"
-    ]
-    ages = [int(value) for value in re.findall(r"\bYas:\s*(\d{1,3})", profil_ozeti or "")]
+def _quality_profile_from_snapshot(snapshot: dict | None) -> dict:
+    """Build RuleEngine input only from the canonical resolved snapshot."""
+    data = snapshot or {}
+    ages = [value for value in data.get("ages", []) if isinstance(value, int)]
+    genders = [str(value) for value in data.get("genders", []) if str(value).strip()]
     return {
-        "alerjiler": allergies,
-        "hastaliklar": diseases,
+        "alerjiler": list(data.get("allergies") or []),
+        "hastaliklar": list(data.get("diseases") or []),
+        "ilaclar": list(data.get("medications") or []),
         "yas": min(ages) if ages else 30,
-        "cinsiyet": _profile_field(profil_ozeti, "Cinsiyet"),
-        "hedef": _profile_field(profil_ozeti, "Beslenme Hedefi"),
+        "cinsiyet": genders[0] if len(genders) == 1 else "",
+        "hedef": ", ".join(data.get("goals") or []),
     }
 
 
@@ -251,13 +226,14 @@ def denetleyici_node(state: AgentState) -> dict:
     Sistemin en kritik katmanı olan Tıbbi Denetim Kurulu (Guardrail) burada kuruyoruz.
     Diyetisyenin önerdiği yemeği, kullanıcının tıbbi profiliyle çapraz kontrole (audit) sokuyoruz.
     """
-    onerilen_yemek = state["uzman_onerisi"]
-    quality_profile = _quality_profile_from_summary(state.get("profil_ozeti", ""))
+    onerilen_yemek = str(state.get("uzman_onerisi") or "").strip()
+    istek_metni = str(state.get("istek") or "").strip()
+    quality_profile = _quality_profile_from_snapshot(state.get("resolved_profile_snapshot"))
     policy_result = PolicyEngine().check_policy(quality_profile, state.get("hedef_islem", "meal_recommendation"))
     policy_warning = " ".join(policy_result.get("applied_policies") or [])
     rule_inputs = [onerilen_yemek]
-    if state.get("istek"):
-        rule_inputs.append(state["istek"])
+    if istek_metni:
+        rule_inputs.append(istek_metni)
     rule_result = RuleEngine().check_rules(quality_profile, onerilen_yemek, rule_inputs)
     rule_warnings = list(rule_result.get("found_warnings") or [])
     quality_events = [
@@ -287,7 +263,7 @@ def denetleyici_node(state: AgentState) -> dict:
     if rule_result.get("found_risks"):
         input_medication_safety = check_medication_food_safety(
             state.get("ilaclar") or [],
-            state.get("istek", ""),
+            istek_metni,
         )
         state = dict(state)
         state["governance_events"] = list(state.get("governance_events") or []) + medication_safety_events(
@@ -675,7 +651,15 @@ def haftalik_plan_olustur(profil_ozeti: str, hafiza_metni: str, is_regeneration:
           "lunch": "...",
           "dinner": "...",
           "snacks": ["..."],
-          "notes": ["..."]
+          "notes": ["..."],
+          "meal_details": {{
+            "breakfast": {{"name": "Kahvaltı adı", "ingredients": ["kullanılan gerçek malzeme"]}},
+            "lunch": {{"name": "Öğle öğünü adı", "ingredients": ["kullanılan gerçek malzeme"]}},
+            "dinner": {{"name": "Akşam öğünü adı", "ingredients": ["kullanılan gerçek malzeme"]}}
+          }},
+          "snack_details": [
+            {{"name": "Atıştırmalık adı", "ingredients": ["kullanılan gerçek malzeme"]}}
+          ]
         }}
       ],
       "summary": "A short motivational summary in Turkish",
@@ -683,6 +667,7 @@ def haftalik_plan_olustur(profil_ozeti: str, hafiza_metni: str, is_regeneration:
       "confidence": {{"medical_risk": 0.1}}
     }}
     - CRITICAL: Inside each meal field, you MUST include the estimated Calories and Macros (Protein, Carbs, Fats) in parentheses. Example: "Menemen (320 kcal, 15g P, 10g K, 20g Y)".
+    - Every displayed breakfast, lunch, dinner, and snack MUST have a matching structured detail with every ingredient actually used. Include sauces, oils, dairy, bread, garnishes, and optional additions.
     - Do NOT output markdown, ONLY pure JSON. No markdown code blocks like ```json.
     """
     

@@ -16,6 +16,16 @@ function historyTargetName(log) {
     return metadata.target_name || log?.kullanici_adi || 'Hedef belirtilmemiş';
 }
 
+function historyMatchesCurrentTarget(log, selectId) {
+    const context = window.ProfileManager?.getTargetCacheContext?.(selectId);
+    if (!context) return true;
+    const metadata = parseHistoryMetadata(log?.metadata);
+    if (!metadata.target_id || !metadata.target_scope) return false;
+    return String(metadata.target_id) === String(context.targetId)
+        && String(metadata.target_scope) === String(context.targetScope)
+        && (!metadata.profile_fingerprint || String(metadata.profile_fingerprint) === String(context.profileFingerprint));
+}
+
 async function scanMenu() {
     const user = getUser();
     const url = document.getElementById('menuUrlInput').value.trim();
@@ -175,18 +185,19 @@ async function loadFridgeHistory() {
     if (!root) return;
     root.innerHTML = '<p class="text-on-surface-variant">Buzdolabı geçmişi yükleniyor...</p>';
     try {
-        const { res, data } = await safeFetchJson(`${API}/api/history?page=1&limit=${HISTORY_LIMIT}`);
-        if (!res.ok || !data?.success) {
+        const history = await fetchHistoryRecords({ limit: 25, maxPages: 4 });
+        if (!history.ok) {
             console.warn('[CureMenu] Buzdolabı geçmişi API hatası.', {
-                status: res.status,
-                success: Boolean(data?.success),
+                status: history.status,
+                success: Boolean(history.data?.success),
             });
             root.innerHTML = '<p class="text-on-surface-variant">Buzdolabı geçmişi şu anda yüklenemedi. Birazdan tekrar deneyebilirsin.</p>';
             return;
         }
-        const records = (data.loglar || []).filter(log => {
+        const records = (history.records || []).filter(log => {
             const action = String(log.eylem || '').toLocaleLowerCase('tr-TR');
-            return action.includes('buzdolabı') || action.includes('buzdolabi');
+            return (action.includes('buzdolabı') || action.includes('buzdolabi'))
+                && historyMatchesCurrentTarget(log, 'fridgeTarget');
         });
         if (!records.length) {
             root.innerHTML = '<p class="text-on-surface-variant">Henüz buzdolabı analizi yok. Yeni bir fotoğraf yüklediğinde sonuç burada görünür.</p>';
@@ -201,7 +212,7 @@ async function loadFridgeHistory() {
         `).join('');
     } catch (error) {
         console.warn('[CureMenu] Buzdolabı geçmişine bağlanılamadı.', { name: error?.name || 'Error' });
-        root.innerHTML = '<p class="text-on-surface-variant">Bağlantı kurulamadı. Birazdan tekrar deneyebilirsin.</p>';
+        root.innerHTML = '<p class="text-on-surface-variant">Buzdolabı geçmişi şu anda yüklenemedi. Birazdan tekrar deneyebilirsin.</p>';
     }
 }
     window.MenuScanner = {

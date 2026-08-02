@@ -12,6 +12,7 @@ def build_smart_grocery(
     weekly_plan: str | None,
     shopping_items: list[dict] | None,
     profile_facts: GroceryProfileFacts,
+    resolved_profile_snapshot: dict,
     location_context: str | None = None,
 ) -> tuple[dict, dict]:
     items = normalize_input_items(shopping_items)
@@ -24,6 +25,8 @@ def build_smart_grocery(
         istek="Smart Grocery",
         profil_ozeti=profile_facts.summary,
         hafiza=[],
+        ilaclar=profile_facts.medications,
+        resolved_profile_snapshot=resolved_profile_snapshot,
     )
     state = apply_event(
         state,

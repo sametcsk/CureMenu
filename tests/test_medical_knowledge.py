@@ -304,6 +304,27 @@ def test_sayisal_secim_resolve_edilip_safety_checkten_gecer(monkeypatch):
     assert "MedicationSafetyChecked" in event_types
 
 
+def test_missing_expert_recommendation_returns_safe_review_instead_of_crashing(monkeypatch):
+    monkeypatch.delenv("BIOPORTAL_API_KEY", raising=False)
+    state = create_initial_state(
+        profil_ozeti="Ali, Hastaliklar: Yok, Alerjiler: Yok, Ilaclar: Yok",
+        istek="Aksam ne yesem?",
+        hafiza=[],
+        ilaclar=[],
+    )
+    state.update({"uzman_onerisi": None, "hedef_islem": "SECENEK_SUN_BITTI"})
+
+    result = denetleyici_node(state)
+
+    assert result["guvenli_mi"] is True
+    assert result["uzman_onerisi"] is None
+    assert result["risk_score"] >= 0.5
+    assert any(
+        event.get("metadata", {}).get("reason") == "short_selection_unresolved"
+        for event in result["governance_events"]
+    )
+
+
 def test_absence_wording_does_not_trigger_medication_food_rule(monkeypatch):
     monkeypatch.delenv("BIOPORTAL_API_KEY", raising=False)
 
@@ -326,6 +347,16 @@ def test_guardrail_checks_original_request_and_keeps_related_warnings(monkeypatc
         istek="Sütlü, yer fıstığı ezmeli ve ıspanaklı içecek tüketebilir miyim?",
         hafiza=[],
         ilaclar=["Warfarin", "Levotiroksin"],
+        resolved_profile_snapshot={
+            "target_id": "self-test",
+            "target_scope": "self",
+            "diseases": ["Gut", "evre 3 kronik böbrek hastalığı"],
+            "allergies": ["İnek sütü proteini", "yer fıstığı"],
+            "medications": ["Warfarin", "Levotiroksin"],
+            "ages": [52],
+            "genders": ["erkek"],
+            "goals": ["Kas Kazanımı"],
+        },
     )
     state.update({
         "uzman_onerisi": "Bu içecek uygun değildir. Gut hastalığında sakatat riski ayrıca değerlendirilir.",

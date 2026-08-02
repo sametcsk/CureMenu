@@ -55,6 +55,16 @@ def test_smart_grocery_event_schema_alanlari_ve_legacy_metadata_korunur():
         weekly_plan=None,
         shopping_items=[{"name": "Yumurta"}],
         profile_facts=profile,
+        resolved_profile_snapshot={
+            "target_id": "self-a",
+            "target_scope": "self",
+            "diseases": [],
+            "allergies": ["yumurta"],
+            "medications": [],
+            "ages": [30],
+            "genders": ["kadın"],
+            "goals": [],
+        },
     )
     events = state["governance_events"]
     health = next(event for event in events if event["event_type"] == "HealthComplianceChecked")

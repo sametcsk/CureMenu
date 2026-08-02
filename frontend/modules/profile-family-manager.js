@@ -200,11 +200,66 @@ async function completeOnboarding() {
 
 const TARGET_STORAGE_PREFIX = 'cm_target_';
 
+function selectedTargetMembers(targetValue) {
+    const profil = window.currentProfile || {};
+    const familyMembers = Array.isArray(profil.aile_uyeleri) ? profil.aile_uyeleri : [];
+    const main = profil.ana_kullanici;
+    const target = String(targetValue || 'kendim').trim();
+    if (target === 'aile') {
+        return [main, ...familyMembers].filter(Boolean);
+    }
+    if (target === 'kendim' || (main && target === main.id)) {
+        return main ? [main] : [];
+    }
+    const folded = target.toLocaleLowerCase('tr-TR');
+    const member = familyMembers.find(item => String(item?.id || '') === target || String(item?.ad || '').toLocaleLowerCase('tr-TR') === folded);
+    return member ? [member] : [];
+}
+
+function stableHash(value) {
+    let hash = 2166136261;
+    const text = String(value || '');
+    for (let i = 0; i < text.length; i += 1) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16);
+}
+
+function getTargetCacheContext(selectIdOrTarget = 'kendim') {
+    const user = window.AuthManager?.getUser?.() || {};
+    const select = document.getElementById(selectIdOrTarget);
+    const target = select ? select.value : String(selectIdOrTarget || 'kendim');
+    const members = selectedTargetMembers(target);
+    const main = window.currentProfile?.ana_kullanici;
+    const targetScope = target === 'aile' ? 'family' : (target === 'kendim' || (main && target === main.id) ? 'self' : 'member');
+    // Backend history metadata uses stable profile ids, not UI labels.
+    const targetId = targetScope === 'self'
+        ? String(main?.id || 'kendim')
+        : (targetScope === 'family' ? 'family' : target);
+    const profilePayload = members.map(member => ({
+        id: member.id || '',
+        hastaliklar: member.hastaliklar || [],
+        alerjiler: member.alerjiler || [],
+        ilaclar: member.ilaclar || [],
+        hedef: member.hedef || '',
+        tibbi_gecmis: member.tibbi_gecmis || '',
+    }));
+    return {
+        accountKey: user.telefon || 'anonymous',
+        targetKey: target || 'kendim',
+        targetId,
+        targetScope,
+        profileFingerprint: stableHash(JSON.stringify(profilePayload)),
+    };
+}
+
 function populateTargetSelect(selectId, familyMembers) {
     const select = document.getElementById(selectId);
     if (!select) return;
 
-    const storageKey = `${TARGET_STORAGE_PREFIX}${selectId}`;
+    const accountKey = window.AuthManager?.getUser?.()?.telefon || 'anonymous';
+    const storageKey = `${TARGET_STORAGE_PREFIX}${accountKey}_${selectId}`;
     const previousValue = select.value || localStorage.getItem(storageKey) || 'kendim';
     const addOption = (value, label) => {
         const option = document.createElement('option');
@@ -231,10 +286,14 @@ function populateTargetSelect(selectId, familyMembers) {
         ? resolvedValue
         : 'kendim';
     localStorage.setItem(storageKey, select.value);
+    if (selectId === 'planTarget') window.WeeklyPlanManager?.loadExistingPlan?.();
+    if (selectId === 'chatTarget') window.ChatWidget?.loadCachedConversation?.();
 
     if (select.dataset.targetPersistenceBound !== 'true') {
         select.addEventListener('change', () => {
             localStorage.setItem(storageKey, select.value);
+            if (selectId === 'planTarget') window.WeeklyPlanManager?.loadExistingPlan?.();
+            if (selectId === 'chatTarget') window.ChatWidget?.loadCachedConversation?.();
             if (selectId === 'tahlilTarget') window.loadLabHistory?.();
             if (selectId === 'fridgeTarget') window.loadFridgeHistory?.();
         });
@@ -398,7 +457,8 @@ function renderMedicationOverview(profil) {
         renderHealthProfile,
         renderEmptyFamily,
         renderFamily,
-        renderMedicationOverview
+        renderMedicationOverview,
+        getTargetCacheContext
     };
     window.ProfileFamilyManager = window.ProfileManager;
 

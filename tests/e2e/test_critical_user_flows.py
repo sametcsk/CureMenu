@@ -28,6 +28,68 @@ def _weekly_plan() -> dict:
     }
 
 
+def test_public_chatbot_blocks_personal_health_advice(browser_page, e2e_base_url: str) -> None:
+    page, _context, runtime_errors = browser_page
+    chat_requests: list[str] = []
+
+    page.route("**/api/chat", lambda route: (chat_requests.append(route.request.post_data or ""), route.abort()))
+    page.goto(e2e_base_url + "/", wait_until="domcontentloaded")
+    page.locator("[data-cm-assistant-launcher]").click()
+    page.fill(
+        "[data-cm-assistant-input]",
+        "Profil ve sağlık bilgilerime göre bugün güvenli bir akşam yemeği önerir misin?",
+    )
+    page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
+
+    body = page.locator("[data-cm-assistant-body]")
+    body.get_by_text("Bunu kişisel sağlık profili olmadan güvenli şekilde değerlendiremem").wait_for()
+    assert body.get_by_text("hastalık, alerji, ilaç ve tercih bilgilerinizi").count() >= 1
+    assert body.get_by_text("Decision ID").count() == 0
+    assert body.get_by_text("risk skoru").count() == 0
+    assert body.get_by_text("governance").count() == 0
+    assert chat_requests == []
+    assert not runtime_errors
+
+
+def test_public_chatbot_product_and_data_explanations(browser_page, e2e_base_url: str) -> None:
+    page, _context, runtime_errors = browser_page
+    chat_requests: list[str] = []
+
+    page.route("**/api/chat", lambda route: (chat_requests.append(route.request.post_data or ""), route.abort()))
+    page.goto(e2e_base_url + "/", wait_until="domcontentloaded")
+    page.locator("[data-cm-assistant-launcher]").click()
+
+    page.fill("[data-cm-assistant-input]", "CureMenu nedir?")
+    page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
+    body = page.locator("[data-cm-assistant-body]")
+    body.get_by_text("beslenme karar destek asistanıdır").wait_for()
+    assert body.get_by_text("Doktor veya diyetisyen yerine geçmez").count() >= 1
+
+    page.fill("[data-cm-assistant-input]", "Verilerimi neden istiyorsunuz?")
+    page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
+    body.get_by_text("kişiselleştirme ve güvenlik kontrolleri için kullanır").wait_for()
+    assert body.get_by_text("tanı koymak veya tedavi düzenlemek değil").count() >= 1
+    assert chat_requests == []
+    assert not runtime_errors
+
+
+def test_public_chatbot_blocks_disease_based_advice(browser_page, e2e_base_url: str) -> None:
+    page, _context, runtime_errors = browser_page
+    chat_requests: list[str] = []
+
+    page.route("**/api/chat", lambda route: (chat_requests.append(route.request.post_data or ""), route.abort()))
+    page.goto(e2e_base_url + "/", wait_until="domcontentloaded")
+    page.locator("[data-cm-assistant-launcher]").click()
+    page.fill("[data-cm-assistant-input]", "Diyabetim var, ne yemeliyim?")
+    page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
+
+    body = page.locator("[data-cm-assistant-body]")
+    body.get_by_text("giriş yaptıktan sonra hastalık, alerji, ilaç").wait_for()
+    assert body.get_by_text("menü").count() == 0
+    assert chat_requests == []
+    assert not runtime_errors
+
+
 def test_family_target_selectors_and_chat_payload(browser_page, e2e_base_url: str) -> None:
     page, _context, runtime_errors = browser_page
     chat_requests: list[dict] = []
@@ -92,9 +154,14 @@ def test_family_target_selectors_and_chat_payload(browser_page, e2e_base_url: st
     page.locator("#chatTarget").select_option("member-ece")
     page.fill("[data-cm-assistant-input]", "Bugün ne yiyebilir?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
-    page.locator("[data-cm-assistant-body]").get_by_text("Ece için yanıt.").wait_for()
+    page.locator("[data-cm-assistant-body]").get_by_text("Ece i").wait_for()
 
     assert chat_requests[-1]["kimin_icin"] == "member-ece"
+    assert page.evaluate("Object.keys(localStorage).some(key => key.startsWith('cm_chat_05000000000_member_member-ece_'))")
+    page.locator("#chatTarget").select_option("kendim")
+    assert page.locator("[data-cm-assistant-body]").get_by_text("Ece i").count() == 0
+    page.locator("#chatTarget").select_option("member-ece")
+    page.locator("[data-cm-assistant-body]").get_by_text("Ece i").wait_for()
     assert not runtime_errors
 
 
@@ -123,9 +190,12 @@ def test_register_wrong_password_login_and_logout(browser_page, e2e_base_url: st
     assert page.locator("#ob_ad").input_value() == "Samet Test"
     assert "hipertansiyon" in page.locator("#ob_hastaliklar").input_value()
     page.locator("#onboardingModal").evaluate("modal => modal.classList.add('hidden')")
+    page.evaluate("switchTab('tahlil')")
+    assert page.evaluate("localStorage.getItem('cm_active_tab')") == "tahlil"
 
     page.locator('button[onclick="logout()"]').first.click()
     page.wait_for_url(e2e_base_url + "/", timeout=10_000)
+    assert page.evaluate("localStorage.getItem('cm_active_tab')") is None
 
     page.goto(f"{e2e_base_url}/giris", wait_until="domcontentloaded")
     page.fill("#phoneNumber", phone)
@@ -137,6 +207,7 @@ def test_register_wrong_password_login_and_logout(browser_page, e2e_base_url: st
     page.fill("#password", password)
     page.click("#submitBtn")
     page.wait_for_url("**/dashboard", timeout=10_000)
+    page.wait_for_function("window.currentProfile && document.querySelector('#tab-dashboard')?.classList.contains('active')")
     assert not runtime_errors
 
 
@@ -200,8 +271,17 @@ def test_weekly_plan_actions_and_gamification(authenticated_page) -> None:
 
     checkbox = page.locator('#planResult input[type="checkbox"]').first
     checkbox.check(force=True)
-    assert page.evaluate("localStorage.getItem('cm_check_meal-0-0')") == "true"
+    assert page.evaluate("Object.keys(localStorage).some(key => key.startsWith('cm_check_') && key.endsWith('_meal-0-0') && localStorage.getItem(key) === 'true')")
     page.locator("#planResult .day-progress").get_by_text("Durum: 1/3").wait_for()
+
+    page.evaluate("window.updatePlanDropdown({aile_uyeleri: [{id: 'member-ece', ad: 'Ece'}]})")
+    page.locator("#planTarget").select_option("member-ece")
+    page.locator("#planResult").get_by_text("Henüz bir haftalık planınız yok").wait_for()
+    assert page.evaluate("Object.keys(localStorage).filter(key => key.startsWith('cm_check_') && key.endsWith('_meal-0-0')).length === 1")
+
+    page.locator("#planTarget").select_option("kendim")
+    page.locator("#planResult").get_by_text("Pazartesi").wait_for()
+    assert page.locator('#planResult input[type="checkbox"]').first.is_checked()
 
     page.unroute("**/api/weekly-plan")
     page.route(
@@ -475,6 +555,28 @@ def test_curebot_progress_and_duplicate_request_guard(authenticated_page) -> Non
     assert not runtime_errors
 
 
+def test_curebot_fetch_error_does_not_show_raw_failed_to_fetch(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    page.locator("[data-cm-assistant-launcher]").click()
+    page.evaluate(
+        """
+        () => {
+            window.safeFetchStream = async () => {
+                throw new TypeError('Failed to fetch');
+            };
+        }
+        """
+    )
+
+    page.fill("[data-cm-assistant-input]", "Glutensiz makarna ve yoğurtlu sos yiyebilir miyim?")
+    page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
+
+    body = page.locator("[data-cm-assistant-body]")
+    body.get_by_text("Yanıt oluşturulamadı. Lütfen tekrar deneyin.").wait_for()
+    assert body.get_by_text("Failed to fetch").count() == 0
+    assert not runtime_errors
+
+
 def test_mobile_navigation_history_and_menu_layout_regressions(authenticated_page) -> None:
     page, _context, runtime_errors, _user = authenticated_page
     history_requests: list[str] = []
@@ -595,4 +697,267 @@ def test_lab_and_fridge_history_empty_state_and_api_error_are_distinct(authentic
     page.evaluate("window.MenuScanner.loadFridgeHistory()")
     page.locator("#fridgeHistoryList").get_by_text("Buzdolabı geçmişi şu anda yüklenemedi").wait_for()
     assert page.locator("#fridgeHistoryList").get_by_text("Bağlantı kurulamadı").count() == 0
+    assert not runtime_errors
+
+
+def test_lab_chart_model_normalizes_aliases_and_builds_dataset(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    page.evaluate("switchTab('tahlil')")
+    model = page.evaluate(
+        """
+        () => window.LabUpload.buildLabChartModel([
+          {
+            tarih: "2026-07-20T10:00:00",
+            metadata: JSON.stringify({
+              biomarkers: [
+                { name: "Hemoglobin A1c", value: 6.1, unit: "%" },
+                { name: "Vitamin B12", value: 320, unit: "pg/mL" }
+              ]
+            })
+          },
+          {
+            tarih: "2026-07-21T10:00:00",
+            metadata: JSON.stringify({
+              biomarkers: [
+                { name: "HbA1c", value: 6.4, unit: "%" },
+                { name: "B12", value: 340, unit: "pg/mL" }
+              ]
+            })
+          }
+        ])
+        """
+    )
+    labels = {dataset["label"] for dataset in model["datasets"]}
+    assert "HbA1c" in labels
+    assert "B12" in labels
+    assert model["emptyMessage"] == ""
+    assert not runtime_errors
+
+
+def test_lab_history_rehydrates_after_refresh_and_draws_chart(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    page.wait_for_function("window.currentProfile && window.currentProfile.ana_kullanici")
+    profile_context = page.evaluate("window.ProfileManager.getTargetCacheContext('tahlilTarget')")
+    page.route(
+        "**/api/history?*",
+        lambda route: _json(
+            route,
+            {
+                "success": True,
+                "loglar": [
+                    {
+                        "id": 11,
+                        "eylem": "Tahlil",
+                        "kullanici_adi": "Test Kullanici",
+                        "kullanici_girdisi": "Birinci PDF",
+                        "asistan_ciktisi": "Hemoglobin A1c sonucu kaydedildi.",
+                        "tarih": "2026-07-20T10:00:00",
+                        "metadata": json.dumps({
+                            "target_id": profile_context["targetId"],
+                            "target_scope": profile_context["targetScope"],
+                            "profile_fingerprint": profile_context["profileFingerprint"],
+                            "biomarkers": [{"name": "Hemoglobin A1c", "value": 6.1, "unit": "%"}],
+                        }, ensure_ascii=False),
+                    },
+                    {
+                        "id": 12,
+                        "eylem": "Tahlil",
+                        "kullanici_adi": "Test Kullanici",
+                        "kullanici_girdisi": "İkinci PDF",
+                        "asistan_ciktisi": "HbA1c sonucu kaydedildi.",
+                        "tarih": "2026-07-21T10:00:00",
+                        "metadata": json.dumps({
+                            "target_id": profile_context["targetId"],
+                            "target_scope": profile_context["targetScope"],
+                            "profile_fingerprint": profile_context["profileFingerprint"],
+                            "biomarkers": [{"name": "HbA1c", "value": "6,4", "unit": "%"}],
+                        }, ensure_ascii=False),
+                    },
+                ],
+                "total": 2,
+                "page": 1,
+                "limit": 10,
+                "has_more": False,
+            },
+        ),
+    )
+    page.evaluate(
+        """
+        () => {
+          window.Chart = function (_ctx, config) {
+            window.__labChartConfig = config;
+            this.destroy = function () {};
+          };
+          switchTab('tahlil');
+        }
+        """
+    )
+    page.locator("#labHistoryList").get_by_text("Birinci PDF").wait_for()
+    page.locator("#labHistoryList").get_by_text("İkinci PDF").wait_for()
+    assert page.evaluate("window.__labChartConfig?.data?.datasets?.[0]?.label") == "HbA1c"
+
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_function("window.currentProfile && window.LabUpload")
+    page.evaluate(
+        """
+        () => {
+          window.Chart = function (_ctx, config) {
+            window.__labChartConfig = config;
+            this.destroy = function () {};
+          };
+        }
+        """
+    )
+    page.evaluate("window.LabUpload.loadLabHistory()")
+    page.locator("#tab-tahlil.active").wait_for()
+    page.locator("#labHistoryList").get_by_text("Birinci PDF").wait_for()
+    assert page.evaluate("window.__labChartConfig?.data?.datasets?.[0]?.label") == "HbA1c"
+    assert not runtime_errors
+
+
+def test_lab_history_keeps_records_when_profile_fingerprint_changes(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    page.wait_for_function("window.currentProfile && window.currentProfile.ana_kullanici")
+    profile_context = page.evaluate("window.ProfileManager.getTargetCacheContext('tahlilTarget')")
+    page.route(
+        "**/api/history?*",
+        lambda route: _json(
+            route,
+            {
+                "success": True,
+                "loglar": [
+                    {
+                        "id": 21,
+                        "eylem": "Tahlil",
+                        "kullanici_adi": "Test Kullanici",
+                        "kullanici_girdisi": "Profil guncel oncesi PDF",
+                        "asistan_ciktisi": "Ferritin sonucu kaydedildi.",
+                        "tarih": "2026-07-20T10:00:00",
+                        "metadata": json.dumps({
+                            "target_id": profile_context["targetId"],
+                            "target_scope": profile_context["targetScope"],
+                            "profile_fingerprint": "previous-profile-fingerprint",
+                            "biomarkers": [{"name": "Ferritin", "value": 45, "unit": "ng/mL"}],
+                        }, ensure_ascii=False),
+                    }
+                ],
+                "total": 1,
+                "page": 1,
+                "limit": 10,
+                "has_more": False,
+            },
+        ),
+    )
+
+    page.evaluate("switchTab('tahlil')")
+
+    page.locator("#labHistoryList").get_by_text("Profil guncel oncesi PDF").wait_for()
+    assert page.locator("#labHistoryList").get_by_text("Ferritin sonucu kaydedildi.").count() == 1
+    assert not runtime_errors
+
+
+def test_lab_history_shows_legacy_records_for_matching_target_name(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    page.wait_for_function("window.currentProfile && window.currentProfile.ana_kullanici")
+    page.route(
+        "**/api/history?*",
+        lambda route: _json(
+            route,
+            {
+                "success": True,
+                "loglar": [
+                    {
+                        "id": 22,
+                        "eylem": "Tahlil",
+                        "kullanici_adi": "Test Kullanici",
+                        "kullanici_girdisi": "Eski tahlil PDF",
+                        "asistan_ciktisi": "B12 sonucu kaydedildi.",
+                        "tarih": "2026-07-20T10:00:00",
+                        "metadata": json.dumps({
+                            "biomarkers": [{"name": "Vitamin B12", "value": 320, "unit": "pg/mL"}],
+                        }, ensure_ascii=False),
+                    }
+                ],
+                "total": 1,
+                "page": 1,
+                "limit": 10,
+                "has_more": False,
+            },
+        ),
+    )
+
+    page.evaluate("switchTab('tahlil')")
+
+    page.locator("#labHistoryList").get_by_text("Eski tahlil PDF").wait_for()
+    assert page.locator("#labHistoryList").get_by_text("B12 sonucu kaydedildi.").count() == 1
+    assert not runtime_errors
+
+
+def test_lab_chart_empty_state_requires_same_numeric_biomarker(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    page.evaluate("switchTab('tahlil')")
+    model = page.evaluate(
+        """
+        () => window.LabUpload.buildLabChartModel([
+          {
+            tarih: "2026-07-20T10:00:00",
+            metadata: JSON.stringify({ biomarkers: [{ name: "Ferritin", value: 45, unit: "ng/mL" }] })
+          },
+          {
+            tarih: "2026-07-21T10:00:00",
+            metadata: JSON.stringify({ biomarkers: [{ name: "TSH", value: 2.1, unit: "mIU/L" }] })
+          }
+        ])
+        """
+    )
+    assert model["datasets"] == []
+    assert "aynı biyomarkerın en az iki sayısal sonucu gerekiyor" in model["emptyMessage"].lower()
+    assert not runtime_errors
+
+
+def test_lab_chart_failure_does_not_hide_history_list(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    profile_context = page.evaluate("window.ProfileManager.getTargetCacheContext('tahlilTarget')")
+    page.route(
+        "**/api/history?*",
+        lambda route: _json(
+            route,
+            {
+                "success": True,
+                "loglar": [
+                    {
+                        "id": 1,
+                        "eylem": "Tahlil",
+                        "kullanici_adi": "Test Kullanici",
+                        "kullanici_girdisi": "Lab A",
+                        "asistan_ciktisi": "Ferritin normal aralıkta.",
+                        "tarih": "2026-07-20T10:00:00",
+                        "metadata": json.dumps({
+                            "target_id": profile_context["targetId"],
+                            "target_scope": profile_context["targetScope"],
+                            "profile_fingerprint": profile_context["profileFingerprint"],
+                            "biomarkers": [{"name": "Ferritin", "value": 45, "unit": "ng/mL"}]
+                        }, ensure_ascii=False),
+                    }
+                ],
+                "total": 1,
+                "page": 1,
+                "limit": 10,
+                "has_more": False,
+            },
+        ),
+    )
+    page.evaluate(
+        """
+        () => {
+          window.Chart = function () {
+            throw new Error("chart failed");
+          };
+          switchTab('tahlil');
+        }
+        """
+    )
+    page.evaluate("window.LabUpload.loadLabHistory()")
+    page.locator("#labHistoryList").get_by_text("Lab A").wait_for()
+    assert page.locator("#labHistoryList").get_by_text("Ferritin normal aralıkta.").count() == 1
     assert not runtime_errors

@@ -224,6 +224,12 @@ def seed_authenticated_user(page, context, base_url: str) -> dict[str, str]:
         f"{base_url}/api/register",
         data={"telefon": phone, "kullanici_adi": name, "sifre": password},
     )
+    if register.status == 429:
+        time.sleep(65)
+        register = context.request.post(
+            f"{base_url}/api/register",
+            data={"telefon": phone, "kullanici_adi": name, "sifre": password},
+        )
     assert register.ok, register.text()
     profile = context.request.post(
         f"{base_url}/api/profile/save",

@@ -1,6 +1,6 @@
 from src.models import AileUyesi, Cinsiyet, KullaniciProfili
-from src.nodes import _quality_profile_from_summary
-from src.profil_utils import profil_ozeti_olustur
+from src.nodes import _quality_profile_from_snapshot
+from src.profile_context import resolve_profile_snapshot_from_profile
 from src.quality.policy_engine import PolicyEngine
 from src.quality.scope_policy import profile_scope_review_reasons
 from src.routers.tools import _check_tool_output_safety
@@ -10,11 +10,14 @@ def _profile(member: AileUyesi) -> KullaniciProfili:
     return KullaniciProfili(ana_kullanici=member)
 
 
+def _snapshot(member: AileUyesi):
+    return resolve_profile_snapshot_from_profile("test-account", _profile(member), "kendim")
+
+
 def test_profile_summary_carries_real_age_into_policy_profile():
     member = AileUyesi(ad="Ada", yas=15, cinsiyet=Cinsiyet.KADIN)
 
-    summary = profil_ozeti_olustur(member)
-    quality_profile = _quality_profile_from_summary(summary)
+    quality_profile = _quality_profile_from_snapshot(_snapshot(member).state_payload())
     policy = PolicyEngine().check_policy(quality_profile, "meal_recommendation")
 
     assert quality_profile["yas"] == 15
@@ -36,16 +39,15 @@ def test_pregnancy_and_kidney_profiles_require_review_without_hard_block():
         hastaliklar=["Kronik böbrek hastalığı"],
     )
 
-    assert any("Gebelik" in item for item in profile_scope_review_reasons(_profile(pregnancy), "kendim"))
-    assert any("Böbrek" in item for item in profile_scope_review_reasons(_profile(kidney), "kendim"))
+    assert any("Gebelik" in item for item in profile_scope_review_reasons(_snapshot(pregnancy)))
+    assert any("Böbrek" in item for item in profile_scope_review_reasons(_snapshot(kidney)))
 
 
 def test_weekly_tool_safety_surfaces_scope_warning():
     member = AileUyesi(ad="Ada", yas=15, cinsiyet=Cinsiyet.KADIN)
 
     result = _check_tool_output_safety(
-        _profile(member),
-        "kendim",
+        _snapshot(member),
         {"days": [{"breakfast": "Yulaf", "lunch": "Mercimek", "dinner": "Sebze"}]},
     )
 

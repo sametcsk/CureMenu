@@ -1,0 +1,189 @@
+"""Canonical profile target resolution for all personalized runtime flows."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import hashlib
+import json
+import sqlite3
+from typing import Any
+
+from fastapi import HTTPException
+
+from src.database import profil_getir_db
+from src.memory import build_memory_namespace
+from src.messages import PROFIL_BULUNAMADI, PROFIL_GEREKLI
+from src.models import AileUyesi, KullaniciProfili
+from src.profil_utils import aile_profil_ozeti_olustur, profil_ozeti_olustur
+
+
+def _dedupe(values: list[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        cleaned = str(value or "").strip()
+        key = cleaned.casefold()
+        if cleaned and key not in seen:
+            seen.add(key)
+            result.append(cleaned)
+    return tuple(result)
+
+
+def _profile_fingerprint(members: list[AileUyesi]) -> str:
+    payload = [
+        {
+            "id": member.id,
+            "diseases": sorted(_dedupe(member.hastaliklar or []), key=str.casefold),
+            "allergies": sorted(_dedupe(member.alerjiler or []), key=str.casefold),
+            "medications": sorted(_dedupe(member.ilaclar or []), key=str.casefold),
+            "goal": str(member.hedef or ""),
+            "medical_history": str(member.tibbi_gecmis or ""),
+        }
+        for member in members
+    ]
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class ResolvedProfileSnapshot:
+    account_id: str
+    target_id: str
+    target_name: str
+    target_scope: str
+    target_key: str
+    source: str
+    profile_fingerprint: str
+    diseases: tuple[str, ...]
+    allergies: tuple[str, ...]
+    medications: tuple[str, ...]
+    goals: tuple[str, ...]
+    ages: tuple[int, ...]
+    genders: tuple[str, ...]
+    medical_history: tuple[str, ...]
+    family_member_id: str | None
+    profile_summary: str
+
+    @property
+    def memory_namespace(self) -> str:
+        subject = f"{self.target_scope}:{self.target_id}:profile:{self.profile_fingerprint}"
+        return build_memory_namespace(self.account_id, subject)
+
+    def quality_profile(self) -> dict[str, Any]:
+        return {
+            "hastaliklar": list(self.diseases),
+            "alerjiler": list(self.allergies),
+            "ilaclar": list(self.medications),
+            "yas": min(self.ages) if self.ages else 30,
+            "cinsiyet": self.genders[0] if len(self.genders) == 1 else "",
+            "hedef": ", ".join(self.goals),
+        }
+
+    def history_metadata(self) -> dict[str, str]:
+        return {
+            "target_key": self.target_key,
+            "target_id": self.target_id,
+            "target_name": self.target_name,
+            "target_scope": self.target_scope,
+            "profile_fingerprint": self.profile_fingerprint,
+        }
+
+    def state_payload(self) -> dict[str, Any]:
+        return {
+            **self.history_metadata(),
+            "source": self.source,
+            "diseases": list(self.diseases),
+            "allergies": list(self.allergies),
+            "medications": list(self.medications),
+            "goals": list(self.goals),
+            "ages": list(self.ages),
+            "genders": list(self.genders),
+            "medical_history": list(self.medical_history),
+            "family_member_id": self.family_member_id,
+        }
+
+
+def _resolve_members(profile: KullaniciProfili, requested_target: str) -> tuple[list[AileUyesi], str, str, str, str, str | None]:
+    target = str(requested_target or "kendim").strip()
+    if target == "aile":
+        members = profile.tum_uyeler()
+        if not members:
+            raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
+        return members, "family", "Tüm Aile", "family", "aile", None
+
+    main = profile.ana_kullanici
+    if target == "kendim" or (main is not None and target == main.id):
+        if main is None:
+            raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
+        return [main], main.id, main.ad, "self", "kendim", main.id
+
+    folded = target.casefold()
+    member = next(
+        (item for item in profile.aile_uyeleri if item.id == target or item.ad.casefold() == folded),
+        None,
+    )
+    if member is None:
+        raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
+    return [member], member.id, member.ad, "member", member.id, member.id
+
+
+def resolve_profile_snapshot_from_profile(
+    account_id: str,
+    profile: KullaniciProfili,
+    requested_target: str,
+) -> ResolvedProfileSnapshot:
+    members, target_id, target_name, target_scope, target_key, family_member_id = _resolve_members(
+        profile,
+        requested_target,
+    )
+    diseases = _dedupe([value for member in members for value in (member.hastaliklar or [])])
+    allergies = _dedupe([value for member in members for value in (member.alerjiler or [])])
+    medications = _dedupe([value for member in members for value in (member.ilaclar or [])])
+    goals = _dedupe([member.hedef for member in members if member.hedef])
+    medical_history = _dedupe([member.tibbi_gecmis for member in members if member.tibbi_gecmis])
+    summary = aile_profil_ozeti_olustur(profile) if target_scope == "family" else profil_ozeti_olustur(members[0])
+    return ResolvedProfileSnapshot(
+        account_id=account_id,
+        target_id=target_id,
+        target_name=target_name,
+        target_scope=target_scope,
+        target_key=target_key,
+        source="profile_db",
+        profile_fingerprint=_profile_fingerprint(members),
+        diseases=diseases,
+        allergies=allergies,
+        medications=medications,
+        goals=goals,
+        ages=tuple(member.yas for member in members),
+        genders=tuple(member.cinsiyet.value for member in members),
+        medical_history=medical_history,
+        family_member_id=family_member_id,
+        profile_summary=summary,
+    )
+
+
+def resolve_profile_snapshot(
+    account_id: str,
+    requested_target: str,
+    *,
+    db: sqlite3.Connection,
+) -> ResolvedProfileSnapshot:
+    profile = profil_getir_db(account_id, conn=db)
+    if profile is None:
+        raise HTTPException(status_code=404, detail=PROFIL_BULUNAMADI)
+    return resolve_profile_snapshot_from_profile(account_id, profile, requested_target)
+
+
+def history_matches_snapshot(record: dict[str, Any], snapshot: ResolvedProfileSnapshot) -> bool:
+    raw = record.get("metadata")
+    if not raw:
+        return False
+    try:
+        metadata = json.loads(raw) if isinstance(raw, str) else dict(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
+    return (
+        metadata.get("target_id") == snapshot.target_id
+        and metadata.get("target_scope") == snapshot.target_scope
+        and metadata.get("profile_fingerprint") == snapshot.profile_fingerprint
+    )

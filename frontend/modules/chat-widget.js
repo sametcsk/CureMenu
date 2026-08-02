@@ -9,13 +9,108 @@ window.ChatWidget = {
     progressTimers: [],
     CHAT_RESPONSE_TIMEOUT_MS: 85000,
     STORAGE_OPEN: "cm_assistant_open",
+    MAX_CACHED_MESSAGES: 12,
 
-    quickPrompts: [
+    authenticatedQuickPrompts: [
         { label: "Bugün ne yesem?", prompt: "Profilime ve sağlık bilgilerime göre bugün güvenli bir akşam yemeği önerir misin?" },
         { label: "İlaç uyumu", prompt: "Kullandığım ilaçlara göre hangi yiyeceklere dikkat etmeliyim? Kısa ve anlaşılır anlat." },
         { label: "Menüye bak", action: "tarayici", prompt: "Restoran menüsünü sağlık profilime göre kontrol etmek istiyorum." },
         { label: "Tahlil yorumla", action: "tahlil", prompt: "Tahlil sonuçlarımı yükleyip beslenme önerilerimde dikkate almak istiyorum." }
     ],
+    publicQuickPrompts: [
+        { label: "CureMenu nedir?", prompt: "CureMenu nedir?" },
+        { label: "Nasıl çalışır?", prompt: "CureMenu nasıl çalışır?" },
+        { label: "Veriler neden gerekli?", prompt: "Verilerimi neden istiyorsunuz?" },
+        { label: "Kayıt olunca ne var?", prompt: "Kayıt olduktan sonra neler yapabilirim?" }
+    ],
+
+    isAuthenticatedMode() {
+        const user = window.AuthManager ? window.AuthManager.getUser() : { telefon: "" };
+        return Boolean(user.telefon) && window.location.pathname.startsWith("/dashboard");
+    },
+
+    getQuickPrompts() {
+        return this.isAuthenticatedMode() ? this.authenticatedQuickPrompts : this.publicQuickPrompts;
+    },
+
+    getConversationCacheKey() {
+        if (!this.isAuthenticatedMode()) return null;
+        const target = this.root?.querySelector("[data-cm-assistant-target]")?.value || "kendim";
+        const context = window.ProfileManager?.getTargetCacheContext?.(target);
+        if (!context) return null;
+        return `cm_chat_${context.accountKey}_${context.targetScope}_${context.targetId}_${context.profileFingerprint}`;
+    },
+
+    readCachedConversation() {
+        const key = this.getConversationCacheKey();
+        if (!key) return [];
+        try {
+            const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+            return Array.isArray(parsed) ? parsed.slice(-this.MAX_CACHED_MESSAGES) : [];
+        } catch (_error) {
+            return [];
+        }
+    },
+
+    writeCachedConversation(messages) {
+        const key = this.getConversationCacheKey();
+        if (!key) return;
+        const safeMessages = (Array.isArray(messages) ? messages : [])
+            .filter(item => ["user", "bot", "soft"].includes(item?.type) && typeof item?.text === "string")
+            .slice(-this.MAX_CACHED_MESSAGES)
+            .map(item => ({ type: item.type, text: item.text.slice(0, 3000), at: item.at || Date.now() }));
+        localStorage.setItem(key, JSON.stringify(safeMessages));
+    },
+
+    appendCachedMessage(type, text) {
+        if (!this.isAuthenticatedMode()) return;
+        const messages = this.readCachedConversation();
+        messages.push({ type, text, at: Date.now() });
+        this.writeCachedConversation(messages);
+    },
+
+    loadCachedConversation() {
+        if (!this.root || !this.isAuthenticatedMode()) return false;
+        const messages = this.readCachedConversation();
+        if (!messages.length) {
+            this.renderWelcome(true);
+            return false;
+        }
+        const body = this.root.querySelector("[data-cm-assistant-body]");
+        if (!body) return false;
+        body.replaceChildren();
+        messages.forEach(item => this.addMessage(item.text, item.type, false));
+        return true;
+    },
+
+    isPersonalHealthRequest(message) {
+        const text = String(message || "").toLocaleLowerCase("tr-TR");
+        const personalSignals = [
+            "profilime", "sağlık bilgilerime", "hastalığıma", "hastalığım",
+            "tahlilime", "tahlilim", "ilacımla", "ilaçlarıma", "alerjime",
+            "diyabetim", "hipertansiyonum", "çölyak", "böbrek hastalığım"
+        ];
+        const adviceSignals = [
+            "ne yemeliyim", "yemek öner", "kahvaltı öner", "akşam yemeği öner",
+            "menü ver", "güvenli", "tüketebilir miyim", "yiyebilir miyim",
+            "beslenme öner", "yorum yap"
+        ];
+        return personalSignals.some(signal => text.includes(signal)) || adviceSignals.some(signal => text.includes(signal));
+    },
+
+    publicResponseFor(message) {
+        const text = String(message || "").toLocaleLowerCase("tr-TR");
+        if (this.isPersonalHealthRequest(message)) {
+            return "Bunu kişisel sağlık profili olmadan güvenli şekilde değerlendiremem. CureMenu'de bu tür öneriler için giriş yaptıktan sonra hastalık, alerji, ilaç ve tercih bilgilerinizi kullanırız. İsterseniz size CureMenu'nün nasıl çalıştığını anlatabilirim.";
+        }
+        if (text.includes("veri") || text.includes("neden ist")) {
+            return "CureMenu hastalık, alerji, ilaç, tercih ve tahlil bilgilerini kişiselleştirme ve güvenlik kontrolleri için kullanır. Amaç tanı koymak veya tedavi düzenlemek değil; yemek kararını daha anlaşılır hale getirmek ve riskli durumda uzman değerlendirmesine yönlendirmektir.";
+        }
+        if (text.includes("nedir") || text.includes("nasıl") || text.includes("kayıt")) {
+            return "CureMenu, özel beslenme ihtiyacı olan kişiler için geliştirilen bir beslenme karar destek asistanıdır. Kayıt olduktan sonra profil, alerji, ilaç, hedef ve tahlil bilgileriyle haftalık plan, CureBot, menü analizi, buzdolabı analizi ve Smart Grocery akışlarını kullanabilirsiniz. Doktor veya diyetisyen yerine geçmez; belirsiz durumda uzman görüşüne yönlendirir.";
+        }
+        return "Ben burada CureMenu'yu tanıtmak ve hangi adımlarla çalıştığını anlatmak için varım. Kişisel beslenme veya sağlık önerileri için önce giriş yapıp profil bilgilerinizi oluşturmanız gerekir.";
+    },
 
     init() {
         if (this.root) return;
@@ -25,7 +120,12 @@ window.ChatWidget = {
         this.root = document.createElement("section");
         this.root.id = "cm-assistant-root";
         this.root.className = "cm-assistant-root";
-        this.root.dataset.open = localStorage.getItem(this.STORAGE_OPEN) === "true" ? "true" : "false";
+        // Do not reopen the assistant over the dashboard after a new page load.
+        // The active dashboard tab is persisted separately; the panel should open
+        // only after an explicit user action or a feature shortcut.
+        this.root.dataset.open = "false";
+        this.root.dataset.mode = this.isAuthenticatedMode() ? "auth" : "public";
+        const quickPrompts = this.getQuickPrompts();
         
         this.root.innerHTML = `
             <div class="cm-assistant-panel" role="dialog" aria-label="CureBot yardımcı">
@@ -50,7 +150,7 @@ window.ChatWidget = {
                 <div class="cm-assistant-body" data-cm-assistant-body></div>
                 <div>
                     <div class="cm-assistant-quick" data-cm-assistant-quick>
-                        ${this.quickPrompts.map((item, i) => `<button type="button" data-cm-quick="${i}">${window.escapeHtml ? escapeHtml(item.label) : item.label}</button>`).join("")}
+                        ${quickPrompts.map((item, i) => `<button type="button" data-cm-quick="${i}">${window.escapeHtml ? escapeHtml(item.label) : item.label}</button>`).join("")}
                     </div>
                     <form class="cm-assistant-inputbar" data-cm-assistant-form>
                         <textarea rows="1" data-cm-assistant-input placeholder="CureBot'a kısa bir şey sor..."></textarea>
@@ -67,6 +167,7 @@ window.ChatWidget = {
 
         document.body.appendChild(this.root);
         this.renderWelcome();
+        this.loadCachedConversation();
         this.bindEvents();
 
         window.openCureMenuAssistant = (msg) => this.open(msg);
@@ -96,7 +197,7 @@ window.ChatWidget = {
         this.root.addEventListener("click", (e) => {
             const quick = e.target.closest("[data-cm-quick]");
             if (quick) {
-                const item = this.quickPrompts[Number(quick.dataset.cmQuick)];
+                const item = this.getQuickPrompts()[Number(quick.dataset.cmQuick)];
                 if (!item) return;
                 if (item.action && typeof window.switchTab === 'function') {
                     window.switchTab(item.action);
@@ -111,6 +212,10 @@ window.ChatWidget = {
                 } else {
                     window.location.href = "/dashboard";
                 }
+            }
+            const publicNav = e.target.closest("[data-cm-public-nav]");
+            if (publicNav) {
+                window.location.href = publicNav.dataset.cmPublicNav || "/kayit";
             }
         });
     },
@@ -279,14 +384,15 @@ window.ChatWidget = {
         const sendBtn = this.root.querySelector("[data-cm-assistant-send]");
         if (this.requestInFlight || sendBtn.disabled) return;
         
-        if (window.AuthManager && !window.AuthManager.getUser().telefon) {
-            this.addMessage("Bunu sana özel yanıtlayabilmem için önce kısa profilini oluşturalım.", "soft");
-            setTimeout(() => window.location.href = "/giris", 900);
-            return;
-        }
-
         this.root.querySelector("[data-cm-assistant-quick]")?.classList.add("is-hidden");
         this.addMessage(message, "user");
+        if (this.isAuthenticatedMode()) this.appendCachedMessage("user", message);
+
+        if (!this.isAuthenticatedMode()) {
+            this.setStatus("CureMenu hakkında yardım");
+            this.addMessage(this.publicResponseFor(message), "bot");
+            return;
+        }
         
         this.requestInFlight = true;
         this.setBusy(true);
@@ -393,11 +499,16 @@ window.ChatWidget = {
             if (!doneSeen && !fullAnswer) {
                 throw new Error("Yanıt tamamlanamadı.");
             }
+            if (fullAnswer) {
+                this.appendCachedMessage("bot", fullAnswer);
+            }
         } catch (error) {
             if (error.name === "AbortError" || this.controller === null) {
                 // Ignore if manually aborted
             } else {
-                this.showError(`${error.message || "Bağlantı kurulamadı."}`);
+                const safeError = "Yanıt oluşturulamadı. Lütfen tekrar deneyin.";
+                this.showError(safeError);
+                this.appendCachedMessage("soft", safeError);
             }
         } finally {
             clearTimeout(timeoutId);
@@ -405,8 +516,23 @@ window.ChatWidget = {
         }
     },
 
-    renderWelcome() {
+    renderWelcome(force = false) {
+        const body = this.root?.querySelector("[data-cm-assistant-body]");
+        if (force && body) body.replaceChildren();
         const user = window.AuthManager ? window.AuthManager.getUser() : {kullanici_adi: ''};
+        if (!this.isAuthenticatedMode()) {
+            this.setStatus("CureMenu'yu tanıtır");
+            this.addMessage("Merhaba, ben CureBot. Giriş yapmadan önce sana CureMenu'nün ne olduğunu, nasıl çalıştığını ve kayıt olduktan sonra hangi özellikleri kullanabileceğini anlatabilirim.");
+            const publicHtml = `
+                <div>Kişisel beslenme önerileri için önce profil oluşturman gerekir.</div>
+                <div class="cm-assistant-actions">
+                    <button type="button" data-cm-public-nav="/kayit">Kayıt ol</button>
+                    <button type="button" data-cm-public-nav="/giris">Giriş yap</button>
+                </div>
+            `;
+            this.addMessage(publicHtml, "soft", true);
+            return;
+        }
         const name = user.kullanici_adi || "Merhaba";
         this.addMessage(`${name}, ben CureBot. İstersen hızlıca güvenli öğün seçmene, menü kontrol etmene, tahlil ya da profil adımlarına geçmene yardım ederim.`);
         const html = `
@@ -439,6 +565,7 @@ window.ChatWidget = {
             .cm-assistant-title span { display: block; margin-top: 2px; font-size: 12px; color: rgba(255,255,255,0.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .cm-assistant-close { border: 0; width: 34px; height: 34px; border-radius: 10px; background: rgba(255,255,255,0.1); color: #fff; display: grid; place-items: center; cursor: pointer; }
             .cm-assistant-context { padding: 10px 14px; background: #ffffff; border-bottom: 1px solid rgba(189, 201, 198, 0.55); display: flex; align-items: center; gap: 10px; }
+            .cm-assistant-root[data-mode="public"] .cm-assistant-context { display: none; }
             .cm-assistant-context label { color: #526762; font-size: 12px; font-weight: 700; white-space: nowrap; }
             .cm-assistant-context select { min-width: 0; flex: 1; height: 36px; border: 1px solid rgba(189, 201, 198, 0.9); border-radius: 10px; padding: 0 10px; background: #ffffff; color: #102033; font-size: 13px; outline: none; }
             .cm-assistant-context select:focus { border-color: #005c55; box-shadow: 0 0 0 3px rgba(0, 92, 85, 0.1); }

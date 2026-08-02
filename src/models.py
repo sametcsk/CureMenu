@@ -1,7 +1,7 @@
 # Veri Modelleri
 from pydantic import BaseModel, Field   
 from enum import Enum   
-from typing import Literal, Optional, List, Dict
+from typing import Annotated, Literal, Optional, List, Dict
 import uuid
 
 
@@ -164,6 +164,31 @@ class PlanActionRequest(BaseModel):
     kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
 
 
+IngredientText = Annotated[str, Field(min_length=1, max_length=200)]
+
+
+class StructuredMealRecommendation(BaseModel):
+    name: str = Field(..., min_length=2, max_length=160)
+    ingredients: list[IngredientText] = Field(..., min_length=1, max_length=30)
+    preparation: str = Field(default="", max_length=2000)
+    portion: str = Field(default="", max_length=500)
+    why_it_fits: str = Field(default="", max_length=1000)
+
+
+class RecipeRecommendation(StructuredMealRecommendation):
+    preparation: str = Field(..., min_length=2, max_length=2000)
+
+
+class MealReplacement(BaseModel):
+    eski: str = Field(..., min_length=1, max_length=500)
+    yeni: str = Field(..., min_length=2, max_length=500)
+    ingredients: list[IngredientText] = Field(..., min_length=1, max_length=30)
+
+
+class AlternativeMealsPayload(BaseModel):
+    degisen_ogunler: list[MealReplacement] = Field(..., min_length=1, max_length=8)
+
+
 class SnackSuggestion(BaseModel):
     name: str = Field(..., min_length=2, max_length=120)
     ingredients: list[str] = Field(..., min_length=1, max_length=20)
@@ -181,6 +206,8 @@ class WeeklyPlanDay(BaseModel):
     dinner: str
     snacks: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    meal_details: dict[str, StructuredMealRecommendation] = Field(default_factory=dict)
+    snack_details: list[StructuredMealRecommendation] = Field(default_factory=list)
 
 class WeeklyPlan(BaseModel):
     days: list[WeeklyPlanDay]

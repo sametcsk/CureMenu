@@ -1,14 +1,15 @@
+import json
 import sqlite3
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from src.auth import get_current_user
-from src.database import get_db, klinik_karar_kaydet, profil_getir_db
+from src.database import etkilesim_logla, get_db, klinik_karar_kaydet
 from src.governance.decision import build_decision_record
 from src.grocery.capability import build_smart_grocery
 from src.grocery.profile import grocery_profile_facts
+from src.profile_context import resolve_profile_snapshot
 from src.grocery.schemas import SmartGroceryRequest, SmartGroceryResponse
-from src.messages import PROFIL_BULUNAMADI, PROFIL_GEREKLI
 
 
 router = APIRouter()
@@ -24,29 +25,34 @@ async def smart_grocery(
     if not req.weekly_plan and not req.shopping_items:
         raise HTTPException(status_code=400, detail="weekly_plan veya shopping_items gerekli")
 
-    profil = profil_getir_db(telefon, conn=db)
-    if profil is None:
-        raise HTTPException(status_code=404, detail=PROFIL_BULUNAMADI)
-    try:
-        profile_facts = grocery_profile_facts(profil, req.kimin_icin)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=PROFIL_GEREKLI) from None
+    snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
+    profile_facts = grocery_profile_facts(snapshot)
 
     shopping_items = [item.model_dump(exclude_none=True) for item in req.shopping_items or []]
     basket, state = build_smart_grocery(
         weekly_plan=req.weekly_plan,
         shopping_items=shopping_items,
         profile_facts=profile_facts,
+        resolved_profile_snapshot=snapshot.state_payload(),
         location_context=req.location_context,
     )
     final_answer = basket["recommendation_summary"]
     decision_record = build_decision_record(
         state,
         telefon=telefon,
-        kimin_icin=req.kimin_icin,
+        kimin_icin=snapshot.target_key,
         final_answer=final_answer,
     )
     bg_tasks.add_task(klinik_karar_kaydet, decision_record)
+    bg_tasks.add_task(
+        etkilesim_logla,
+        telefon,
+        snapshot.target_name,
+        "Smart Grocery",
+        "Sepet değerlendirmesi",
+        final_answer,
+        json.dumps(snapshot.history_metadata(), ensure_ascii=False),
+    )
 
     return {
         "success": True,

@@ -5,12 +5,21 @@
 
 const API = '';  // Aynı sunucu
 
-let isRefreshing = false;
-let refreshSubscribers = [];
+let refreshPromise = null;
 
-function onRefreshed(token) {
-    refreshSubscribers.map(cb => cb(token));
-    refreshSubscribers = [];
+function refreshAccessToken() {
+    if (!refreshPromise) {
+        refreshPromise = fetch(API + '/api/refresh', {
+            method: 'POST',
+            credentials: 'include',
+        })
+            .then(response => response.ok)
+            .catch(() => false)
+            .finally(() => {
+                refreshPromise = null;
+            });
+    }
+    return refreshPromise;
 }
 
 function apiHataMesaji(data, varsayilan = 'Bir hata oluştu. Lütfen tekrar deneyin.') {
@@ -45,33 +54,12 @@ async function safeFetchJson(url, options = {}) {
     
     // Auto Refresh Logic
     if (res.status === 401 && url.indexOf('/api/refresh') === -1 && url.indexOf('/api/login') === -1) {
-        if (!isRefreshing) {
-            isRefreshing = true;
-            try {
-                const refreshRes = await fetch(API + '/api/refresh', { method: 'POST', credentials: 'include' });
-                if (refreshRes.ok) {
-                    onRefreshed(true);
-                } else {
-                    onRefreshed(false);
-                    window.logout?.(); // If refresh fails, log them out
-                }
-            } catch (e) {
-                onRefreshed(false);
-                window.logout?.();
-            } finally {
-                isRefreshing = false;
-            }
-        }
-        
-        // Wait for the refresh to finish
-        const refreshed = await new Promise(resolve => {
-            refreshSubscribers.push(resolve);
-        });
-        
+        const refreshed = await refreshAccessToken();
         if (refreshed) {
             // Retry original request
             res = await fetch(url, options);
         } else {
+            window.logout?.();
             return { res, data: null };
         }
     }
@@ -85,36 +73,29 @@ async function safeFetchJson(url, options = {}) {
     return { res, data };
 }
 
+async function fetchHistoryRecords({ limit = 25, maxPages = 4 } = {}) {
+    const records = [];
+    for (let page = 1; page <= maxPages; page += 1) {
+        const { res, data } = await safeFetchJson(`${API}/api/history?page=${page}&limit=${limit}`);
+        if (!res.ok || !data?.success) {
+            return { ok: false, status: res.status, records, data };
+        }
+        records.push(...(data.loglar || []));
+        if (!data.has_more) break;
+    }
+    return { ok: true, status: 200, records, data: { success: true } };
+}
+
 async function safeFetchStream(url, options = {}) {
     options.credentials = 'include';
     let res = await fetch(url, options);
     
     if (res.status === 401 && url.indexOf('/api/refresh') === -1 && url.indexOf('/api/login') === -1) {
-        if (!isRefreshing) {
-            isRefreshing = true;
-            try {
-                const refreshRes = await fetch(API + '/api/refresh', { method: 'POST', credentials: 'include' });
-                if (refreshRes.ok) {
-                    onRefreshed(true);
-                } else {
-                    onRefreshed(false);
-                    window.logout?.();
-                }
-            } catch (e) {
-                onRefreshed(false);
-                window.logout?.();
-            } finally {
-                isRefreshing = false;
-            }
-        }
-        
-        const refreshed = await new Promise(resolve => {
-            refreshSubscribers.push(resolve);
-        });
-        
+        const refreshed = await refreshAccessToken();
         if (refreshed) {
             res = await fetch(url, options);
         } else {
+            window.logout?.();
             return res;
         }
     }
@@ -146,6 +127,5 @@ window.safeFetchStream = safeFetchStream;
 window.apiHataMesaji = apiHataMesaji;
 window.baglantiHatasi = baglantiHatasi;
 window.renderTextState = renderTextState;
-window.onRefreshed = onRefreshed;
 window.formatMarkdownSafe = formatMarkdownSafe;
 window.escapeHtml = escapeHtml;

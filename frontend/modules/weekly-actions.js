@@ -161,8 +161,9 @@
         const fallbackUser = typeof getUser === 'function' ? getUser() : null;
         const user = window.AuthManager?.getUser?.() || fallbackUser;
         if (user?.telefon) {
-            localStorage.setItem('cm_saved_plan_json_' + user.telefon, newPlanText);
-            localStorage.setItem('cm_saved_plan_' + user.telefon, newPlanText);
+            const cacheKey = window.WeeklyPlanManager?.getPlanCacheKey?.(user)
+                || `cm_saved_plan_json_${user.telefon}_${selectedPlanTarget()}`;
+            localStorage.setItem(cacheKey, newPlanText);
         }
         window.renderSavedPlan?.(newPlanText);
     }

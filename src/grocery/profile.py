@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
-from src.models import AileUyesi, KullaniciProfili
-from src.profil_utils import aile_profil_ozeti_olustur, hedef_profili_bul
+from src.profile_context import ResolvedProfileSnapshot
 
 
 @dataclass(frozen=True)
@@ -24,52 +23,10 @@ def _dedupe(values: list[str]) -> list[str]:
     return result
 
 
-def _collect_members(members: list[AileUyesi]) -> GroceryProfileFacts:
-    diseases: list[str] = []
-    allergies: list[str] = []
-    medications: list[str] = []
-    for member in members:
-        diseases.extend(getattr(member, "hastaliklar", []) or [])
-        allergies.extend(getattr(member, "alerjiler", []) or [])
-        medications.extend(getattr(member, "ilaclar", []) or [])
+def grocery_profile_facts(snapshot: ResolvedProfileSnapshot) -> GroceryProfileFacts:
     return GroceryProfileFacts(
-        summary="",
-        diseases=_dedupe(diseases),
-        allergies=_dedupe(allergies),
-        medications=_dedupe(medications),
-    )
-
-
-def _member_summary(member: AileUyesi) -> str:
-    diseases = ", ".join(getattr(member, "hastaliklar", []) or []) or "Yok"
-    allergies = ", ".join(getattr(member, "alerjiler", []) or []) or "Yok"
-    medications = ", ".join(getattr(member, "ilaclar", []) or []) or "Yok"
-    return (
-        f"{member.ad}, "
-        f"Hastalıklar: {diseases}, "
-        f"Alerjiler: {allergies}, "
-        f"Kullandığı ilaçlar: {medications}"
-    )
-
-
-def grocery_profile_facts(profil: KullaniciProfili, kimin_icin: str) -> GroceryProfileFacts:
-    if kimin_icin == "aile":
-        members = profil.tum_uyeler()
-        facts = _collect_members(members)
-        return GroceryProfileFacts(
-            summary=aile_profil_ozeti_olustur(profil),
-            diseases=facts.diseases,
-            allergies=facts.allergies,
-            medications=facts.medications,
-        )
-
-    target = hedef_profili_bul(profil, kimin_icin)
-    if target is None:
-        raise ValueError("profile_target_not_found")
-
-    return GroceryProfileFacts(
-        summary=_member_summary(target),
-        diseases=_dedupe(getattr(target, "hastaliklar", []) or []),
-        allergies=_dedupe(getattr(target, "alerjiler", []) or []),
-        medications=_dedupe(getattr(target, "ilaclar", []) or []),
+        summary=snapshot.profile_summary,
+        diseases=_dedupe(list(snapshot.diseases)),
+        allergies=_dedupe(list(snapshot.allergies)),
+        medications=_dedupe(list(snapshot.medications)),
     )

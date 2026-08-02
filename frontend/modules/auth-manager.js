@@ -35,6 +35,7 @@ window.AuthManager = {
         localStorage.setItem('cm_kullanici_adi', loginData.kullanici_adi || '');
         localStorage.setItem('cm_has_profile', loginData.has_profile ? 'true' : 'false');
         localStorage.setItem('cm_disclaimer_ok', 'true');
+        localStorage.removeItem('cm_active_tab');
         
         return loginData;
     },
@@ -61,7 +62,7 @@ window.AuthManager = {
             await fetch((window.API || '') + '/api/logout', { method: 'POST', credentials: 'include' });
         } catch(e) {}
         
-        ['cm_telefon', 'cm_kullanici_adi', 'cm_has_profile', 'cm_onboarding_done', 'cm_disclaimer_ok'].forEach(k => localStorage.removeItem(k));
+        ['cm_telefon', 'cm_kullanici_adi', 'cm_has_profile', 'cm_onboarding_done', 'cm_disclaimer_ok', 'cm_active_tab'].forEach(k => localStorage.removeItem(k));
         window.location.href = '/';
     }
 };

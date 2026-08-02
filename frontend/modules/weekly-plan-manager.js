@@ -4,6 +4,24 @@
  */
 
 window.WeeklyPlanManager = {
+    getPlanCacheKey(user, target = null) {
+        const resolvedTarget = target || document.getElementById('planTarget')?.value || 'kendim';
+        const context = window.ProfileManager?.getTargetCacheContext?.(resolvedTarget);
+        if (context) {
+            return `cm_saved_plan_json_${context.accountKey}_${context.targetScope}_${context.targetId}_${context.profileFingerprint}`;
+        }
+        return `cm_saved_plan_json_${user.telefon}_${resolvedTarget}`;
+    },
+
+    getMealCheckKey(cellId) {
+        const target = document.getElementById('planTarget')?.value || 'kendim';
+        const context = window.ProfileManager?.getTargetCacheContext?.(target);
+        if (context) {
+            return `cm_check_${context.accountKey}_${context.targetScope}_${context.targetId}_${context.profileFingerprint}_${cellId}`;
+        }
+        return `cm_check_${target}_${cellId}`;
+    },
+
     init() {
         const generateBtn = document.getElementById('generatePlanBtn');
         if (generateBtn) {
@@ -25,7 +43,8 @@ window.WeeklyPlanManager = {
             const kimin_icin = document.getElementById('planTarget')?.value || 'kendim';
             this.showLoading();
 
-            const isRegeneration = localStorage.getItem('cm_saved_plan_json_' + user.telefon) !== null;
+            const cacheKey = this.getPlanCacheKey(user, kimin_icin);
+            const isRegeneration = localStorage.getItem(cacheKey) !== null;
 
             const { res, data } = await safeFetchJson(API + '/api/weekly-plan', {
                 method: 'POST',
@@ -34,7 +53,7 @@ window.WeeklyPlanManager = {
             });
 
             if (data && (data.ok || data.success) && data.plan) {
-                localStorage.setItem('cm_saved_plan_json_' + user.telefon, JSON.stringify(data.plan));
+                localStorage.setItem(cacheKey, JSON.stringify(data.plan));
                 this.renderPlan(data.plan);
             } else {
                 this.showError(data?.error?.message || "Plan oluşturulamadı. Lütfen daha sonra tekrar deneyin.");
@@ -50,7 +69,7 @@ window.WeeklyPlanManager = {
         const user = window.AuthManager.getUser();
         if (!user) return;
 
-        const savedPlanStr = localStorage.getItem('cm_saved_plan_json_' + user.telefon);
+        const savedPlanStr = localStorage.getItem(this.getPlanCacheKey(user));
         if (savedPlanStr) {
             try {
                 const plan = JSON.parse(savedPlanStr);
@@ -154,7 +173,7 @@ window.WeeklyPlanManager = {
         plan.days.forEach((dayData, rowIndex) => {
             ['breakfast', 'lunch', 'dinner'].forEach((mealType, colIndex) => {
                 const cellId = `meal-${rowIndex}-${colIndex}`;
-                const isChecked = localStorage.getItem('cm_check_' + cellId) === 'true';
+                const isChecked = localStorage.getItem(this.getMealCheckKey(cellId)) === 'true';
                 if (isChecked) {
                     const cb = document.getElementById(cellId);
                     if (cb) {
@@ -181,7 +200,7 @@ window.WeeklyPlanManager = {
         const cellId = checkbox.id;
         const td = document.getElementById(`td-${cellId}`);
 
-        localStorage.setItem('cm_check_' + cellId, isChecked);
+        localStorage.setItem(this.getMealCheckKey(cellId), isChecked);
 
         if (isChecked) {
             td?.classList.add('opacity-60', 'bg-surface-container-high');
@@ -247,7 +266,7 @@ window.WeeklyPlanManager = {
     resetState() {
         const user = window.AuthManager.getUser();
         if (user) {
-            localStorage.removeItem('cm_saved_plan_json_' + user.telefon);
+            localStorage.removeItem(this.getPlanCacheKey(user));
         }
         this.renderEmptyState();
     }

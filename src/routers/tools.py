@@ -5,16 +5,15 @@ import sqlite3
 import json
 import time
 
-from src.models import ComplianceRequest, FridgeScanRequest, GeriBildirimRequest, HaftalikPlanRequest, PlanActionRequest, ScanMenuImageRequest, ScanMenuRequest, SnackSuggestionsPayload
-from src.database import get_db, etkilesim_logla, klinik_karar_kaydet, profil_getir_db
+from src.models import AlternativeMealsPayload, ComplianceRequest, FridgeScanRequest, GeriBildirimRequest, HaftalikPlanRequest, PlanActionRequest, RecipeRecommendation, ScanMenuImageRequest, ScanMenuRequest, SnackSuggestionsPayload
+from src.database import get_db, etkilesim_logla, klinik_karar_kaydet
 from src.auth import get_current_user
 from src.messages import PLAN_OLUSTURULAMADI, MENU_BOS, MENU_FOTO_OKUNAMADI, BUZDOLABI_FOTO_OKUNAMADI, PROFIL_GEREKLI, PROFIL_BULUNAMADI
 from src.nodes import haftalik_plan_olustur, mutfak_asistani
 from src.scanner import ImageValidationError, scrape_menu_from_url, extract_text_from_image_base64, extract_ingredients_from_image_base64
 from src.menu_agent import menu_danismani
 from src.economist_agent import alisveris_ve_butce_hesapla
-from src.profil_utils import aile_profil_ozeti_olustur, hedef_ilaclari, hedef_profili_bul, profil_ozeti_olustur
-from src.memory import build_memory_namespace, hafizadakini_getir, geri_bildirim_ekle
+from src.memory import hafizadakini_getir, geri_bildirim_ekle
 from src.llm import invoke_with_model_fallback, parse_llm_response
 import fitz
 from src.governance.decision import build_decision_record, calculate_confidence
@@ -22,8 +21,10 @@ from src.agent_state import create_initial_state
 from src.governance.events import make_event
 from src.grocery.health import assess_item_health
 from src.grocery.profile import grocery_profile_facts
+from src.profile_context import ResolvedProfileSnapshot, resolve_profile_snapshot
 from src.medical_knowledge.safety_checker import check_medication_food_safety, medication_safety_events
 from src.quality.rule_engine import RuleEngine
+from src.quality.recommendation_contract import extract_recommendation_safety_input
 from src.quality.scope_policy import profile_scope_review_reasons
 from src.rate_limit import authenticated_user_or_ip, limiter
 from src.logger import get_logger, log_failure
@@ -157,32 +158,31 @@ def _plan_action_messages(
 
 
 def _recommendation_parts(output) -> tuple[str, list[str]]:
-    if isinstance(output, dict) and isinstance(output.get("days"), list):
-        meals: list[str] = []
-        for day in output["days"]:
-            if not isinstance(day, dict):
-                continue
-            meals.extend(str(day.get(key) or "") for key in ("breakfast", "lunch", "dinner"))
-            meals.extend(str(item) for item in day.get("snacks", []) if item)
-        return "\n".join(meals), []
-    if isinstance(output, dict) and isinstance(output.get("degisen_ogunler"), list):
-        return "\n".join(
-            str(item.get("yeni") or "")
-            for item in output["degisen_ogunler"]
-            if isinstance(item, dict)
-        ), []
-    if isinstance(output, dict) and "snack_onerileri" in output:
-        return str(output.get("snack_onerileri") or ""), []
-    if isinstance(output, dict) and isinstance(output.get("snacks"), list):
-        names: list[str] = []
-        ingredients: list[str] = []
-        for snack in output["snacks"]:
-            if not isinstance(snack, dict):
-                continue
-            names.append(str(snack.get("name") or ""))
-            ingredients.extend(str(item) for item in snack.get("ingredients", []) if item)
-        return "\n".join(names), ingredients
-    return str(output or ""), []
+    safety_input = extract_recommendation_safety_input(output)
+    return safety_input.display_text, list(safety_input.ingredients)
+
+
+def _parse_json_model(raw_text: str, model_type):
+    import re
+
+    json_match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+    if not json_match:
+        raise ValueError("Model response did not contain a JSON object")
+    return model_type.model_validate(json.loads(json_match.group(0)))
+
+
+def _render_recipe(recipe: RecipeRecommendation) -> str:
+    ingredient_lines = "\n".join(f"- {item}" for item in recipe.ingredients)
+    sections = [
+        f"### {recipe.name}",
+        f"**Malzemeler**\n{ingredient_lines}",
+        f"**Hazırlanışı**\n{recipe.preparation}",
+    ]
+    if recipe.portion:
+        sections.append(f"**Porsiyon**\n{recipe.portion}")
+    if recipe.why_it_fits:
+        sections.append(f"**Neden uygun olabilir?**\n{recipe.why_it_fits}")
+    return "\n\n".join(sections)
 
 
 def _render_snack_suggestions(payload: SnackSuggestionsPayload) -> str:
@@ -198,18 +198,20 @@ def _render_snack_suggestions(payload: SnackSuggestionsPayload) -> str:
     return "\n\n".join(sections)
 
 
-def _check_tool_output_safety(profil, kimin_icin: str, output) -> dict:
-    facts = grocery_profile_facts(profil, kimin_icin)
-    recommendation, ingredients = _recommendation_parts(output)
+def _check_tool_output_safety(snapshot: ResolvedProfileSnapshot, output) -> dict:
+    facts = grocery_profile_facts(snapshot)
+    safety_input = extract_recommendation_safety_input(output)
+    recommendation = safety_input.display_text
+    ingredients = list(safety_input.ingredients)
     safety_text = "\n".join([recommendation, *ingredients])
     rule_result = RuleEngine().check_rules(
         {"alerjiler": facts.allergies, "hastaliklar": facts.diseases},
         recommendation,
         ingredients,
-        structured_ingredients=bool(ingredients),
+        structured_ingredients=safety_input.has_structured_ingredients,
     )
     medication_result = check_medication_food_safety(facts.medications, safety_text)
-    scope_reasons = profile_scope_review_reasons(profil, kimin_icin)
+    scope_reasons = profile_scope_review_reasons(snapshot)
     matched_rules = medication_result.get("matched_rules") or []
     avoid_rules = [rule for rule in matched_rules if rule.get("severity") == "avoid"]
     caution_rules = [rule for rule in matched_rules if rule.get("severity") != "avoid"]
@@ -240,7 +242,7 @@ def _check_tool_output_safety(profil, kimin_icin: str, output) -> dict:
             "Öneriyi uygulamadan önce doktorunuza, eczacınıza veya diyetisyeninize danışın."
         )
     raw_warning = " ".join(warnings)
-    warning = user_facing_safety_guidance(raw_warning) if raw_warning else ""
+    warning = user_facing_safety_guidance(raw_warning, profile=snapshot.state_payload()) if raw_warning else ""
     events = [
         make_event(
             "RuleChecked",
@@ -263,7 +265,14 @@ def _check_tool_output_safety(profil, kimin_icin: str, output) -> dict:
     }
 
 
-def _safety_block_detail() -> str:
+def _safety_block_detail(reasons: list[str] | None = None) -> str:
+    clean_reasons = [str(reason).strip() for reason in (reasons or []) if str(reason).strip()]
+    if clean_reasons:
+        reason_text = " ".join(clean_reasons[:3])
+        return (
+            f"Bu öneri profilinizle çakışabileceği için gösterilmedi. Neden: {reason_text} "
+            "Malzemeleri değiştirerek tekrar deneyebilir veya sağlık profesyoneline danışabilirsiniz."
+        )
     return (
         "Üretilen öneri sağlık profilinizle çakıştığı için gösterilmedi. "
         "Lütfen yeniden deneyin veya sağlık profesyoneline danışın."
@@ -278,54 +287,6 @@ def _prepend_menu_safety_alerts(analysis: str, safety: dict) -> str:
         alerts.append(safety["warning"])
     alert_lines = "\n".join(f"- {reason}" for reason in alerts)
     return f"### Profil İçin Zorunlu Güvenlik Uyarıları\n{alert_lines}\n\n{analysis}"
-
-def _get_profil_ve_hedef(telefon: str, kimin_icin: str, db: sqlite3.Connection):
-    profil = profil_getir_db(telefon, conn=db)
-    if profil is None:
-        raise HTTPException(status_code=404, detail=PROFIL_BULUNAMADI)
-
-    if kimin_icin == "aile":
-        return profil, None
-
-    hedef = hedef_profili_bul(profil, kimin_icin)
-
-    if hedef is None:
-        raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
-
-    return profil, hedef
-
-
-def _history_target_context(profil, kimin_icin: str) -> tuple[str, dict]:
-    """Return a stable, user-visible target identity for persisted interaction logs."""
-    if kimin_icin == "aile":
-        return "Tüm Aile", {
-            "target_key": "aile",
-            "target_id": "family",
-            "target_name": "Tüm Aile",
-            "target_scope": "family",
-        }
-
-    hedef = hedef_profili_bul(profil, kimin_icin)
-    if hedef is None:
-        raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
-    is_self = kimin_icin == "kendim"
-    return hedef.ad, {
-        "target_key": "kendim" if is_self else hedef.id,
-        "target_id": hedef.id,
-        "target_name": hedef.ad,
-        "target_scope": "self" if is_self else "member",
-    }
-
-
-def _profil_baglamini_hazirla(telefon: str, kimin_icin: str, db: sqlite3.Connection):
-    profil, hedef = _get_profil_ve_hedef(telefon, kimin_icin, db=db)
-    if kimin_icin == "aile":
-        return profil, aile_profil_ozeti_olustur(profil), build_memory_namespace(telefon, "family")
-
-    if hedef is None:
-        raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
-    return profil, profil_ozeti_olustur(hedef), build_memory_namespace(telefon, f"member:{hedef.id}")
-
 
 def _geri_bildirimi_hafizaya_ekle(kullanici_id: str, mesaj: str) -> None:
     try:
@@ -343,13 +304,21 @@ async def feedback(
     db: sqlite3.Connection = Depends(get_db),
 ):
     try:
-        _, _, kullanici_id = _profil_baglamini_hazirla(telefon, req.kimin_icin, db=db)
+        snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
     except HTTPException:
         raise HTTPException(status_code=400, detail="Geri bildirim icin gecerli bir profil secin.")
 
     mesaj = f"Bu yemek tercih edilmedi: {req.yemek_adi}"
-    bg_tasks.add_task(_geri_bildirimi_hafizaya_ekle, kullanici_id, mesaj)
-    bg_tasks.add_task(etkilesim_logla, telefon, "", "Yemek Geri Bildirimi", req.yemek_adi, "Kaydedildi", None)
+    bg_tasks.add_task(_geri_bildirimi_hafizaya_ekle, snapshot.memory_namespace, mesaj)
+    bg_tasks.add_task(
+        etkilesim_logla,
+        telefon,
+        snapshot.target_name,
+        "Yemek Geri Bildirimi",
+        req.yemek_adi,
+        "Kaydedildi",
+        json.dumps(snapshot.history_metadata(), ensure_ascii=False),
+    )
     return {"success": True, "message": "Geri bildiriminiz kaydedildi."}
 
 
@@ -366,31 +335,44 @@ async def meal_compliance(
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
 async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
     try:
-        profil, profil_ozeti, kullanici_id = _profil_baglamini_hazirla(telefon, req.kimin_icin, db=db)
+        snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
     except HTTPException as e:
         return JSONResponse(
             status_code=400,
             content={"ok": False, "error": {"code": "PROFILE_MISSING", "message": "Haftalık plan oluşturmak için önce profil bilgilerinizi tamamlamalısınız."}}
         )
 
-    if kullanici_id is None:
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "error": {"code": "PROFILE_MISSING", "message": "Haftalık plan oluşturmak için önce profil bilgilerinizi tamamlamalısınız."}}
-        )
-        
-    gecmis = await run_in_threadpool(hafizadakini_getir, kullanici_id, "yemek", 10)
+    profil_ozeti = snapshot.profile_summary
+    gecmis = await run_in_threadpool(hafizadakini_getir, snapshot.memory_namespace, "yemek", 10)
     hafiza_metni = " ".join(gecmis) if gecmis else "Kayıtlı geri bildirim yok."
     
     try:
         plan = await run_in_threadpool(haftalik_plan_olustur, profil_ozeti, hafiza_metni, req.is_regeneration)
-        safety = _check_tool_output_safety(profil, req.kimin_icin, plan)
+        safety = _check_tool_output_safety(snapshot, plan)
+        if safety["blocked"]:
+            # A model draft can occasionally contain an allergen despite the
+            # profile prompt. Retry once with the concrete rejection reasons;
+            # never show the unsafe draft and never weaken the deterministic
+            # safety gate.
+            retry_feedback = (
+                f"{hafiza_metni}\n"
+                "Önceki taslak güvenlik kontrolünden geçmedi. "
+                "Aşağıdaki içerikleri yeni planda kesinlikle kullanma: "
+                + "; ".join(safety["reasons"])
+            )
+            plan = await run_in_threadpool(
+                haftalik_plan_olustur,
+                profil_ozeti,
+                retry_feedback,
+                True,
+            )
+            safety = _check_tool_output_safety(snapshot, plan)
         if safety["blocked"]:
             return JSONResponse(
                 status_code=422,
                 content={
                     "ok": False,
-                    "error": {"code": "PLAN_SAFETY_BLOCKED", "message": _safety_block_detail()},
+                    "error": {"code": "PLAN_SAFETY_BLOCKED", "message": _safety_block_detail(safety["reasons"])},
                 },
             )
         if safety["warning"]:
@@ -402,7 +384,8 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
             istek="Haftalık plan oluştur",
             profil_ozeti=profil_ozeti,
             hafiza=gecmis,
-            ilaclar=hedef_ilaclari(profil, req.kimin_icin),
+            ilaclar=list(snapshot.medications),
+            resolved_profile_snapshot=snapshot.state_payload(),
         )
         state = dict(initial_state)
         state["governance_events"] = list(state.get("governance_events") or []) + safety["events"]
@@ -411,9 +394,17 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
         state["risk_score"] = 0.5 if safety["review_required"] else 0.15
         
         import json
-        decision_record = build_decision_record(state, telefon=telefon, kimin_icin=req.kimin_icin, final_answer=json.dumps(plan))
+        decision_record = build_decision_record(state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=json.dumps(plan))
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, "", "Haftalık Plan", f"{req.kimin_icin} için plan", json.dumps(plan), None)
+        bg_tasks.add_task(
+            etkilesim_logla,
+            telefon,
+            snapshot.target_name,
+            "Haftalık Plan",
+            f"{snapshot.target_name} için plan",
+            json.dumps(plan),
+            json.dumps(snapshot.history_metadata(), ensure_ascii=False),
+        )
         
         return {"ok": True, "plan": plan}
     except Exception as e:
@@ -439,30 +430,32 @@ async def shopping_list(request: Request, req: ShoppingListRequest, telefon: str
 @router.post("/api/scan-menu")
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
 async def scan_menu(request: Request, req: ScanMenuRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
-    profil, profil_ozeti, _ = _profil_baglamini_hazirla(telefon, req.kimin_icin, db=db)
+    snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
+    profil_ozeti = snapshot.profile_summary
     try:
         ham_metin = await run_in_threadpool(scrape_menu_from_url, req.url)
         if not ham_metin or len(ham_metin) < 10:
             return {"success": False, "detail": MENU_BOS}
         
         analiz_sonucu = await run_in_threadpool(menu_danismani, ham_metin, profil_ozeti)
-        safety = _check_tool_output_safety(profil, req.kimin_icin, ham_metin)
+        safety = _check_tool_output_safety(snapshot, ham_metin)
         analiz_sonucu = _prepend_menu_safety_alerts(analiz_sonucu, safety)
 
         initial_state = create_initial_state(
             istek=f"Menü Tarama: {req.url}",
             profil_ozeti=profil_ozeti,
             hafiza=[],
-            ilaclar=hedef_ilaclari(profil, req.kimin_icin),
+            ilaclar=list(snapshot.medications),
+            resolved_profile_snapshot=snapshot.state_payload(),
         )
         state = dict(initial_state)
         state["governance_events"] = list(state.get("governance_events") or []) + safety["events"]
         state["tarif_metni"] = analiz_sonucu
         state["hedef_islem"] = "MENU_TARAMA"
 
-        decision_record = build_decision_record(state, telefon=telefon, kimin_icin=req.kimin_icin, final_answer=analiz_sonucu)
+        decision_record = build_decision_record(state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=analiz_sonucu)
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, "", "QR Menü", req.url, analiz_sonucu, None)
+        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "QR Menü", req.url, analiz_sonucu, json.dumps(snapshot.history_metadata(), ensure_ascii=False))
 
         return {"success": True, "analiz": analiz_sonucu}
     except Exception as exc:
@@ -478,7 +471,8 @@ async def scan_menu(request: Request, req: ScanMenuRequest, bg_tasks: Background
 @router.post("/api/scan-menu-image")
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
 async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
-    profil, profil_ozeti, _ = _profil_baglamini_hazirla(telefon, req.kimin_icin, db=db)
+    snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
+    profil_ozeti = snapshot.profile_summary
     
     try:
         ham_metin = await run_in_threadpool(extract_text_from_image_base64, req.image_base64)
@@ -486,23 +480,24 @@ async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks:
             return {"success": False, "detail": MENU_FOTO_OKUNAMADI}
             
         analiz_sonucu = await run_in_threadpool(menu_danismani, ham_metin, profil_ozeti)
-        safety = _check_tool_output_safety(profil, req.kimin_icin, ham_metin)
+        safety = _check_tool_output_safety(snapshot, ham_metin)
         analiz_sonucu = _prepend_menu_safety_alerts(analiz_sonucu, safety)
         
         initial_state = create_initial_state(
             istek="Menü Fotoğrafı Tarama",
             profil_ozeti=profil_ozeti,
             hafiza=[],
-            ilaclar=hedef_ilaclari(profil, req.kimin_icin),
+            ilaclar=list(snapshot.medications),
+            resolved_profile_snapshot=snapshot.state_payload(),
         )
         state = dict(initial_state)
         state["governance_events"] = list(state.get("governance_events") or []) + safety["events"]
         state["tarif_metni"] = analiz_sonucu
         state["hedef_islem"] = "MENU_TARAMA"
         
-        decision_record = build_decision_record(state, telefon=telefon, kimin_icin=req.kimin_icin, final_answer=analiz_sonucu)
+        decision_record = build_decision_record(state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=analiz_sonucu)
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, "", "Menü Foto", "Fotoğraf yüklendi", analiz_sonucu, None)
+        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "Menü Foto", "Fotoğraf yüklendi", analiz_sonucu, json.dumps(snapshot.history_metadata(), ensure_ascii=False))
         
         return {"success": True, "analiz": analiz_sonucu}
     except ImageValidationError:
@@ -517,8 +512,8 @@ async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks:
 @router.post("/api/fridge-scan")
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
 async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
-    profil, profil_ozeti, _ = _profil_baglamini_hazirla(telefon, req.kimin_icin, db=db)
-    hedef_adi, history_metadata = _history_target_context(profil, req.kimin_icin)
+    snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
+    profil_ozeti = snapshot.profile_summary
     
     try:
         malzemeler = await run_in_threadpool(extract_ingredients_from_image_base64, req.image_base64)
@@ -526,11 +521,22 @@ async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: Backgr
             return {"success": False, "detail": BUZDOLABI_FOTO_OKUNAMADI}
             
         tarif = await run_in_threadpool(mutfak_asistani, profil_ozeti, malzemeler)
-        safety = _check_tool_output_safety(profil, req.kimin_icin, tarif)
+        detected_ingredients = [
+            item.strip(" .;:-")
+            for item in str(malzemeler).replace("\n", ",").split(",")
+            if item.strip(" .;:-")
+        ]
+        safety = _check_tool_output_safety(
+            snapshot,
+            # Detected fridge items are context, not ingredients used by the
+            # generated recipe. Checking them here falsely blocks a safe recipe
+            # whenever an unsafe item is merely present in the fridge.
+            {"name": "Buzdolabı önerisi", "recommendation": tarif},
+        )
         if safety["blocked"]:
             return JSONResponse(
                 status_code=422,
-                content={"success": False, "detail": _safety_block_detail()},
+                content={"success": False, "detail": _safety_block_detail(safety["reasons"])},
             )
         if safety["warning"]:
             tarif = f"{safety['warning']}\n\n{tarif}"
@@ -539,7 +545,8 @@ async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: Backgr
             istek="Buzdolabı Tarama",
             profil_ozeti=profil_ozeti,
             hafiza=[],
-            ilaclar=hedef_ilaclari(profil, req.kimin_icin),
+            ilaclar=list(snapshot.medications),
+            resolved_profile_snapshot=snapshot.state_payload(),
         )
         state = dict(initial_state)
         state["governance_events"] = list(state.get("governance_events") or []) + safety["events"]
@@ -547,15 +554,15 @@ async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: Backgr
         state["hedef_islem"] = "BUZDOLABI_TARAMA"
         state["risk_score"] = 0.5 if safety["review_required"] else 0.15
         
-        decision_record = build_decision_record(state, telefon=telefon, kimin_icin=req.kimin_icin, final_answer=tarif)
+        decision_record = build_decision_record(state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=tarif)
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
         etkilesim_logla(
             telefon,
-            hedef_adi,
+            snapshot.target_name,
             "Buzdolabı",
             malzemeler[:100],
             tarif,
-            json.dumps(history_metadata, ensure_ascii=False),
+            json.dumps(snapshot.history_metadata(), ensure_ascii=False),
             conn=db,
         )
         
@@ -579,12 +586,7 @@ async def upload_health_record(
     telefon: str = Depends(get_current_user),
     db: sqlite3.Connection = Depends(get_db)
 ):
-    profil, hedef = _get_profil_ve_hedef(telefon, kimin_icin, db=db)
-    hedef_adi, history_metadata = _history_target_context(profil, kimin_icin)
-    if kimin_icin == "aile":
-        kullanici_id = build_memory_namespace(telefon, "family")
-    else:
-        kullanici_id = build_memory_namespace(telefon, f"member:{hedef.id}")
+    snapshot = resolve_profile_snapshot(telefon, kimin_icin, db=db)
     
     try:
         filename = (file.filename or "").lower()
@@ -607,7 +609,7 @@ async def upload_health_record(
         ozet = parse_llm_response(cevap)
         
         import re, json
-        metadata_payload = dict(history_metadata)
+        metadata_payload = dict(snapshot.history_metadata())
         
         # Locate potential JSON blocks / Olası JSON bloklarını tespit et
         json_start_match = re.search(r'```json\s*\{|\{\s*"biomarkers"', ozet)
@@ -637,10 +639,10 @@ async def upload_health_record(
             except Exception:
                 pass
         
-        geri_bildirim_ekle(kullanici_id, f"{file.filename} Özeti: {ozet}")
+        geri_bildirim_ekle(snapshot.memory_namespace, f"{file.filename} Özeti: {ozet}")
         etkilesim_logla(
             telefon,
-            hedef_adi,
+            snapshot.target_name,
             "Tahlil",
             file.filename,
             ozet,
@@ -665,19 +667,25 @@ async def plan_action(request: Request, req: PlanActionRequest, bg_tasks: Backgr
     import re
     
     try:
-        profil, profil_ozeti, _ = _profil_baglamini_hazirla(
-            telefon,
-            req.kimin_icin,
-            db=db,
-        )
+        snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
+        profil_ozeti = snapshot.profile_summary
     except HTTPException:
         return JSONResponse(status_code=400, content={"success": False, "detail": "Profil bulunamadı."})
     
     if req.action_type == "recipe":
         instruction = """The user is requesting a detailed recipe for the meal given in the untrusted user data.
 Write a healthy, delicious, and detailed recipe for that meal, calculated specifically for this user's profile. Include estimated macronutrient values.
-Format the output in Markdown. Include sections for Title, Ingredients, and Instructions.
-Write the final response entirely in Turkish."""
+Write all user-facing values in Turkish.
+
+WARNING: Provide your response ONLY as a JSON object in the following format. Do not use markdown code blocks.
+List every ingredient that will actually be used, including sauces, oils, garnishes, and optional additions:
+{
+  "name": "Tarif adı",
+  "ingredients": ["miktarıyla gerçek malzeme 1", "miktarıyla gerçek malzeme 2"],
+  "preparation": "Kısa ve uygulanabilir hazırlama adımları",
+  "portion": "Porsiyon ve yaklaşık makro bilgisi",
+  "why_it_fits": "Profil açısından kısa ve temkinli açıklama"
+}"""
         messages = _plan_action_messages(
             instruction,
             profile_context=profil_ozeti,
@@ -686,16 +694,24 @@ Write the final response entirely in Turkish."""
         
         try:
             tarif_cevap_obj = await run_in_threadpool(invoke_with_model_fallback, messages)
-            tarif_metni = parse_llm_response(tarif_cevap_obj)
-            safety = _check_tool_output_safety(profil, req.kimin_icin, tarif_metni)
+            raw_recipe = parse_llm_response(tarif_cevap_obj)
+            try:
+                recipe = _parse_json_model(raw_recipe, RecipeRecommendation)
+            except (json.JSONDecodeError, ValueError):
+                return JSONResponse(
+                    status_code=502,
+                    content={"success": False, "detail": "Tarif güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin."},
+                )
+            safety = _check_tool_output_safety(snapshot, recipe)
             if safety["blocked"]:
                 return JSONResponse(
                     status_code=422,
-                    content={"success": False, "detail": _safety_block_detail()},
+                    content={"success": False, "detail": _safety_block_detail(safety["reasons"])},
                 )
+            tarif_metni = _render_recipe(recipe)
             if safety["warning"]:
                 tarif_metni = f"{safety['warning']}\n\n{tarif_metni}"
-            bg_tasks.add_task(etkilesim_logla, telefon, "", "Plan-Tarif", req.meal_text, tarif_metni, None)
+            bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "Plan-Tarif", req.meal_text, tarif_metni, json.dumps(snapshot.history_metadata(), ensure_ascii=False))
             return {"success": True, "result": tarif_metni}
         except Exception:
             return JSONResponse(status_code=503, content={"success": False, "detail": "Tarif şu anda hazırlanamadı. Lütfen birazdan tekrar deneyin."})
@@ -709,11 +725,12 @@ TASK:
 2. If the calories or macros (Protein, Carbs, Fats) of this new meal differ from the old one, analyze the OTHER meals for THAT SAME DAY (Breakfast, Lunch, Dinner, etc.). Adjust the portions or ingredients of those other meals to maintain the daily macro and calorie balance. (e.g., if breakfast has less protein now, add chicken to dinner).
 3. Add both the originally replaced meal AND any other meals you modified for balance to the `degisen_ogunler` JSON array. If no other meals needed changing, just add the replaced meal.
 4. For the "eski" (old) field, write the EXACT string of the meal from the Current Weekly Plan text (including calorie values) so the system can find and replace it. For the "yeni" (new) field, write your new suggested meal in the exact same format.
+5. For every replacement, list every ingredient that will actually be used. Do not omit sauces, dairy, bread, garnishes, or optional additions.
 
 WARNING: Provide your response ONLY in the following JSON format. Do not use markdown code blocks (` ```json `). All meal names and text inside the JSON must be in Turkish:
 {{
   "degisen_ogunler": [
-    {{"eski": "Mercimek Çorbası (300 kcal...)", "yeni": "Ezogelin Çorbası (300 kcal...)"}}
+    {{"eski": "Mercimek Çorbası (300 kcal...)", "yeni": "Ezogelin Çorbası (300 kcal...)", "ingredients": ["kırmızı mercimek", "bulgur", "zeytinyağı"]}}
   ]
 }}"""
         messages = _plan_action_messages(
@@ -724,32 +741,27 @@ WARNING: Provide your response ONLY in the following JSON format. Do not use mar
         try:
             cevap_obj = await run_in_threadpool(invoke_with_model_fallback, messages)
             cevap = parse_llm_response(cevap_obj)
-            # Extract JSON block using regex / Regex kullanarak JSON bloğunu çıkar
-            json_match = re.search(r'\{.*\}', cevap, re.DOTALL)
-            if json_match:
-                json_text = json_match.group(0)
-                try:
-                    data = json.loads(json_text)
-                    safety = _check_tool_output_safety(profil, req.kimin_icin, data)
-                    if safety["blocked"]:
-                        return JSONResponse(
-                            status_code=422,
-                            content={"success": False, "detail": _safety_block_detail()},
-                        )
-                    if safety["warning"]:
-                        data["warning"] = safety["warning"]
-                    bg_tasks.add_task(etkilesim_logla, telefon, "", "Plan-Alternatif", req.meal_text, json.dumps(data, ensure_ascii=False), None)
-                    return {"success": True, "result": data}
-                except:
-                    pass
-            
-            return JSONResponse(
-                status_code=502,
-                content={
-                    "success": False,
-                    "detail": "Alternatif öğün güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin.",
-                },
-            )
+            try:
+                payload = _parse_json_model(cevap, AlternativeMealsPayload)
+            except (json.JSONDecodeError, ValueError):
+                return JSONResponse(
+                    status_code=502,
+                    content={
+                        "success": False,
+                        "detail": "Alternatif öğün güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin.",
+                    },
+                )
+            data = payload.model_dump()
+            safety = _check_tool_output_safety(snapshot, payload)
+            if safety["blocked"]:
+                return JSONResponse(
+                    status_code=422,
+                    content={"success": False, "detail": _safety_block_detail(safety["reasons"])},
+                )
+            if safety["warning"]:
+                data["warning"] = safety["warning"]
+            bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "Plan-Alternatif", req.meal_text, json.dumps(data, ensure_ascii=False), json.dumps(snapshot.history_metadata(), ensure_ascii=False))
+            return {"success": True, "result": data}
         except Exception:
             return JSONResponse(status_code=503, content={"success": False, "detail": "Alternatif öğün şu anda hazırlanamadı. Lütfen birazdan tekrar deneyin."})
             
@@ -766,6 +778,7 @@ The current weekly plan is provided in the untrusted user data.
 TASK:
 Suggest 2-3 logical, clinically safe, and portion-controlled alternative snacks/desserts that are COMPLETELY APPROPRIATE for this user's health profile and perfectly balance the macros of their {bugun} menu. 
 Briefly explain the recipes and your clinical reasoning in Markdown format.
+Vary the options: use different textures and preparation styles, and prefer practical Turkish-kitchen ideas such as a small toast, a bowl, a simple baked option, or a vegetable-based snack when compatible with the profile. Do not repeat the same default apple/chia suggestion every time.
 Do NOT reference the wrong day!
 Write the final response entirely in Turkish.
 
@@ -804,17 +817,17 @@ Put only foods that will actually be used under ingredients. Keep safety explana
                     content={"success": False, "detail": "Atıştırmalık önerileri güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin."},
                 )
             data = payload.model_dump()
-            safety = _check_tool_output_safety(profil, req.kimin_icin, data)
+            safety = _check_tool_output_safety(snapshot, data)
             if safety["blocked"]:
                 return JSONResponse(
                     status_code=422,
-                    content={"success": False, "detail": _safety_block_detail()},
+                    content={"success": False, "detail": _safety_block_detail(safety["reasons"])},
                 )
             if safety["warning"]:
                 data["warning"] = safety["warning"]
             data["snack_onerileri"] = _render_snack_suggestions(payload)
             data.pop("snacks", None)
-            bg_tasks.add_task(etkilesim_logla, telefon, "", "Plan-Snack", "Atıştırmalık İsteği", snack_metni, None)
+            bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "Plan-Snack", "Atıştırmalık İsteği", snack_metni, json.dumps(snapshot.history_metadata(), ensure_ascii=False))
             return {"success": True, "result": data}
         except Exception:
             return JSONResponse(status_code=503, content={"success": False, "detail": "Ara öğün önerisi şu anda hazırlanamadı. Lütfen birazdan tekrar deneyin."})
