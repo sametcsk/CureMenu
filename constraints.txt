@@ -160,7 +160,7 @@ rich==15.0.0
 rpds-py==2026.5.1
 safetensors==0.8.0
 scikit-learn==1.9.0
-scipy==1.18.0
+scipy==1.16.3
 sentence-transformers==5.6.0
 setuptools==81.0.0
 shellingham==1.5.4
