@@ -1,6 +1,9 @@
 <div align="center">
   <h1>🍽️ CureMenu</h1>
-  <p><strong>Kronik Hastalıklara Özel Kişiselleştirilmiş Beslenme ve Karar Motoru</strong></p>
+  <p><strong>Profil ve güvenlik kontrolleriyle beslenme karar desteği</strong></p>
+  <p>
+    <a href="https://github.com/sametcsk/CureMenu/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/sametcsk/CureMenu/actions/workflows/ci.yml/badge.svg"></a>
+  </p>
 </div>
 
 ---
@@ -37,8 +40,8 @@ Evde veya dışarıda yaşanan "Ne yiyebilirim?" sorusuna yardımcı olmak amac�
 | Katman | Teknoloji |
 |--------|-----------|
 | **Web Arayüzü** | Vanilla JS, HTML, CSS (`frontend/` modüler yapısı) |
-| **Backend API** | FastAPI, Python 3.12 |
-| **Yapay Zeka Mimarisi** | LangGraph (StateGraph tabanlı Multi-Agent Workflow), Google Gemini, Tavily |
+| **Backend API** | FastAPI, Python 3.11 / 3.12 |
+| **Yapay Zeka Mimarisi** | LangGraph (StateGraph tabanlı Multi-Agent Workflow), Google Gemini |
 | **Hafıza & RAG** | ChromaDB (Yerel vektör veritabanı, HuggingFace embeddings) |
 | **İlişkisel Veritabanı** | SQLite (Profiller, loglar) + Alembic Migration |
 | **Kalite ve Güvenlik** | Deterministik kontrol kuralları, kaynak izlenebilirliği, Pydantic Structured Outputs |
@@ -50,7 +53,6 @@ Evde veya dışarıda yaşanan "Ne yiyebilirim?" sorusuna yardımcı olmak amac�
 ### Gereksinimler
 - **Python 3.11 veya 3.12**
 - Google Gemini API Anahtarı
-- Tavily API Anahtarı
 
 ### Başlangıç Adımları
 
@@ -63,8 +65,8 @@ python -m venv .venv
 .venv\Scripts\activate        # Windows
 # source .venv/bin/activate   # macOS / Linux
 
-# Bağımlılıkları yükleyin
-pip install -r requirements.txt
+# Tekrarlanabilir runtime bağımlılıklarını yükleyin
+pip install -c constraints.txt -r requirements.txt
 
 # Çevre değişkenlerini ayarlayın
 copy .env.example .env        # Windows
@@ -78,6 +80,21 @@ python run.py
 Tarayıcınızda açın: **http://localhost:8000**
 - Ana Sayfa: `/`
 - Dashboard: `/dashboard`
+- Liveness: `/live`
+- Readiness: `/ready`
+
+### Kontrollü beta dağıtımı
+
+Depoda Render için bir Blueprint (`render.yaml`) ve güvenli başlangıç scripti
+bulunur. Mevcut SQLite + ChromaDB yapısı yalnızca düşük trafikli, tek instance
+kapalı beta için kalıcı disk üzerinde çalıştırılmalıdır; çoklu instance veya
+genel kullanıma açık production ölçeği için yönetilen ilişkisel ve vektör veri
+katmanına geçiş gerekir.
+
+Dağıtım öncesi ortam değişkenleri, migration, yedekleme, rollback ve smoke test
+adımları [`docs/DEPLOYMENT_RUNBOOK.md`](docs/DEPLOYMENT_RUNBOOK.md) içinde
+belgelenmiştir. Blueprint'in depoda bulunması, canlı ortamın klinik olarak
+doğrulandığı veya production'a hazır olduğu anlamına gelmez.
 
 ### Sağlık kaynağı izlenebilirliği
 
@@ -98,20 +115,24 @@ Uzak kaynak değiştiğinde hash otomatik kabul edilmez; insan ve sağlık uzman
 ## Veri Gizliliği ve Güvenlik Modeli
 
 CureMenu, hassas sağlık verilerini işlediği için sıkı bir veri güvenliği protokolü izler:
-- **Yerel Depolama:** Kullanıcı profilleri, kişisel bilgiler ve oluşturulan loglar (`SQLite`) ile bağlamsal geri bildirimler (`ChromaDB`) tamamen yerel sunucuda/disk üzerinde tutulur.
-- **Veri Maskeleme (Data Redaction):** LLM'e gönderilen istemlerde ve veri tabanına yazılan kalıcı izlenebilirlik (audit) loglarında T.C. Kimlik, Telefon Numarası, IBAN ve API Token gibi kişisel tanımlayıcı veriler regex maskeleme mekanizmaları ile sansürlenir.
-- **Sistem İzolasyonu:** API endpointleri Rate Limiting ve SSRF koruma önlemleri ile dış tehditlere karşı korunmuştur. Modellerin dış internet aramaları Tavily üzerinden güvenli sınırlara hapsedilmiştir.
+- **Kalıcı Veri Katmanı:** Profil, işlem kaydı ve bağlamsal hafıza verileri yapılandırılmış sunucu diskinde SQLite ve ChromaDB ile saklanır. Kapalı beta ortamında bu disk erişimi ve yedekleri ayrıca sınırlandırılmalıdır.
+- **Harici Model Sınırı:** Yanıt üretimi için gerekli sınırlı bağlam Google Gemini hizmetine gönderilebilir. Bu nedenle sistem tamamen çevrimdışı veya yalnızca yerel veri işleyen bir ürün olarak değerlendirilmemelidir.
+- **Veri Maskeleme (Data Redaction):** Model, izlenebilirlik kaydı ve bağlamsal hafıza yollarında e-posta, telefon, kimlik numarası, IBAN ve token benzeri kişisel tanımlayıcılar maskelenir. Bu kontroller veri minimizasyonu ve açık kullanıcı bilgilendirmesi gereksinimini ortadan kaldırmaz.
+- **Sistem İzolasyonu:** API endpointlerinde kimlik doğrulama, rate limiting, güvenlik başlıkları; URL ve dosya akışlarında SSRF, format, boyut ve işlem limitleri uygulanır.
 
 ---
 
 ## Testler ve CI/CD
 
-Proje geniş kapsamlı bir test altyapısına sahiptir:
-```bash
-pytest tests/ -v
+```powershell
+# Birim ve API testleri
+python -m pytest -q tests --ignore=tests/e2e
+
+# Gerçek tarayıcı E2E testleri
+python -m pytest -q tests/e2e
 ```
 **Kapsam:** Profil CRUD işlemleri, Guardrail ve kural motoru kararları, API entegrasyonları, PDF analiz validasyonları ve PII (Kişisel Veri) Redaction testleri.  
-*Tüm testler GitHub Actions üzerinden CI/CD pipeline'ı ile doğrulanmaktadır.*
+GitHub Actions, bağımlılık kurulumunu ve iki test paketini Python 3.11 ile 3.12 üzerinde ayrı ayrı doğrular. Otomatik test sonuçları yazılım regresyon kanıtıdır; klinik doğrulama kanıtı değildir.
 
 ---
 
@@ -123,6 +144,9 @@ pytest tests/ -v
 - [x] Ekonomi & Bütçe Ajanı Entegrasyonu
 - [x] Klinik Guardrail ve İzlenebilirlik Kayıtları
 - [x] Tahlil (PDF) Ayrıştırma ve Bio-Marker Takibi
-- [ ] Yapısal Akıllı Sepet (Structured Smart Grocery) Modülü
+- [x] Yapısal Akıllı Sepet (Structured Smart Grocery) Modülü
+- [x] Kontrollü beta deployment Blueprint'i ve operasyon runbook'u
+- [ ] Gerçek HTTPS ortamında deployment ve fiziksel cihaz smoke testi
+- [ ] Uzman pilotu ve tanımlı klinik validasyon süreci
 - [ ] Lokasyon Bazlı Restoran Önerisi
 - [ ] Giyilebilir Teknoloji (Wearable) Entegrasyonu
