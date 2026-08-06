@@ -167,6 +167,22 @@ window.ChatWidget = {
         `;
 
         document.body.appendChild(this.root);
+        const contextBar = this.root.querySelector('.cm-assistant-context');
+        if (contextBar) contextBar.style.display = 'none';
+        const status = this.root.querySelector('#cm-assistant-status');
+        if (status) status.textContent = 'Her öğünde, her sorunda yanında.';
+        const titleBlock = this.root.querySelector('.cm-assistant-title > div:last-child');
+        if (titleBlock) {
+            const subtitle = document.createElement('small');
+            subtitle.className = 'cm-assistant-subtitle';
+            subtitle.textContent = 'Profilini, aileni ve günlük yemek kararlarını birlikte değerlendirir.';
+            titleBlock.appendChild(subtitle);
+            const chip = document.createElement('span');
+            chip.className = 'cm-assistant-context-chip';
+            chip.dataset.cmHeaderContext = 'true';
+            chip.textContent = 'Samet için';
+            titleBlock.appendChild(chip);
+        }
         this.renderWelcome();
         this.loadCachedConversation();
         this.bindEvents();
@@ -421,6 +437,8 @@ window.ChatWidget = {
                 : 'Samet iÃ§in';
             const contextChip = this.root.querySelector('[data-cm-context-chip]');
             if (contextChip) contextChip.textContent = inferredLabel;
+            const headerChip = this.root.querySelector('[data-cm-header-context]');
+            if (headerChip) headerChip.textContent = inferredLabel;
             
             if (!window.safeFetchStream) throw new Error("API client yüklü değil.");
             
@@ -575,6 +593,8 @@ window.ChatWidget = {
             .cm-assistant-context label { color: #526762; font-size: 12px; font-weight: 700; white-space: nowrap; }
             .cm-assistant-context select { min-width: 0; flex: 1; height: 36px; border: 1px solid rgba(189, 201, 198, 0.9); border-radius: 10px; padding: 0 10px; background: #ffffff; color: #102033; font-size: 13px; outline: none; }
             .cm-assistant-context select:focus { border-color: #005c55; box-shadow: 0 0 0 3px rgba(0, 92, 85, 0.1); }
+            .cm-assistant-subtitle { display: block; margin-top: 3px; font-size: 10px; line-height: 1.25; color: rgba(255,255,255,0.72); max-width: 230px; }
+            .cm-assistant-context-chip { display: inline-flex; align-items: center; width: fit-content; border: 1px solid rgba(255,255,255,0.24); border-radius: 999px; padding: 3px 8px; color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.1); font-size: 10px; font-weight: 700; }
             .cm-assistant-body { overflow-y: auto; padding: 14px; background: #f7fbfc; display: flex; flex-direction: column; gap: 10px; }
             .cm-assistant-message { max-width: 86%; border-radius: 14px; padding: 11px 12px; font-size: 13px; line-height: 1.5; border: 1px solid transparent; word-wrap: break-word; }
             .cm-assistant-message.bot { align-self: flex-start; background: #ffffff; border-color: rgba(189, 201, 198, 0.7); color: #102033; }
