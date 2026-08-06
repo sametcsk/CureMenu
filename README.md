@@ -33,7 +33,7 @@ Bu proje bir **beslenme karar destek prototipidir**. Doktorun, diyetisyenin veya
 - **Tahlil PDF analizi:** Metin içeren laboratuvar PDF’lerini geçmişe kaydeder.
 - **Buzdolabı analizi:** Fotoğraftaki malzemelerden profil uyumlu fikirler üretir.
 - **Plan alışverişi ve bütçesi:** Alışveriş listesini yaklaşık bütçeyle birleştirir.
-- **Governance ve izlenebilirlik:** Karar kayıtları, kural kontrolleri ve güvenlik durumlarını saklar.
+- **Karar İzlenebilirliği (Audit Trail):** Yapay zekanın sağlık tavsiyesi verirken hangi kurala ve güvenlik bariyerine göre karar verdiğini şeffafça kaydeder.
 
 ## Mimari
 
@@ -42,9 +42,9 @@ Bu proje bir **beslenme karar destek prototipidir**. Doktorun, diyetisyenin veya
 | Frontend | Vanilla JavaScript, HTML ve CSS; `frontend/` altında modüler yapı |
 | Backend | Python 3.11/3.12, FastAPI, Uvicorn |
 | AI/LLM | LangGraph tabanlı akışlar ve Google Gemini |
-| RAG/Hafıza | ChromaDB, HuggingFace embeddings ve sınırlı bağlamsal hafıza |
+| Akıllı Hafıza | ChromaDB, vektör tabanlı arama ve kişiselleştirilmiş bağlam belleği |
 | Veritabanı | SQLite; profil, etkileşim ve karar kayıtları |
-| Güvenlik/kalite | Deterministik safety kuralları, Pydantic çıktıları, rate limiting, redaction ve izlenebilirlik |
+| Güvenlik ve Doğruluk | Kesin kurallı sağlık bariyerleri, KVKK uyumlu veri maskeleme ve şeffaf izlenebilirlik |
 
 ## Kurulum
 
@@ -94,7 +94,7 @@ CureMenu sağlık verisi işleyebildiği için hassas veri varsayımıyla tasarl
 
 - Profil, etkileşim ve karar kayıtları yerel SQLite/Chroma katmanlarında tutulabilir.
 - Yanıt üretimi için gerekli sınırlı bağlam Google Gemini gibi harici model sağlayıcılarına gönderilebilir.
-- Telefon, e-posta, kimlik numarası ve token benzeri tanımlayıcılar için redaction ve veri minimizasyonu kontrolleri bulunur.
+- Telefon, e-posta, kimlik numarası gibi hassas kişisel veriler yapay zekaya iletilmeden önce otomatik olarak maskelenir (veri minimizasyonu).
 - Kimlik doğrulama, rate limiting, dosya boyutu/format kontrolleri ve URL güvenlik kontrolleri uygulanır.
 - KVKK, sağlık mevzuatı ve kurumsal veri yönetişimi için ayrıca hukuki, teknik ve operasyonel çalışma gerekir.
 
@@ -110,7 +110,7 @@ CureMenu kontrollü demo ve eğitim senaryolarında kullanılabilir. Ana demo ak
 - Beslenme uzmanlarıyla pilot çalışma
 - Tanımlı klinik validasyon ve güvenlik değerlendirmeleri
 - Lisanslı, doğrulanabilir veri kaynaklarının genişletilmesi
-- Deployment, gözlemlenebilirlik ve veri saklama hardening’i
+- Canlı ortam (production) gözlemlenebilirliği ve veri güvenliğinin artırılması
 - Restoran, konum ve menü entegrasyonlarının güçlendirilmesi
 
 ## Sorumluluk reddi
