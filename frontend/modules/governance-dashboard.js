@@ -82,7 +82,7 @@ function renderClinicalDecisions(decisions) {
     const root = document.getElementById('clinicalDecisionList');
     if (!root) return;
     if (!decisions || decisions.length === 0) {
-        root.innerHTML = '<p class="text-on-surface-variant">Henuz klinik karar kaydi yok. CureBot ile bir konusma yaptiktan sonra burada gorunur.</p>';
+        root.innerHTML = '<p class="text-on-surface-variant">Henüz klinik karar kaydı yok. CureBot ile bir konuşma yaptıktan sonra burada görünür.</p>';
         return;
     }
     root.innerHTML = decisions.map((decision) => {

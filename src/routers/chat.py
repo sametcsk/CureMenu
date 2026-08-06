@@ -270,10 +270,10 @@ def _final_cevap_metni(result: dict, streamed_text: str = "") -> str:
 
 def _chat_fallback_message(profil_ozeti: str, user_message: str) -> str:
     request_hint = user_message.strip()[:140] if user_message else "beslenme sorusu"
-    profile_hint = "Profilindeki hastalik, alerji ve ilac bilgilerini dikkate alarak ilerlemem gerekiyor."
+    profile_hint = "Profilindeki hastalık, alerji ve ilaç bilgilerini dikkate alarak ilerlemem gerekiyor."
     if not profil_ozeti:
-        profile_hint = "Sana ozel konusabilmem icin profil bilgilerini net gormem gerekiyor."
-    return f"Su an akilli oneri motoruna baglanirken bir aksama yasadim, ama seni bosta birakmayacagim.\n\n- Istegin: {request_hint}\n- Guvenlik notum: {profile_hint}\n- Bugun icin en guvenli yaklasim: hafif, az tuzlu, islenmemis ve alerji riski tasimayan bir ogun sec; emin olmadigin ilac-besin eslesmelerinde doktoruna veya diyetisyenine danis.\n\nBirazdan tekrar denediginde daha ayrintili ve kisisel bir oneri hazirlayabilirim."
+        profile_hint = "Sana özel konuşabilmem için profil bilgilerini net görmem gerekiyor."
+    return f"Şu an akıllı öneri motoruna bağlanırken bir aksama yaşadım, ama seni yanıtsız bırakmayacağım.\n\n- İsteğin: {request_hint}\n- Güvenlik notum: {profile_hint}\n- Bugün için en güvenli yaklaşım: hafif, az tuzlu, işlenmemiş ve alerji riski taşımayan bir öğün seç; emin olmadığın ilaç-besin eşleşmelerinde doktoruna veya diyetisyenine danış.\n\nBirazdan tekrar denediğinde daha ayrıntılı ve kişisel bir öneri hazırlayabilirim."
 
 def _chat_fallback_state(initial_state: dict, fallback_message: str, error: Exception) -> dict:
     confidence = calculate_confidence(safe=True, evidence_found=False, citations=[])
