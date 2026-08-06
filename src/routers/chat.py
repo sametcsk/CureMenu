@@ -414,11 +414,16 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
     except Exception:
         intent_plan = fallback_intent_plan(req.mesaj, req.kimin_icin)
     if intent_plan.intent in {"meal_recommendation", "dessert_craving", "coffee_habit", "explanation_followup", "product_question"} and not plan_requires_safety_gate(intent_plan):
+        if normalized_message(req.mesaj).strip() in {"öner", "oner", "alternatif", "başka", "baska", "detay", "tarif"} and not sohbet_gecmisi:
+            natural_answer = "Neye alternatif istediğini tam çıkaramadım. İstersen tatlı, kahvaltı ya da akşam yemeği olarak uyarlayabilirim."
+        else:
+            natural_answer = None
         try:
-            natural_answer = await asyncio.wait_for(
-                run_in_threadpool(generate_curebot_natural_answer, intent_plan, snapshot, req.mesaj, ""),
-                timeout=12,
-            )
+            if natural_answer is None:
+                natural_answer = await asyncio.wait_for(
+                    run_in_threadpool(generate_curebot_natural_answer, intent_plan, snapshot, req.mesaj, "Önceki konuşma bağlamı yerel olarak mevcut; ham içerik gönderilmedi." if sohbet_gecmisi else ""),
+                    timeout=12,
+                )
         except Exception:
             natural_answer = "İsteğini anladım. Profiline uygun birkaç pratik seçenek düşünebiliriz; istersen neyi özellikle sevdiğini söyle."
         if natural_answer:

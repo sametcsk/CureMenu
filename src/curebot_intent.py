@@ -1,6 +1,7 @@
 """Structured, bounded intent planning for CureBot conversation routing."""
 import json
 from datetime import datetime
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -72,6 +73,31 @@ def _natural_fallback(plan: CureBotIntentPlan) -> str:
     }.get(plan.meal_context, "İsteğini profil bağlamında değerlendiriyorum. Birkaç güvenli ve pratik seçenek önerebilirim; istersen neyi özellikle sevdiğini de söyle.")
 
 
+def _concise_markdown(answer: str, plan: CureBotIntentPlan, snapshot) -> str:
+    text = re.sub(r"(?is)^(?:sağlık profiliniz nedeniyle.*?)(?:\n\n|$)", "", str(answer or "").strip())
+    for phrase in ("İsteğinize uygun seçenekler:", "iki harika önerim var", "ilaçlarını düzenli kullanmayı unutma"):
+        text = re.sub(re.escape(phrase), "", text, flags=re.IGNORECASE)
+    if snapshot.allergies:
+        text = re.sub(r"(?im)^.*(?:badem sütü|ceviz|fıstık|kuruyemiş).*$(?:\n|$)", "", text)
+    words = text.split()
+    if len(words) > 110 and plan.intent != "explanation_followup":
+        text = " ".join(words[:110]).rstrip(" ,;:") + "."
+    if plan.intent == "explanation_followup":
+        # Explanations should describe criteria, never become a second meal recommendation.
+        text = (
+            "Bu öneriyi birkaç ölçütü birlikte değerlendirerek hazırladım:\n\n"
+            "- **Profil uyumu:** Seçili hedefin bilinen sağlık kısıtları.\n"
+            "- **Alerji güvenliği:** Kayıtlı alerjenlerden ve belirsiz içeriklerden kaçınma.\n"
+            "- **Porsiyon dengesi:** Öğünün tokluk ve kan şekeri açısından ölçülü olması.\n"
+            "- **Pratiklik:** Hazırlama süresi, pişirme yöntemi ve günlük koşullar."
+        )
+    if "**" not in text and not re.search(r"(?m)^\s*[-•]", text):
+        sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+        if len(sentences) > 1:
+            text = sentences[0] + "\n\n" + "\n".join(f"- {sentence}" for sentence in sentences[1:3])
+    return text.strip() or _natural_fallback(plan)
+
+
 def generate_curebot_natural_answer(intent_plan: CureBotIntentPlan, snapshot, user_message: str, safety_context: str = "") -> str:
     flags = {
         "target_scope": snapshot.target_scope,
@@ -103,6 +129,6 @@ Use a short safety note only at the end when clearly necessary. Do not invent un
     try:
         response = invoke_with_model_fallback(prompt, temperature=0.65)
         answer = parse_llm_response(response).strip()
-        return answer or _natural_fallback(intent_plan)
+        return _concise_markdown(answer or _natural_fallback(intent_plan), intent_plan, snapshot)
     except Exception:
         return _natural_fallback(intent_plan)
