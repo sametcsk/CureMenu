@@ -106,11 +106,11 @@ def _is_small_talk(message: str) -> bool:
 def _small_talk_answer(message: str) -> str | None:
     text = _normalized_message(message)
     if text in {"tesekkurler", "tesekkur ederim", "sag ol", "sagol"}:
-        return "Rica ederim. Istersen bir sonraki ogun, menu secimi ya da alisveris plani icin de yardimci olabilirim."
+        return "Rica ederim. İstersen bir sonraki öğün, menü seçimi ya da alışveriş planı için de yardımcı olabilirim."
     if text in {"ok", "tamam", "devam", "anladim"}:
-        return "Tamam. Istersen bir sonraki ogun, menu secimi ya da alisveris plani icin devam edebiliriz."
+        return "Tamam. İstersen bir sonraki öğün, menü seçimi ya da alışveriş planı için devam edebiliriz."
     if text in {"merhaba", "selam", "selamlar", "slm", "mrb", "naber", "nasilsin", "nasilsiniz", "iyi misin", "gunaydin", "iyi aksamlar"}:
-        return "Merhaba, buradayim. Istersen bugun ne yesem, disarida ne secsem ya da profilime gore nelere dikkat etmeliyim diye birlikte hizlica bakabiliriz."
+        return "Merhaba, buradayım. İstersen bugün ne yesem, dışarıda ne seçsem ya da profilime göre nelere dikkat etmeliyim diye birlikte hızlıca bakabiliriz."
     return None
 def _is_lab_question(message: str) -> bool:
     text = _normalized_message(message)
@@ -376,6 +376,23 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "input_guardrail": True})
             yield _sse("done")
         return StreamingResponse(injection_stream(), media_type="text/event-stream")
+
+    # Everyday conversation must be resolved before generic input/rule safety.
+    # Risky food questions return None here and continue to the explicit safety gate below.
+    intent_answer = _intent_fast_answer(snapshot, req.mesaj)
+    if intent_answer:
+        intent_state = _simple_chat_state(initial_state, intent_answer)
+        decision_record = build_decision_record(intent_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=intent_answer)
+        bg_tasks.add_task(klinik_karar_kaydet, decision_record)
+        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, intent_answer[:500], history_metadata)
+
+        async def intent_stream_precheck():
+            yield _sse("status", {"status": "Yanıt hazırlanıyor..."})
+            yield _sse("message", {"chunk": intent_answer})
+            yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "fast_path": True})
+            yield _sse("done")
+
+        return StreamingResponse(intent_stream_precheck(), media_type="text/event-stream")
 
     input_safety_answer = _explicit_input_safety_answer(snapshot, req.mesaj)
     if input_safety_answer:
