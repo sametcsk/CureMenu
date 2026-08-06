@@ -1,8 +1,11 @@
 """Structured, bounded intent planning for CureBot conversation routing."""
 import json
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+from src.llm import invoke_with_model_fallback, parse_llm_response
 
 
 
@@ -32,7 +35,19 @@ def fallback_intent_plan(message: str, target: str = "self") -> CureBotIntentPla
     risk = ""
     if any(x in text for x in ("fındıklı baklava", "fındıklı tatlı", "yiyebilir miyim")):
         risk = message
-    return CureBotIntentPlan(target=resolved_target, risk_subject=risk, needs_safety_gate=bool(risk), reason="classifier fallback")
+    context = "unknown"
+    intent = "unknown_nutrition_related"
+    if any(x in text for x in ("kahvalt", "sabah")):
+        context, intent = "breakfast", "meal_recommendation"
+    elif any(x in text for x in ("akşam", "aksam", "öğün", "ogun")):
+        context, intent = "dinner", "meal_recommendation"
+    elif any(x in text for x in ("tatlı", "tatli")):
+        context, intent = "dessert", "dessert_craving"
+    elif "kahve" in text:
+        context, intent = "coffee_pairing", "coffee_habit"
+    elif any(x in text for x in ("hangi kriter", "neye göre", "neye gore", "önceki öner")):
+        intent = "explanation_followup"
+    return CureBotIntentPlan(target=resolved_target, intent=intent, meal_context=context, risk_subject=risk, needs_safety_gate=bool(risk), reason="local privacy fallback")
 
 
 def classify_intent_plan(message: str, conversation: list[dict] | None = None, target: str = "self", profile_names: list[str] | None = None, health_flags: dict | None = None) -> CureBotIntentPlan:
@@ -43,3 +58,44 @@ def classify_intent_plan(message: str, conversation: list[dict] | None = None, t
 
 def plan_requires_safety_gate(plan: CureBotIntentPlan) -> bool:
     return bool(plan.needs_safety_gate or plan.intent in {"medication_food_question", "allergy_conflict", "lab_followup"})
+
+
+def _natural_fallback(plan: CureBotIntentPlan) -> str:
+    return {
+        "breakfast": "Bugün pratik ve dengeli bir kahvaltı seçelim: yumurta veya yulafı, yanında sebze ve küçük bir meyve porsiyonuyla tamamlayabilirsin.",
+        "dinner": "Akşam için ızgara bir protein, bol sebze ve ölçülü bir tahıl/ekmek eşliği iyi bir başlangıç olur. Evdeki malzemeleri söylersen bunu netleştirebilirim.",
+        "dessert_craving": "Tatlı isteğini küçük bir porsiyon meyve, şekersiz chia pudingi veya uygun bir yoğurt alternatifiyle karşılayabilirsin.",
+        "coffee_habit": "Kahveyi tamamen bırakman gerekmeyebilir; miktarı ve saatini gözlemle, yanında küçük ve dengeli bir atıştırmalık tercih et.",
+        "explanation_followup": "Öneriyi profilindeki kısıtlar, öğünün dengesi ve isteğinin pratikliği birlikte düşünülerek hazırladım. İstersen hangi kısmı değiştirmek istediğini söyle.",
+    }.get(plan.meal_context, "İsteğini profil bağlamında değerlendiriyorum. Birkaç güvenli ve pratik seçenek önerebilirim; istersen neyi özellikle sevdiğini de söyle.")
+
+
+def generate_curebot_natural_answer(intent_plan: CureBotIntentPlan, snapshot, user_message: str, safety_context: str = "") -> str:
+    flags = {
+        "target_scope": snapshot.target_scope,
+        "allergy_present": bool(snapshot.allergies),
+        "disease_present": bool(snapshot.diseases),
+        "medication_present": bool(snapshot.medications),
+        "allergy_categories": list(snapshot.allergies)[:8],
+        "disease_categories": list(snapshot.diseases)[:8],
+        "medication_categories": list(snapshot.medications)[:8],
+    }
+    prompt = f"""You are CureBot, a warm Turkish nutrition decision-support assistant.
+Return only the final Turkish answer to the user.
+USER MESSAGE: {str(user_message)[:900]}
+INTENT PLAN: {intent_plan.model_dump_json(exclude={"reason"})}
+MINIMAL PROFILE FACTS: {json.dumps(flags, ensure_ascii=False)}
+SAFETY CONTEXT: {safety_context[:500]}
+RESPONSE VARIATION SEED: {datetime.now().minute}
+
+Rules: sound natural and varied, usually 80-150 words, with 2-3 practical options when recommending food.
+Do not use the user's name or any family member name. Do not mention internal plans, rules, scores or classifiers.
+Never begin with generic health disclaimers. Do not use the phrase 'kayıtlı alerjenleri dışarıda bırakan'.
+Use a short safety note only at the end when clearly necessary. Do not invent unknown ingredients or medical facts.
+"""
+    try:
+        response = invoke_with_model_fallback(prompt, temperature=0.65)
+        answer = parse_llm_response(response).strip()
+        return answer or _natural_fallback(intent_plan)
+    except Exception:
+        return _natural_fallback(intent_plan)

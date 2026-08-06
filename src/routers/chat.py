@@ -30,7 +30,7 @@ from src.config import settings
 from src.profile_context import ResolvedProfileSnapshot, history_matches_snapshot, resolve_profile_snapshot
 from src.chat_intents import intent_fast_answer, merge_medications, normalized_message
 from src.chat_response import final_response_text, safety_outcome
-from src.curebot_intent import classify_intent_plan, fallback_intent_plan, plan_requires_safety_gate
+from src.curebot_intent import classify_intent_plan, fallback_intent_plan, generate_curebot_natural_answer, plan_requires_safety_gate
 from src.presentation import (
     friendly_source_title,
     format_rule_risks_for_user,
@@ -380,7 +380,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
 
     # Everyday conversation must be resolved before generic input/rule safety.
     # Risky food questions return None here and continue to the explicit safety gate below.
-    intent_answer = _intent_fast_answer(snapshot, req.mesaj)
+    intent_answer = None
     if intent_answer:
         intent_state = _simple_chat_state(initial_state, intent_answer)
         decision_record = build_decision_record(intent_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=intent_answer)
@@ -413,6 +413,26 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
         )
     except Exception:
         intent_plan = fallback_intent_plan(req.mesaj, req.kimin_icin)
+    if intent_plan.intent in {"meal_recommendation", "dessert_craving", "coffee_habit", "explanation_followup", "product_question"} and not plan_requires_safety_gate(intent_plan):
+        try:
+            natural_answer = await asyncio.wait_for(
+                run_in_threadpool(generate_curebot_natural_answer, intent_plan, snapshot, req.mesaj, ""),
+                timeout=12,
+            )
+        except Exception:
+            natural_answer = "İsteğini anladım. Profiline uygun birkaç pratik seçenek düşünebiliriz; istersen neyi özellikle sevdiğini söyle."
+        if natural_answer:
+            natural_state = _simple_chat_state(initial_state, natural_answer)
+            decision_record = build_decision_record(natural_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=natural_answer)
+            bg_tasks.add_task(klinik_karar_kaydet, decision_record)
+            bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, natural_answer[:500], history_metadata)
+
+            async def natural_stream():
+                yield _sse("message", {"chunk": natural_answer})
+                yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "fast_path": True})
+                yield _sse("done")
+
+            return StreamingResponse(natural_stream(), media_type="text/event-stream")
     input_safety_answer = _explicit_input_safety_answer(snapshot, req.mesaj) if plan_requires_safety_gate(intent_plan) else None
     if input_safety_answer:
         blocked_state = _guardrail_block_state(initial_state, input_safety_answer)
