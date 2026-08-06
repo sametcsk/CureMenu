@@ -42,8 +42,15 @@ async function calculateBudget() {
 
         if (data && data.success) {
             const formatted = formatMarkdownSafe(data.rapor);
+            const targetSelect = document.getElementById('planTarget');
+            const targetLabel = targetSelect?.selectedOptions?.[0]?.textContent?.trim() || 'Seçili hedef kişi';
             resultDiv.innerHTML = `
             <div class="bg-surface-container-low rounded-lg p-6 border border-secondary/20 shadow-inner">
+                <div class="mb-5 rounded-lg bg-primary-container/30 p-4 text-on-surface">
+                    <h3 class="font-display text-2xl font-bold">Plan Alışverişi ve Bütçesi</h3>
+                    <p class="mt-1 text-sm">${escapeHtml(targetLabel)} için bu haftalık planın gerekli ürünleri ve tahmini bütçesi.</p>
+                </div>
+                <div class="mb-5 rounded-lg border border-warning/20 bg-warning-container p-4 text-sm text-on-surface-variant">Fiyatlar canlı market fiyatı değildir; Türkiye geneli tahmini aralık olarak değerlendirilmelidir.</div>
                 <div class="prose prose-sm max-w-none font-body-md text-on-surface
                         prose-table:w-full prose-table:border-collapse prose-table:border prose-table:border-outline-variant/30
                         prose-th:bg-surface-container-high prose-th:p-2 prose-th:text-left prose-th:font-label-md prose-th:border prose-th:border-outline-variant/30
