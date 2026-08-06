@@ -100,6 +100,15 @@ def test_dietitian_prompt_avoids_unverified_clinical_certainty():
     assert "harika ve güvenli 3 alternatif" not in prompt
     assert "WHY this is medically safe" not in prompt
     assert 'Do NOT call a meal or ingredient "safe"' in prompt
+    assert "Do not mention family-member names" in prompt
+    assert "Do not repeat every diagnosis or medication" in prompt
+
+
+def test_fridge_recipe_prompt_keeps_detailed_chef_explanation_without_inventing_profile_facts():
+    source = (ROOT / "src" / "nodes.py").read_text(encoding="utf-8")
+
+    assert "Şefin Yorumu ve Tıbbi Uyarı" in source
+    assert "do not claim clinical certainty or invent profile facts" in source
 
 
 def test_plan_alternatif_sahte_placeholder_ogun_kullanmaz():

@@ -609,6 +609,9 @@ def test_weekly_plan_caution_ilac_besin_riskini_uyariyla_gosterir(mock_plan, moc
     assert "Warfarin" in body["plan"]["warnings"][0]
     assert "kritiktir" not in body["plan"]["warnings"][0].casefold()
     assert "INR dengesini koruyunuz" not in body["plan"]["warnings"][0]
+    assert body["compatibility"]["status"] == "caution"
+    assert body["compatibility"]["tone"] == "yellow"
+    assert body["compatibility"]["label"] == "Dikkat gerektiren noktalar var"
 
 
 @patch("src.routers.tools.hafizadakini_getir", return_value=[])
@@ -639,7 +642,7 @@ def test_weekly_plan_avoid_ilac_besin_riskini_bloklar(mock_plan, mock_hafiza, cl
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["code"] == "PLAN_SAFETY_BLOCKED"
-    assert "profesyoneline" in body["error"]["message"]
+    assert "kayıtlı alerji veya beslenme kısıtlarınızla uyuşmuyor" in body["error"]["message"]
     assert "tekrar deneyebilir" in body["error"]["message"]
 
 
@@ -704,6 +707,166 @@ def test_weekly_plan_structured_ingredients_drive_safety_check(mock_plan, mock_h
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "PLAN_SAFETY_BLOCKED"
+
+
+@patch("src.routers.tools.hafizadakini_getir", return_value=[])
+@patch("src.routers.tools.haftalik_plan_olustur")
+def test_weekly_plan_structured_safe_ingredients_ignore_explanation_negations(mock_plan, mock_hafiza, client):
+    login_with_profile(
+        client,
+        "5554445608",
+        "Structured Weekly Safe Test",
+        hastaliklar=["çölyak"],
+        alerjiler=["inek sütü proteini", "yumurta", "yer fıstığı"],
+    )
+    mock_plan.return_value = {
+        "days": [{
+            "day": "Pazartesi",
+            "breakfast": "Meyveli chia kasesi",
+            "lunch": "Sebzeli sandviç",
+            "dinner": "Mercimek çorbası",
+            "snacks": [],
+            "notes": ["Süt içermez, yumurtasızdır ve yer fıstığı kullanılmaz."],
+            "meal_details": {
+                "breakfast": {
+                    "name": "Meyveli chia kasesi",
+                    "ingredients": ["badem sütü", "chia tohumu", "elma"],
+                },
+                "lunch": {
+                    "name": "Sebzeli sandviç",
+                    "ingredients": ["glutensiz ekmek", "domates", "marul"],
+                },
+                "dinner": {
+                    "name": "Mercimek çorbası",
+                    "ingredients": ["mercimek", "havuç", "zeytinyağı"],
+                },
+            },
+        }],
+        "summary": "Alerjenleri içermez ve glutensiz seçeneklerden oluşur.",
+        "warnings": [],
+        "confidence": {},
+    }
+
+    response = client.post("/api/weekly-plan", json={"kimin_icin": "kendim"})
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert mock_plan.call_count == 1
+    assert response.json()["compatibility"]["status"] == "caution"
+    assert response.json()["compatibility"]["tone"] == "yellow"
+
+
+@patch("src.routers.tools.hafizadakini_getir", return_value=[])
+@patch("src.routers.tools.haftalik_plan_olustur")
+def test_weekly_plan_returns_green_compatibility_without_detected_conflicts(mock_plan, mock_hafiza, client):
+    login_with_profile(
+        client,
+        "5554445618",
+        "Weekly Fit Test",
+    )
+    mock_plan.return_value = {
+        "days": [{
+            "day": "Pazartesi",
+            "breakfast": "Yulaf ve meyve",
+            "lunch": "Sebzeli tavuk",
+            "dinner": "Mercimek çorbası",
+            "snacks": [],
+            "notes": [],
+            "meal_details": {
+                "breakfast": {"name": "Yulaf ve meyve", "ingredients": ["yulaf", "elma"]},
+                "lunch": {"name": "Sebzeli tavuk", "ingredients": ["tavuk", "kabak"]},
+                "dinner": {"name": "Mercimek çorbası", "ingredients": ["mercimek", "havuç"]},
+            },
+        }],
+        "summary": "Dengeli plan",
+        "warnings": [],
+        "confidence": {},
+    }
+
+    response = client.post(
+        "/api/weekly-plan",
+        json={
+            "kimin_icin": "kendim",
+            "plan_style": "mediterranean",
+            "plan_preferences": ["seasonal", "budget"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["compatibility"]["status"] == "fit"
+    assert response.json()["compatibility"]["tone"] == "green"
+    assert response.json()["compatibility"]["label"] == "Belirgin bir çakışma bulunmadı"
+    assert mock_plan.call_args.args[3] == "mediterranean"
+    assert mock_plan.call_args.args[4] == ["seasonal", "budget"]
+
+
+def test_weekly_plan_compatibility_requires_structured_ingredients_for_green():
+    from src.routers.tools import _compatibility_status_from_safety
+
+    compatibility = _compatibility_status_from_safety({
+        "blocked": False,
+        "review_required": False,
+        "warning": "",
+        "has_structured_ingredients": False,
+    })
+
+    assert compatibility["status"] == "unknown"
+    assert compatibility["tone"] == "gray"
+    assert compatibility["label"] == "Yeterli bilgiyle değerlendirilemedi"
+
+
+@patch("src.routers.tools.hafizadakini_getir", return_value=[])
+@patch("src.routers.tools.haftalik_plan_olustur")
+def test_weekly_plan_retries_once_after_real_allergen_and_returns_safe_draft(mock_plan, mock_hafiza, client):
+    login_with_profile(
+        client,
+        "5554445609",
+        "Weekly Retry Test",
+        alerjiler=["inek sütü proteini"],
+    )
+    unsafe = {
+        "days": [{
+            "day": "Pazartesi",
+            "breakfast": "Yoğurtlu kase",
+            "lunch": "Sebze çorbası",
+            "dinner": "Izgara tavuk",
+            "snacks": [],
+            "notes": [],
+            "meal_details": {
+                "breakfast": {"name": "Yoğurtlu kase", "ingredients": ["yoğurt", "elma"]},
+                "lunch": {"name": "Sebze çorbası", "ingredients": ["havuç", "kabak"]},
+                "dinner": {"name": "Izgara tavuk", "ingredients": ["tavuk", "brokoli"]},
+            },
+        }],
+        "summary": "İlk taslak",
+        "warnings": [],
+        "confidence": {},
+    }
+    safe = {
+        "days": [{
+            "day": "Pazartesi",
+            "breakfast": "Chia kasesi",
+            "lunch": "Sebze çorbası",
+            "dinner": "Izgara tavuk",
+            "snacks": [],
+            "notes": [],
+            "meal_details": {
+                "breakfast": {"name": "Chia kasesi", "ingredients": ["badem sütü", "chia tohumu", "elma"]},
+                "lunch": {"name": "Sebze çorbası", "ingredients": ["havuç", "kabak"]},
+                "dinner": {"name": "Izgara tavuk", "ingredients": ["tavuk", "brokoli"]},
+            },
+        }],
+        "summary": "Güvenli ikinci taslak",
+        "warnings": [],
+        "confidence": {},
+    }
+    mock_plan.side_effect = [unsafe, safe]
+
+    response = client.post("/api/weekly-plan", json={"kimin_icin": "kendim"})
+
+    assert response.status_code == 200
+    assert response.json()["plan"]["summary"] == "Güvenli ikinci taslak"
+    assert mock_plan.call_count == 2
 
 
 @patch("src.routers.tools.hafizadakini_getir", return_value=[])
@@ -1032,6 +1195,30 @@ def test_chat_intent_safe_breakfast_returns_concrete_suggestions(client, monkeyp
     assert "Decision ID" not in response.text
 
 
+def test_chat_intent_safe_breakfast_accepts_natural_imperative(client, monkeypatch):
+    login_with_profile(
+        client,
+        "5554445610",
+        "Intent Natural Imperative",
+        hastaliklar=["çölyak"],
+        alerjiler=["yumurta", "yer fıstığı", "inek sütü proteini"],
+        ilaclar=["levotiroksin"],
+    )
+
+    async def should_not_run(_state):
+        raise AssertionError("Natural safe recommendation should use the deterministic answer")
+
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+    response = client.post(
+        "/api/chat",
+        json={"mesaj": "Yumurtasız, sütsüz ve yer fıstıksız tok tutan bir kahvaltı öner.", "kimin_icin": "kendim"},
+    )
+
+    assert response.status_code == 200
+    assert "glutensiz yulaf" in response.text
+    assert "Sağlık profiliniz nedeniyle" not in response.text
+
+
 def test_chat_intent_levothyroxine_badem_sutu_timing_not_dairy_block(client, monkeypatch):
     login_with_profile(
         client,
@@ -1053,10 +1240,46 @@ def test_chat_intent_levothyroxine_badem_sutu_timing_not_dairy_block(client, mon
 
     assert response.status_code == 200
     assert "Badem sütü inek sütü proteiniyle aynı şey değildir" in response.text
-    assert "doktorunuzun ya da eczacınızın önerisini izleyin" in response.text
+    assert "reçetenizdeki talimata" in response.text
+    assert "doktorunuzun ya da eczacınızın önerisine uyun" in response.text
     assert "Profilinizle şu açık çakışmalar" not in response.text
     assert "böbrek" not in response.text.casefold()
     assert "warfarin" not in response.text.casefold()
+
+
+def test_chat_intent_levothyroxine_plain_question_does_not_mention_almond_milk(client, monkeypatch):
+    login_with_profile(client, "5554445611", "Intent Levothyroxine Plain", ilaclar=["levotiroksin"])
+
+    async def should_not_run(_state):
+        raise AssertionError("Levothyroxine timing intent should not fall through")
+
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+    response = client.post(
+        "/api/chat",
+        json={"mesaj": "Levotiroksini kahvaltıyla birlikte alabilir miyim?", "kimin_icin": "kendim"},
+    )
+
+    assert response.status_code == 200
+    assert "kahvaltıyla aynı anda" in response.text
+    assert "badem sütü" not in response.text.casefold()
+
+
+def test_chat_intent_warfarin_question_is_direct_and_not_generic(client, monkeypatch):
+    login_with_profile(client, "5554445612", "Intent Warfarin General", ilaclar=[])
+
+    async def should_not_run(_state):
+        raise AssertionError("Warfarin food question should use the focused answer")
+
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+    response = client.post(
+        "/api/chat",
+        json={"mesaj": "Warfarin kullanırken ıspanak tamamen yasak mı?", "kimin_icin": "kendim"},
+    )
+
+    assert response.status_code == 200
+    assert "otomatik olarak tamamen yasak değildir" in response.text
+    assert "düzenli tutmaktır" in response.text
+    assert "Sağlık profiliniz nedeniyle" not in response.text
 
 
 def test_chat_intent_explains_active_profile_only(client, monkeypatch):
@@ -1109,10 +1332,56 @@ def test_chat_intent_product_info_does_not_show_health_warning(client, monkeypat
     )
 
     assert response.status_code == 200
-    assert "profilinizdeki hastalık, alerji, ilaç" in response.text
-    assert "tanı koymak ya da tedavi düzenlemek değil" in response.text
+    assert "seçtiğiniz kişinin hastalık, alerji, ilaç, hedef" in response.text
+    assert "Tanı koymam veya tedavi düzenlemem" in response.text
     assert "Sağlık profiliniz nedeniyle" not in response.text
     assert "doktorunuza" not in response.text.casefold()
+
+
+def test_chat_intent_product_trust_question_does_not_turn_into_lab_analysis(client, monkeypatch):
+    login_with_profile(
+        client,
+        "5554445607",
+        "Intent Product Trust",
+        hastaliklar=[],
+        alerjiler=[],
+        ilaclar=[],
+    )
+
+    async def should_not_run(_state):
+        raise AssertionError("Product trust intent should not fall through to model graph")
+
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+    response = client.post(
+        "/api/chat",
+        json={
+            "mesaj": "Senin arkanda ne var, bunu nasıl yapıyorsun ve sana güvenebilir miyim?",
+            "kimin_icin": "kendim",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.text.casefold()
+    assert "malzemelerini kayıtlı alerji" in body
+    assert "doktor ya da diyetisyenin yerini almaz" in body
+    assert "tahlil sonucunuzda" not in body
+    for unexpected_marker in ("hba1c", "ferritin", "vitamin b12", "tsh"):
+        assert unexpected_marker not in body
+
+
+def test_review_without_specific_warning_keeps_useful_model_answer():
+    from src.chat_response import final_response_text
+
+    answer = final_response_text({
+        "uzman_onerisi": "Kabaklı karabuğday pilavını 20 dakikada hazırlayabilirsiniz.",
+        "uyari_mesaji": "",
+        "guvenli_mi": True,
+        "risk_score": 0.5,
+        "governance_events": [],
+    })
+
+    assert answer == "Kabaklı karabuğday pilavını 20 dakikada hazırlayabilirsiniz."
+    assert "Sağlık profiliniz nedeniyle" not in answer
 
 
 def test_chat_intent_diabetes_snack_returns_concrete_options(client, monkeypatch):
@@ -1254,7 +1523,13 @@ def test_fridge_scan_model_hatasinda_temiz_mesaj_doner(mock_scan, client):
     assert "gemini" not in body["detail"].lower()
 
 
-@patch("src.routers.tools.mutfak_asistani", return_value="Ispanak yemeği tarifi")
+@patch("src.routers.tools.mutfak_asistani", return_value=json.dumps({
+    "name": "Ispanak yemeği",
+    "ingredients": ["ıspanak", "soğan", "zeytinyağı"],
+    "preparation": "Sebzeleri zeytinyağıyla pişirin.",
+    "portion": "1 porsiyon",
+    "why_it_fits": "Porsiyonu kişisel önerinize göre ayarlayın.",
+}, ensure_ascii=False))
 @patch("src.routers.tools.extract_ingredients_from_image_base64", return_value="ıspanak, soğan, yağ")
 def test_fridge_scan_caution_ilac_besin_riskini_uyariyla_gosterir(mock_scan, mock_recipe, client):
     login_with_profile(
@@ -1274,7 +1549,11 @@ def test_fridge_scan_caution_ilac_besin_riskini_uyariyla_gosterir(mock_scan, moc
     assert "Warfarin" in response.json()["tarif"]
 
 
-@patch("src.routers.tools.mutfak_asistani", return_value="Yoğurtlu salatalık kasesi")
+@patch("src.routers.tools.mutfak_asistani", return_value=json.dumps({
+    "name": "Yoğurtlu salatalık kasesi",
+    "ingredients": ["yoğurt", "salatalık", "dereotu"],
+    "preparation": "Malzemeleri karıştırın.",
+}, ensure_ascii=False))
 @patch("src.routers.tools.extract_ingredients_from_image_base64", return_value="yoğurt, salatalık, dereotu")
 def test_fridge_scan_family_member_history_targetini_korur(mock_scan, mock_recipe, client):
     login_with_profile(
@@ -1307,7 +1586,11 @@ def test_fridge_scan_family_member_history_targetini_korur(mock_scan, mock_recip
     assert metadata["profile_fingerprint"]
 
 
-@patch("src.routers.tools.mutfak_asistani", return_value="Yoğurtlu salatalık kasesi")
+@patch("src.routers.tools.mutfak_asistani", return_value=json.dumps({
+    "name": "Yoğurtlu salatalık kasesi",
+    "ingredients": ["yoğurt", "salatalık", "dereotu"],
+    "preparation": "Malzemeleri karıştırın.",
+}, ensure_ascii=False))
 @patch("src.routers.tools.extract_ingredients_from_image_base64", return_value="yoğurt, salatalık, dereotu")
 def test_fridge_scan_alerjende_spesifik_blok_mesaji_doner(mock_scan, mock_recipe, client):
     login_with_profile(
@@ -1326,9 +1609,38 @@ def test_fridge_scan_alerjende_spesifik_blok_mesaji_doner(mock_scan, mock_recipe
 
     assert response.status_code == 422
     assert body["success"] is False
-    assert "Neden:" in body["detail"]
-    assert "inek sütü" in body["detail"].casefold() or "yoğurt" in body["detail"].casefold()
-    assert "Üretilen öneri sağlık profilinizle çakıştı" not in body["detail"]
+    assert "kayıtlı alerji veya beslenme kısıtlarınızla uyuşmuyor" in body["detail"]
+    assert "Neden:" not in body["detail"]
+    assert "RuleEngine" not in body["detail"]
+
+
+@patch("src.routers.tools.mutfak_asistani", return_value=json.dumps({
+    "name": "Dereotlu salatalık",
+    "ingredients": ["salatalık", "dereotu", "zeytinyağı"],
+    "preparation": "Malzemeleri doğrayıp karıştırın.",
+    "why_it_fits": "Buzdolabındaki yoğurt bu tarifte kullanılmadı.",
+}, ensure_ascii=False))
+@patch("src.routers.tools.extract_ingredients_from_image_base64", return_value="yoğurt, salatalık, dereotu")
+def test_fridge_scan_bulunan_alerjen_tarifte_kullanilmadiysa_bloklamaz(mock_scan, mock_recipe, client):
+    login_with_profile(
+        client,
+        "5554445593",
+        "Fridge Ingredient Separation",
+        alerjiler=["inek sütü proteini"],
+    )
+
+    response = client.post(
+        "/api/fridge-scan",
+        json={"kimin_icin": "kendim", "image_base64": "data:image/jpeg;base64,abc"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["recipe_ingredients"] == ["salatalık", "dereotu", "zeytinyağı"]
+    history_record = response.json()["history_record"]
+    assert history_record["eylem"] == "Buzdolabı"
+    assert history_record["asistan_ciktisi"] == response.json()["tarif"]
+    assert history_record["metadata"]["target_scope"] == "self"
 
 
 @patch("src.routers.tools.menu_danismani", return_value="Menü analizi tamamlandı.")
