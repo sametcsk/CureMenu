@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import cv2
+
 from conftest import next_phone
 
 
@@ -214,9 +216,14 @@ def test_register_wrong_password_login_and_logout(browser_page, e2e_base_url: st
 def test_weekly_plan_actions_and_gamification(authenticated_page) -> None:
     page, _context, runtime_errors, _user = authenticated_page
     plan = _weekly_plan()
+    weekly_requests: list[dict] = []
     action_requests: list[dict] = []
 
-    page.route("**/api/weekly-plan", lambda route: _json(route, {"ok": True, "plan": plan}))
+    def weekly_plan(route) -> None:
+        weekly_requests.append(json.loads(route.request.post_data or "{}"))
+        _json(route, {"ok": True, "plan": plan, "compatibility": {"status": "fit", "tone": "green", "label": "Belirgin çakışma bulunmadı", "message": "Test değerlendirmesi."}})
+
+    page.route("**/api/weekly-plan", weekly_plan)
 
     def plan_action(route) -> None:
         request = json.loads(route.request.post_data or "{}")
@@ -244,6 +251,7 @@ def test_weekly_plan_actions_and_gamification(authenticated_page) -> None:
     page.evaluate("switchTab('plan')")
     page.click("#generatePlanBtn")
     page.locator("#planResult").get_by_text("Pazartesi").wait_for()
+    page.locator("#planResult").get_by_text("Belirgin çakışma bulunmadı").wait_for()
     assert page.locator('[data-weekly-action="recipe"]').count() == 3
 
     page.locator('[data-weekly-action="recipe"]').first.evaluate("button => { button.click(); button.click(); }")
@@ -363,11 +371,13 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     chat_requests: list[dict] = []
 
     def chat_stream(route) -> None:
-        chat_requests.append(json.loads(route.request.post_data or "{}"))
+        request = json.loads(route.request.post_data or "{}")
+        chat_requests.append(request)
+        target_name = request.get("kimin_icin", "kendim")
         body = "".join(
             [
                 'event: status\ndata: {"status":"Kontroller calisiyor"}\n\n',
-                'event: token\ndata: {"chunk":"Profiline gore test yaniti."}\n\n',
+                f'event: token\ndata: {{"chunk":"{target_name} icin test yaniti."}}\n\n',
                 'event: governance\ndata: {"decision_id":"e2e-chat-decision","confidence_score":0.82,"risk_score":0.25}\n\n',
                 "event: done\ndata: {}\n\n",
             ]
@@ -401,7 +411,7 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     target.select_option("member-ece")
     page.fill("[data-cm-assistant-input]", "Aksam ne yiyebilirim?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
-    page.locator("[data-cm-assistant-body]").get_by_text("Profiline gore test yaniti.").wait_for()
+    page.locator("[data-cm-assistant-body]").get_by_text("member-ece icin test yaniti.").wait_for()
     assert chat_requests[-1]["kimin_icin"] == "member-ece"
     assert page.locator("[data-cm-assistant-body]").get_by_text("e2e-chat-decision").count() == 0
     assert page.locator("[data-cm-assistant-body]").get_by_text("Operasyonel güven").count() == 0
@@ -409,6 +419,20 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     assert citation_panel.count() == 0 or citation_panel.is_hidden()
     assert page.locator("[data-cm-assistant-body]").get_by_text("E2E resmi kaynak").count() == 0
     assert page.locator("[data-cm-assistant-body]").get_by_text("Test kanit parcasi").count() == 0
+
+    target.select_option("kendim")
+    page.fill("[data-cm-assistant-input]", "Kendim icin ne onerirsin?")
+    page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
+    page.locator("[data-cm-assistant-body]").get_by_text("kendim icin test yaniti.").wait_for()
+    assert chat_requests[-1]["kimin_icin"] == "kendim"
+    assert page.locator("[data-cm-assistant-body]").get_by_text("member-ece icin test yaniti.").count() == 0
+
+    target.select_option("aile")
+    page.fill("[data-cm-assistant-input]", "Tum aile icin ne onerirsin?")
+    page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
+    page.locator("[data-cm-assistant-body]").get_by_text("aile icin test yaniti.").wait_for()
+    assert chat_requests[-1]["kimin_icin"] == "aile"
+    assert page.locator("[data-cm-assistant-body]").get_by_text("kendim icin test yaniti.").count() == 0
 
     page.route(
         "**/api/clinical-decisions/e2e-no-citations",
@@ -469,8 +493,73 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     page.evaluate("window.MenuScanner.scanMenu()")
     page.locator("#menuScanResult").get_by_text("E2E menu analizi").wait_for()
 
+    assert page.evaluate("typeof window.Html5Qrcode === 'function'")
+
+    qr_encoder = cv2.QRCodeEncoder_create()
+    qr_image = qr_encoder.encode("https://example.com/qr-menu")
+    qr_image = cv2.resize(qr_image, None, fx=10, fy=10, interpolation=cv2.INTER_NEAREST)
+    qr_image = cv2.copyMakeBorder(qr_image, 80, 80, 80, 80, cv2.BORDER_CONSTANT, value=255)
+    encoded, qr_png = cv2.imencode(".png", qr_image)
+    assert encoded
+    page.set_input_files(
+        "#qrImageInput",
+        {"name": "menu-qr.png", "mimeType": "image/png", "buffer": qr_png.tobytes()},
+    )
+    page.wait_for_function("document.getElementById('menuUrlInput').value === 'https://example.com/qr-menu'")
+    page.locator("#menuScanResult").get_by_text("Menü bağlantısı okundu").wait_for()
+
+    page.evaluate(
+        """
+        () => {
+            window.Html5Qrcode = class {
+                constructor(elementId) { this.elementId = elementId; }
+                async start() {
+                    this.isScanning = true;
+                    document.getElementById(this.elementId).textContent = 'QR okuyucu';
+                }
+                async stop() { this.isScanning = false; }
+                async clear() {}
+            };
+        }
+        """
+    )
     page.evaluate("window.MenuScanner.startQRScanner()")
     page.locator("#qr-reader").get_by_text("QR okuyucu").wait_for()
+
+    page.evaluate(
+        """
+        () => {
+            window.Html5Qrcode = class {
+                constructor(elementId) { this.elementId = elementId; }
+                async scanFile() {
+                    document.getElementById(this.elementId).textContent = 'No multi-format readers were able to detect the code';
+                    throw new Error('No multi-format readers were able to detect the code');
+                }
+                async clear() {}
+            };
+        }
+        """
+    )
+    page.set_input_files(
+        "#qrImageInput",
+        {"name": "not-a-qr.png", "mimeType": "image/png", "buffer": b"not-a-qr"},
+    )
+    page.locator("#menuScanResult").get_by_text("Bu görselde okunabilir bir QR kod bulunamadı").wait_for()
+    assert page.get_by_text("No multi-format readers were able to detect the code").count() == 0
+    assert page.locator("[id^='qr-file-reader-']").count() == 0
+
+    page.evaluate(
+        """
+        () => {
+            window.Html5Qrcode = class {
+                async start() { throw new Error('NotAllowedError'); }
+                async clear() {}
+            };
+        }
+        """
+    )
+    page.evaluate("window.MenuScanner.startQRScanner()")
+    page.locator("#qr-reader").get_by_text("Kameraya erişilemedi").wait_for()
 
     page.route(
         "**/api/scan-menu-image",
@@ -486,7 +575,13 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
         "**/api/fridge-scan",
         lambda route: _json(
             route,
-            {"success": True, "malzemeler": "Yumurta, domates", "tarif": "E2E sebzeli omlet"},
+            {
+                "success": True,
+                "malzemeler": "Yumurta, domates",
+                "tarif": "E2E sebzeli omlet",
+                "recipe_ingredients": ["yumurta", "domates"],
+                "image_preview_base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+            },
         ),
     )
     page.evaluate("switchTab('buzdolabi')")
@@ -495,6 +590,9 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
         {"name": "fridge.png", "mimeType": "image/png", "buffer": b"not-a-real-image-for-mocked-e2e"},
     )
     page.locator("#fridgeScanResult").get_by_text("E2E sebzeli omlet").wait_for()
+    assert page.locator('#fridgeScanResult img[alt="Yüklenen buzdolabı fotoğrafı"]').count() == 1
+    page.locator("#fridgeHistoryList").get_by_text("Fotoğrafı ve tarifi aç").wait_for()
+    assert page.locator("#fridgeHistoryList").get_by_text("Henüz buzdolabı analizi yok").count() == 0
 
     page.unroute("**/api/fridge-scan")
     page.route(
@@ -697,6 +795,68 @@ def test_lab_and_fridge_history_empty_state_and_api_error_are_distinct(authentic
     page.evaluate("window.MenuScanner.loadFridgeHistory()")
     page.locator("#fridgeHistoryList").get_by_text("Buzdolabı geçmişi şu anda yüklenemedi").wait_for()
     assert page.locator("#fridgeHistoryList").get_by_text("Bağlantı kurulamadı").count() == 0
+    assert not runtime_errors
+
+
+def test_curebot_stays_closed_on_fresh_dashboard(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    root = page.locator("#cm-assistant-root")
+
+    assert root.get_attribute("data-open") != "true"
+    assert not root.locator(".cm-assistant-panel").is_visible()
+    assert root.locator("[data-cm-assistant-launcher]").is_visible()
+    assert page.evaluate("localStorage.getItem('cm_active_tab') !== 'curebot'")
+    assert not runtime_errors
+
+
+def test_fridge_history_restores_photo_detected_ingredients_and_recipe(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    main_id = page.evaluate("String(window.currentProfile.ana_kullanici.id)")
+    preview = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    metadata = json.dumps(
+        {
+            "target_id": main_id,
+            "target_scope": "self",
+            "target_name": "Test Kullanici",
+            "profile_fingerprint": "backend-generated-profile-fingerprint",
+            "detected_ingredients": ["domates", "salatalık", "yoğurt"],
+            "recipe_ingredients": ["domates", "salatalık"],
+            "image_preview_base64": preview,
+        },
+        ensure_ascii=False,
+    )
+
+    page.route(
+        "**/api/history?*",
+        lambda route: _json(
+            route,
+            {
+                "success": True,
+                "loglar": [
+                    {
+                        "eylem": "Buzdolabı",
+                        "kullanici_adi": "Test Kullanici",
+                        "kullanici_girdisi": "domates, salatalık, yoğurt",
+                        "asistan_ciktisi": "Domatesli salatalık kasesi tarifi",
+                        "tarih": "2026-08-04T10:00:00",
+                        "metadata": metadata,
+                    }
+                ],
+                "has_more": False,
+            },
+        ),
+    )
+    page.evaluate("switchTab('buzdolabi')")
+    page.evaluate("window.MenuScanner.loadFridgeHistory()")
+
+    history_card = page.locator("#fridgeHistoryList [data-fridge-history-index='0']")
+    history_card.get_by_text("Fotoğrafı ve tarifi aç").wait_for()
+    assert history_card.locator("img").count() == 1
+    history_card.click()
+    result = page.locator("#fridgeScanResult")
+    result.get_by_text("Domatesli salatalık kasesi tarifi").wait_for()
+    assert result.locator("img").count() == 1
+    assert "yoğurt" in result.inner_text()
     assert not runtime_errors
 
 
