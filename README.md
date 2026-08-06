@@ -1,152 +1,119 @@
-<div align="center">
-  <h1>🍽️ CureMenu</h1>
-  <p><strong>Profil ve güvenlik kontrolleriyle beslenme karar desteği</strong></p>
-  <p>
-    <a href="https://github.com/sametcsk/CureMenu/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/sametcsk/CureMenu/actions/workflows/ci.yml/badge.svg"></a>
-  </p>
-</div>
+# CureMenu
 
----
+Profil ve güvenlik bağlamını bir araya getiren beslenme karar destek prototipi.
 
-## Ürün Fikri ve Açıklaması
+[![CI](https://github.com/sametcsk/CureMenu/actions/workflows/ci.yml/badge.svg)](https://github.com/sametcsk/CureMenu/actions/workflows/ci.yml)
 
-**CureMenu**, ilaç kullanan, alerjisi veya kronik durumu bulunan kişilerin günlük yemek kararlarını profil bilgisi, sınırlı deterministik güvenlik kuralları ve kaynak destekli açıklamalarla destekleyen bir beslenme karar destek prototipidir. Tanı koymaz, tedavi düzenlemez ve sağlık profesyonelinin yerine geçmez.
+## Ürün özeti
 
-Evde veya dışarıda yaşanan "Ne yiyebilirim?" sorusuna yardımcı olmak amacıyla önerileri profil, alerji ve bilinen ilaç-besin kurallarıyla kontrol eder. Kapsam dışı, riskli veya belirsiz durumda koşulsuz uygunluk iddiası yerine profesyonel değerlendirme uyarısı üretir.
+CureMenu; kronik hastalığı, alerjisi, ilaç kullanımı veya özel beslenme hedefi olan kişilerin günlük yemek kararlarını daha bilinçli değerlendirmesine yardımcı olur. Sağlık profili, aile profili, haftalık plan, menü analizi, tahlil ve buzdolabı akışlarını tek bir uygulamada birleştirir.
 
-## Öne Çıkan Özellikler
+Bu proje bir **beslenme karar destek prototipidir**. Doktorun, diyetisyenin veya başka bir sağlık profesyonelinin yerini almaz; tanı koymaz ve tedavi düzenlemez.
 
-- **Sağlık Profili & Tahlil PDF Akışı:** Hastalık, alerji ve ilaç bilgileriyle birlikte metin katmanı bulunan laboratuvar PDF'lerinden beslenme bağlamı çıkarır; sonuçlar tanı amacıyla kullanılmaz.
-- **Kesişim Odaklı Aile Modu:** Farklı kısıtları olan aile bireyleri için ortak seçenek taslağı üretir ve bilinen çatışmaları işaretler.
-- **Güvenlik Kontrolleri:** Üretken yapay zeka çıktısını sınırlı deterministik kurallar ve denetim akışıyla kontrol eder; riskli sonucu engeller, belirsiz sonucu uzman incelemesine yönlendirir.
-- **Dinamik Haftalık Plan & Atıştırmalık:** Sağlık profiline göre 7 günlük plan taslağı, öğün alternatifi ve atıştırmalık önerileri üretir.
-- **Akıllı Menü Tarayıcı:** URL veya fotoğraftan çıkarılan menü metnini profil kısıtlarıyla karşılaştırır; okunamayan veya belirsiz içerikte uyarı verir.
-- **İzlenebilirlik ve Karar Kayıtları (Governance):** Öneri akışındaki kaynak, kural ve tahmini risk kayıtlarını olay zinciriyle saklar; bu kayıtlar klinik doğruluk skoru değildir.
-- **Bütçe Optimizasyonu:** Sunulan haftalık planın tahmini market maliyetini hesaplayarak aile bütçesine katkı sağlar.
+## Problem
 
----
+“Bugün ne yiyebilirim?” sorusu; kronik hastalık, alerji, ilaç kullanımı ve farklı aile bireylerinin kısıtları bir araya geldiğinde zorlaşır. Evdeki malzemeler, restoran menüleri, tahlil sonuçları ve alışveriş bütçesi çoğu zaman ayrı ayrı değerlendirilir. CureMenu, bu kararları daha anlaşılır ve izlenebilir bir akışta toplamayı hedefler.
 
-## Hedef Kitle
+## Çözüm
 
-- Kendisinde veya sevdiklerinde kronik sağlık sorunları olan ve günlük beslenme rutinini güvenle yönetmek isteyen bireyler.
-- Birden fazla farklı diyeti (örn. glutensiz ve az tuzlu) aynı mutfakta yönetmeye çalışan ebeveynler.
-- Özel beslenme hedefi olan ve plan taslağını sağlık profesyoneliyle birlikte değerlendirmek isteyen kullanıcılar. Çocuk, gebelik/emzirme ve böbrek hastalığı gibi yüksek değişkenlik taşıyan profiller uzman incelemesi gerektirir.
-- Dışarıda, restoran menülerinde ne yiyeceği konusunda kafa karışıklığı ve korku yaşayan alerjik bireyler.
+- Profil bilgilerini ve bilinen kısıtları öneri bağlamına taşır.
+- Aile modu ile farklı profillerin ortak güvenli seçeneklerini değerlendirir.
+- Menü fotoğrafı veya manuel link üzerinden seçenekleri sınıflandırır.
+- Metin katmanı bulunan tahlil PDF’lerinden beslenme bağlamı çıkarır.
+- Haftalık plan, tarif ve öğün alternatifleri oluşturur.
+- Plan alışverişini ve Türkiye geneli tahmini bütçeyi birlikte gösterir.
+- Güvenlik kararlarını ve etkileşimleri izlenebilir kayıtlarla destekler.
 
----
+## Öne çıkan özellikler
 
-## Teknolojik Altyapı
+- **CureBot:** Profil bağlamında doğal dil ile beslenme sorularını yanıtlar.
+- **Sağlık profili:** Hastalık, alerji, ilaç ve hedef bilgilerini yönetir.
+- **Aile profili:** Kendim, aile üyesi veya tüm aile kapsamında değerlendirme yapar.
+- **Haftalık plan:** Günlük öğünler, tarifler ve güvenlik notları sunar.
+- **Menü analizi:** Fotoğraf veya linkten restoran menüsü analizi yapar.
+- **Tahlil PDF analizi:** Metin içeren laboratuvar PDF’lerini geçmişe kaydeder.
+- **Buzdolabı analizi:** Fotoğraftaki malzemelerden profil uyumlu fikirler üretir.
+- **Plan alışverişi ve bütçesi:** Alışveriş listesini yaklaşık bütçeyle birleştirir.
+- **Governance ve izlenebilirlik:** Karar kayıtları, kural kontrolleri ve güvenlik durumlarını saklar.
 
-| Katman | Teknoloji |
-|--------|-----------|
-| **Web Arayüzü** | Vanilla JS, HTML, CSS (`frontend/` modüler yapısı) |
-| **Backend API** | FastAPI, Python 3.11 / 3.12 |
-| **Yapay Zeka Mimarisi** | LangGraph (StateGraph tabanlı Multi-Agent Workflow), Google Gemini |
-| **Hafıza & RAG** | ChromaDB (Yerel vektör veritabanı, HuggingFace embeddings) |
-| **İlişkisel Veritabanı** | SQLite (Profiller, loglar) + Alembic Migration |
-| **Kalite ve Güvenlik** | Deterministik kontrol kuralları, kaynak izlenebilirliği, Pydantic Structured Outputs |
+## Mimari
 
----
+| Katman | Teknoloji / yaklaşım |
+|---|---|
+| Frontend | Vanilla JavaScript, HTML ve CSS; `frontend/` altında modüler yapı |
+| Backend | Python 3.11/3.12, FastAPI, Uvicorn |
+| AI/LLM | LangGraph tabanlı akışlar ve Google Gemini |
+| RAG/Hafıza | ChromaDB, HuggingFace embeddings ve sınırlı bağlamsal hafıza |
+| Veritabanı | SQLite; profil, etkileşim ve karar kayıtları |
+| Güvenlik/kalite | Deterministik safety kuralları, Pydantic çıktıları, rate limiting, redaction ve izlenebilirlik |
 
-## Kurulum ve Çalıştırma
+## Kurulum
 
-### Gereksinimler
-- **Python 3.11 veya 3.12**
-- Google Gemini API Anahtarı
+Gereksinimler: Python 3.11 veya 3.12.
 
-### Başlangıç Adımları
-
-```bash
+```powershell
 git clone https://github.com/sametcsk/CureMenu.git
 cd CureMenu
 
-# Sanal ortamı kurun ve aktif edin
 python -m venv .venv
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # macOS / Linux
+.venv\Scripts\Activate.ps1
 
-# Tekrarlanabilir runtime bağımlılıklarını yükleyin
 pip install -c constraints.txt -r requirements.txt
+copy .env.example .env
 
-# Çevre değişkenlerini ayarlayın
-copy .env.example .env        # Windows
-# cp .env.example .env        # macOS / Linux
-# (Sonrasında .env dosyasını açıp API anahtarlarınızı girin)
-
-# Uygulamayı başlatın
+# .env içindeki gerekli API anahtarlarını ve ortam ayarlarını düzenleyin.
 python run.py
 ```
 
-Tarayıcınızda açın: **http://localhost:8000**
-- Ana Sayfa: `/`
-- Dashboard: `/dashboard`
-- Liveness: `/live`
-- Readiness: `/ready`
+macOS/Linux için sanal ortamı `source .venv/bin/activate` ile etkinleştirebilirsiniz.
 
-### Kontrollü beta dağıtımı
+Uygulama varsayılan olarak [http://localhost:8000](http://localhost:8000) adresinde açılır. Sağlık kontrol uçları `/live` ve `/ready` yollarındadır.
 
-Depoda Render için bir Blueprint (`render.yaml`) ve güvenli başlangıç scripti
-bulunur. Mevcut SQLite + ChromaDB yapısı yalnızca düşük trafikli, tek instance
-kapalı beta için kalıcı disk üzerinde çalıştırılmalıdır; çoklu instance veya
-genel kullanıma açık production ölçeği için yönetilen ilişkisel ve vektör veri
-katmanına geçiş gerekir.
-
-Dağıtım öncesi ortam değişkenleri, migration, yedekleme, rollback ve smoke test
-adımları [`docs/DEPLOYMENT_RUNBOOK.md`](docs/DEPLOYMENT_RUNBOOK.md) içinde
-belgelenmiştir. Blueprint'in depoda bulunması, canlı ortamın klinik olarak
-doğrulandığı veya production'a hazır olduğu anlamına gelmez.
-
-### Sağlık kaynağı izlenebilirliği
-
-Resmî kaynak URL'leri, PDF hash'leri, izin verilen sayfalar ve ilaç-besin kural bağlantıları `data/clinical_evidence_registry.json` dosyasında tek yerde tutulur.
+## Testler
 
 ```powershell
-# Yerel PDF/hash/sayfa/kural kontrolü
-.\.venv\Scripts\python.exe scripts\sync_clinical_evidence.py --check-only
+# Python kaynaklarının derlenebilirlik kontrolü
+.\.venv\Scripts\python.exe -m compileall src
 
-# Kaynak bütünlüğü kontrolü geçerse resmî kapsamlı koleksiyonu yeniden kur
-.\.venv\Scripts\python.exe scripts\sync_clinical_evidence.py --rebuild
+# Backend ve API testleri
+.\.venv\Scripts\python.exe -m pytest -q tests --ignore=tests/e2e
+
+# Playwright uçtan uca testleri
+.\.venv\Scripts\python.exe -m pytest -q tests/e2e
+
+# Vendor hariç frontend JavaScript dosyaları için syntax kontrolü
+Get-ChildItem frontend -Recurse -Filter *.js |
+  Where-Object { $_.FullName -notmatch '\\vendor\\' } |
+  ForEach-Object { node --check $_.FullName }
 ```
 
-Uzak kaynak değiştiğinde hash otomatik kabul edilmez; insan ve sağlık uzmanı incelemesi gerekir. Kaynak bütünlüğü kontrolü klinik performans kanıtı değildir.
+Testler yazılım regresyonlarını ve güvenlik kontrollerini ölçer; klinik etkinlik veya tıbbi doğrulama anlamına gelmez.
 
----
+## Gizlilik ve güvenlik
 
-## Veri Gizliliği ve Güvenlik Modeli
+CureMenu sağlık verisi işleyebildiği için hassas veri varsayımıyla tasarlanmıştır.
 
-CureMenu, hassas sağlık verilerini işlediği için sıkı bir veri güvenliği protokolü izler:
-- **Kalıcı Veri Katmanı:** Profil, işlem kaydı ve bağlamsal hafıza verileri yapılandırılmış sunucu diskinde SQLite ve ChromaDB ile saklanır. Kapalı beta ortamında bu disk erişimi ve yedekleri ayrıca sınırlandırılmalıdır.
-- **Harici Model Sınırı:** Yanıt üretimi için gerekli sınırlı bağlam Google Gemini hizmetine gönderilebilir. Bu nedenle sistem tamamen çevrimdışı veya yalnızca yerel veri işleyen bir ürün olarak değerlendirilmemelidir.
-- **Veri Maskeleme (Data Redaction):** Model, izlenebilirlik kaydı ve bağlamsal hafıza yollarında e-posta, telefon, kimlik numarası, IBAN ve token benzeri kişisel tanımlayıcılar maskelenir. Bu kontroller veri minimizasyonu ve açık kullanıcı bilgilendirmesi gereksinimini ortadan kaldırmaz.
-- **Sistem İzolasyonu:** API endpointlerinde kimlik doğrulama, rate limiting, güvenlik başlıkları; URL ve dosya akışlarında SSRF, format, boyut ve işlem limitleri uygulanır.
+- Profil, etkileşim ve karar kayıtları yerel SQLite/Chroma katmanlarında tutulabilir.
+- Yanıt üretimi için gerekli sınırlı bağlam Google Gemini gibi harici model sağlayıcılarına gönderilebilir.
+- Telefon, e-posta, kimlik numarası ve token benzeri tanımlayıcılar için redaction ve veri minimizasyonu kontrolleri bulunur.
+- Kimlik doğrulama, rate limiting, dosya boyutu/format kontrolleri ve URL güvenlik kontrolleri uygulanır.
+- KVKK, sağlık mevzuatı ve kurumsal veri yönetişimi için ayrıca hukuki, teknik ve operasyonel çalışma gerekir.
 
----
+Bu repository production-ready klinik yazılım olarak sunulmamaktadır.
 
-## Testler ve CI/CD
+## Demo durumu
 
-```powershell
-# Birim ve API testleri
-python -m pytest -q tests --ignore=tests/e2e
+CureMenu kontrollü demo ve eğitim senaryolarında kullanılabilir. Ana demo akışı olarak manuel menü linki veya menü fotoğrafı önerilir. QR/kamera akışı cihaz, HTTPS ve tarayıcı izinlerine bağlı olduğu için yardımcı/fallback akışı olarak değerlendirilmelidir.
 
-# Gerçek tarayıcı E2E testleri
-python -m pytest -q tests/e2e
-```
-**Kapsam:** Profil CRUD işlemleri, Guardrail ve kural motoru kararları, API entegrasyonları, PDF analiz validasyonları ve PII (Kişisel Veri) Redaction testleri.  
-GitHub Actions, bağımlılık kurulumunu ve iki test paketini Python 3.11 ile 3.12 üzerinde ayrı ayrı doğrular. Otomatik test sonuçları yazılım regresyon kanıtıdır; klinik doğrulama kanıtı değildir.
+## Yol haritası
 
----
+- Kontrollü beta ve geri bildirim döngüsü
+- Beslenme uzmanlarıyla pilot çalışma
+- Tanımlı klinik validasyon ve güvenlik değerlendirmeleri
+- Lisanslı, doğrulanabilir veri kaynaklarının genişletilmesi
+- Deployment, gözlemlenebilirlik ve veri saklama hardening’i
+- Restoran, konum ve menü entegrasyonlarının güçlendirilmesi
 
-## Yol Haritası (Roadmap)
+## Sorumluluk reddi
 
-- [x] Multi-Agent Yapay Zeka Mimarisi
-- [x] Geçmiş Hafıza ve Geri Bildirim Sistemi
-- [x] Kamera/QR ile Menü Tarama (OCR)
-- [x] Ekonomi & Bütçe Ajanı Entegrasyonu
-- [x] Klinik Guardrail ve İzlenebilirlik Kayıtları
-- [x] Tahlil (PDF) Ayrıştırma ve Bio-Marker Takibi
-- [x] Yapısal Akıllı Sepet (Structured Smart Grocery) Modülü
-- [x] Kontrollü beta deployment Blueprint'i ve operasyon runbook'u
-- [ ] Gerçek HTTPS ortamında deployment ve fiziksel cihaz smoke testi
-- [ ] Uzman pilotu ve tanımlı klinik validasyon süreci
-- [ ] Lokasyon Bazlı Restoran Önerisi
-- [ ] Giyilebilir Teknoloji (Wearable) Entegrasyonu
+CureMenu tanı koymaz, tedavi düzenlemez ve sağlık profesyonelinin yerini almaz. Öneriler eğitim ve karar desteği amaçlıdır; kişisel sağlık durumları, ilaçlar ve tahliller için doktor veya diyetisyen değerlendirmesi gerekir. Acil bir durumda uygulamaya değil, doğrudan uygun sağlık kuruluşuna başvurulmalıdır.
