@@ -126,6 +126,17 @@ def test_peanut_allergy_blocks_peanut():
     assert result["found_risks"]
 
 
+def test_profile_declaration_and_negative_wording_do_not_trigger_food_allergy():
+    profile = {"alerjiler": ["fındık"], "hastaliklar": []}
+    with_nut = RuleEngine().check_rules(profile, "Fındıklı baklava", ["Fındıklı baklava"])
+    without_nut = RuleEngine().check_rules(profile, "Fındıksız granola", ["Fındıksız granola"])
+    lactose_free = RuleEngine().check_rules({"alerjiler": ["süt"], "hastaliklar": []}, "Laktozsuz yoğurt", ["Laktozsuz yoğurt"])
+
+    assert with_nut["found_risks"]
+    assert without_nut["found_risks"] == []
+    assert lactose_free["found_risks"] == []
+
+
 def test_kidney_disease_does_not_create_offal_warning():
     result = _check(
         diseases=["evre 3 kronik böbrek hastalığı"],

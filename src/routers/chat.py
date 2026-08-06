@@ -258,10 +258,19 @@ def _chat_fallback_state(initial_state: dict, fallback_message: str, error: Exce
 
 
 def _explicit_input_safety_answer(snapshot: ResolvedProfileSnapshot, message: str) -> str | None:
+    request_parts = []
+    for part in re.split(r"[.!?\n]+", message or ""):
+        normalized = _normalized_message(part)
+        if normalized and not re.search(
+            r"\b(?:alerjim|alerjisi|hassasiyetim|direncim|hastaligim|ilacim|ilac kullaniyorum)\b",
+            normalized,
+        ):
+            request_parts.append(part)
+    request_text = " ".join(request_parts).strip()
     result = RuleEngine().check_rules(
         snapshot.quality_profile(),
-        message,
-        [message],
+        request_text,
+        [request_text],
     )
     risks = list(result.get("found_risks") or [])
     if not risks:

@@ -16,7 +16,7 @@ _NON_INGREDIENT_SUFFIX = re.compile(
     r"^\s*(?:urunu\s+)?(?:"
     r"icermez|icermeyen|bulunmaz|yok(?:tur)?|kullanilmadan|yerine|alerjisi?|"
     r"riski|risklidir|riskli(?:dir)?|onerilmez|onermiyorum|onermeyin|"
-    r"tuketmeyin|tuketilmemeli|kacinin|uzak\s+durun|uygun\s+degil|siz|suz"
+    r"tuketmeyin|tuketilmemeli|kacinin|uzak\s+durun|uygun\s+degil|sız|siz|suz|süz"
     r")"
 )
 
@@ -54,6 +54,8 @@ def contains_positive_food_mention(
     )
     for match in pattern.finditer(value):
         before = value[max(0, match.start() - 40):match.start()]
+        if re.search(r"(?:^|\s)\S*(?:sız|siz|suz|süz)\s*$", before):
+            continue
         if any(before.rstrip().endswith(f"{_normalize(prefix)} ".rstrip()) for prefix in safe_prefixes):
             continue
         after = value[match.end():match.end() + 60]

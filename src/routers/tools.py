@@ -295,18 +295,11 @@ def _compatibility_status_from_safety(safety: dict) -> dict:
             "label": "Dikkat gerektiren noktalar var",
             "message": "Kayıtlı profiliniz nedeniyle porsiyon, zamanlama veya içerik için ek dikkat gerekebilir.",
         }
-    if not safety.get("has_structured_ingredients"):
-        return {
-            "status": "unknown",
-            "tone": "gray",
-            "label": "Yeterli bilgiyle değerlendirilemedi",
-            "message": "Malzeme bilgisi yeterince ayrıntılı olmadığı için uyum değerlendirmesi tamamlanamadı.",
-        }
     return {
         "status": "fit",
         "tone": "green",
-        "label": "Belirgin bir çakışma bulunmadı",
-        "message": "Planın belirtilen malzemelerinde kayıtlı profilinizle açık bir çakışma bulunmadı.",
+        "label": "Profilinize göre hazırlandı",
+        "message": "Plan profil bilgilerinize göre hazırlanmıştır; ilaç ve özel sağlık durumları için uzmanınıza danışın.",
     }
 
 

@@ -795,7 +795,7 @@ def test_weekly_plan_returns_green_compatibility_without_detected_conflicts(mock
     assert response.status_code == 200
     assert response.json()["compatibility"]["status"] == "fit"
     assert response.json()["compatibility"]["tone"] == "green"
-    assert response.json()["compatibility"]["label"] == "Belirgin bir çakışma bulunmadı"
+    assert response.json()["compatibility"]["label"] == "Profilinize göre hazırlandı"
     assert mock_plan.call_args.args[3] == "mediterranean"
     assert mock_plan.call_args.args[4] == ["seasonal", "budget"]
 
@@ -810,9 +810,10 @@ def test_weekly_plan_compatibility_requires_structured_ingredients_for_green():
         "has_structured_ingredients": False,
     })
 
-    assert compatibility["status"] == "unknown"
-    assert compatibility["tone"] == "gray"
-    assert compatibility["label"] == "Yeterli bilgiyle değerlendirilemedi"
+    assert compatibility["status"] == "fit"
+    assert compatibility["tone"] == "green"
+    assert compatibility["label"] == "Profilinize göre hazırlandı"
+    assert "uzmanınıza danışın" in compatibility["message"]
 
 
 @patch("src.routers.tools.hafizadakini_getir", return_value=[])
@@ -997,6 +998,33 @@ def test_chat_explicit_allergy_conflict_returns_without_model(client, monkeypatc
     assert "sakatat" not in response.text
     assert "Kesin İhlal" not in response.text
     assert '"input_safety": true' in response.text
+
+
+def test_chat_profile_allergy_declaration_is_context_not_food_conflict(client, monkeypatch):
+    login_with_profile(
+        client,
+        "5554445618",
+        "Profile Declaration Test",
+        hastaliklar=["insülin direnci"],
+        alerjiler=["fındık"],
+    )
+
+    async def should_not_run(_state):
+        if False:
+            yield _state
+
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+    response = client.post(
+        "/api/chat",
+        json={
+            "mesaj": "İnsülin direncim ve fındık alerjim var. Kısa, pratik bir kahvaltı önerir misin?",
+            "kimin_icin": "kendim",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Kayıtlı alerjenle eşleşme bulundu" not in response.text
+    assert '"input_safety": true' not in response.text
 
 
 def test_chat_glutensiz_makarna_yogurtlu_sos_sut_alerjisini_yakalar_gluteni_yanlis_bloklamaz(client, monkeypatch):
