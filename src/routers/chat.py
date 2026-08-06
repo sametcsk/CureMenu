@@ -30,6 +30,7 @@ from src.config import settings
 from src.profile_context import ResolvedProfileSnapshot, history_matches_snapshot, resolve_profile_snapshot
 from src.chat_intents import intent_fast_answer, merge_medications, normalized_message
 from src.chat_response import final_response_text, safety_outcome
+from src.curebot_intent import classify_intent_plan, fallback_intent_plan, plan_requires_safety_gate
 from src.presentation import (
     friendly_source_title,
     format_rule_risks_for_user,
@@ -394,7 +395,25 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
 
         return StreamingResponse(intent_stream_precheck(), media_type="text/event-stream")
 
-    input_safety_answer = _explicit_input_safety_answer(snapshot, req.mesaj)
+    try:
+        intent_plan = await asyncio.wait_for(
+            run_in_threadpool(
+                classify_intent_plan,
+                req.mesaj,
+                [],
+                snapshot.target_scope,
+                [],
+                {
+                    "allergy_present": bool(snapshot.allergies),
+                    "medication_present": bool(snapshot.medications),
+                    "disease_present": bool(snapshot.diseases),
+                },
+            ),
+            timeout=8,
+        )
+    except Exception:
+        intent_plan = fallback_intent_plan(req.mesaj, req.kimin_icin)
+    input_safety_answer = _explicit_input_safety_answer(snapshot, req.mesaj) if plan_requires_safety_gate(intent_plan) else None
     if input_safety_answer:
         blocked_state = _guardrail_block_state(initial_state, input_safety_answer)
         decision_record = build_decision_record(
