@@ -47,6 +47,8 @@ def fallback_intent_plan(message: str, target: str = "self") -> CureBotIntentPla
         context, intent = "coffee_pairing", "coffee_habit"
     elif any(x in text for x in ("hangi kriter", "neye göre", "neye gore", "önceki öner")):
         intent = "explanation_followup"
+    if text.strip() in {"öner", "oner", "alternatif", "başka", "baska", "daha farklı", "daha farkli", "detay", "tarif"}:
+        context, intent = "dessert", "dessert_craving"
     return CureBotIntentPlan(target=resolved_target, intent=intent, meal_context=context, risk_subject=risk, needs_safety_gate=bool(risk), reason="local privacy fallback")
 
 
@@ -64,7 +66,7 @@ def _natural_fallback(plan: CureBotIntentPlan) -> str:
     return {
         "breakfast": "Bugün pratik ve dengeli bir kahvaltı seçelim: yumurta veya yulafı, yanında sebze ve küçük bir meyve porsiyonuyla tamamlayabilirsin.",
         "dinner": "Akşam için ızgara bir protein, bol sebze ve ölçülü bir tahıl/ekmek eşliği iyi bir başlangıç olur. Evdeki malzemeleri söylersen bunu netleştirebilirim.",
-        "dessert_craving": "Tatlı isteğini küçük bir porsiyon meyve, şekersiz chia pudingi veya uygun bir yoğurt alternatifiyle karşılayabilirsin.",
+        "dessert_craving": "Tatlı isteğini küçük bir porsiyon fırınlanmış elma, meyve-chia karışımı veya kuruyemişsiz uygun bir yoğurt alternatifiyle karşılayabilirsin.",
         "coffee_habit": "Kahveyi tamamen bırakman gerekmeyebilir; miktarı ve saatini gözlemle, yanında küçük ve dengeli bir atıştırmalık tercih et.",
         "explanation_followup": "Öneriyi profilindeki kısıtlar, öğünün dengesi ve isteğinin pratikliği birlikte düşünülerek hazırladım. İstersen hangi kısmı değiştirmek istediğini söyle.",
     }.get(plan.meal_context, "İsteğini profil bağlamında değerlendiriyorum. Birkaç güvenli ve pratik seçenek önerebilirim; istersen neyi özellikle sevdiğini de söyle.")
@@ -88,11 +90,13 @@ MINIMAL PROFILE FACTS: {json.dumps(flags, ensure_ascii=False)}
 SAFETY CONTEXT: {safety_context[:500]}
 RESPONSE VARIATION SEED: {datetime.now().minute}
 
-Rules: sound natural and varied, and stay under 180 words. Never write one long paragraph.
+Rules: sound natural and varied. Default to 60-110 words; only use 120-180 words if the user asks for detail, a recipe, or an explanation. Never write one long paragraph.
 Use this Markdown structure: one short opening sentence, then 2-3 separate bullet options.
 Each option must start with a short bold heading (**Başlık**) followed by 1-2 concise explanatory sentences.
-End with one brief attention note only when genuinely needed. Do not add a long disclaimer.
+End with one brief "Kısa not:" only when genuinely needed. Do not add a long disclaimer.
 Do not use the user's name or any family member name. Do not mention internal plans, rules, scores or classifiers.
+Avoid exaggerated words such as "harika", "en sağlıklısı" or "çok önemli". Do not repeat stock openings such as "İsteğinize uygun seçenekler".
+If allergy flags are present, do not make nuts or nut milks the default first option; prefer nut-free fruit, baked apple/pear, chia or suitable yogurt alternatives. If a nut-derived option is mentioned, advise checking labels and cross-contamination.
 Never begin with generic health disclaimers. Do not use the phrase 'kayıtlı alerjenleri dışarıda bırakan'.
 Use a short safety note only at the end when clearly necessary. Do not invent unknown ingredients or medical facts.
 """
