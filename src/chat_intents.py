@@ -141,8 +141,43 @@ def _ibs_tolerance_answer() -> str:
     )
 
 
+def _dessert_craving_answer(snapshot: ResolvedProfileSnapshot) -> str:
+    allergy_note = " Kayıtlı alerjenlerini özellikle dışarıda bırakalım." if snapshot.allergies else ""
+    return (
+        "Canın tatlı çektiyse tamamen yasaklamak yerine küçük ve dengeli bir seçenek seçebiliriz.\n"
+        "- Tarçınlı yoğurt veya laktozsuz yoğurtla küçük bir meyve porsiyonu\n"
+        "- İlave şekeri düşük chia pudingi\n"
+        "- Birkaç parça meyve ve yanında sade kahve\n\n"
+        f"Porsiyonu küçük tutmak iyi olur.{allergy_note}"
+    )
+
+
+def _coffee_habit_answer(snapshot: ResolvedProfileSnapshot) -> str:
+    return (
+        "Kahveyi tamamen bırakman gerekmeyebilir; miktar, saat ve yanında ne tükettiğin daha belirleyici olabilir.\n"
+        "- Gün içinde seni rahatsız etmeyen miktarı koru ve geç saatlere bırakmamaya çalış.\n"
+        "- Şekerli şuruplar yerine sade kahve veya daha az şekerli bir seçenek deneyebilirsin.\n"
+        "- Yanında küçük, dengeli bir atıştırmalık tercih etmek daha iyi olabilir.\n\n"
+        "Çarpıntı, mide yakınması veya uyku sorunu yapıyorsa miktarı azaltıp kişisel toleransını takip et."
+    )
+
+
+def _explanation_followup_answer(snapshot: ResolvedProfileSnapshot) -> str:
+    bullets = _profile_bullets(snapshot)
+    details = "\n".join(f"- {item}" for item in bullets[:3])
+    if not details:
+        details = "- Alerji, hastalık, ilaç ve günlük hedefler\n- Porsiyon ve içerik dengesi\n- İsteğinin pratiklik ve damak tadına uygunluğu"
+    return "Bu öneriyi şu ölçütleri birlikte düşünerek hazırladım:\n" + details + "\n\nİçeriği veya hedefi değiştirirsek öneriyi yeniden uyarlayabilirim."
+
+
 def intent_fast_answer(snapshot: ResolvedProfileSnapshot, message: str) -> str | None:
     text = normalized_message(message)
+    if any(phrase in text for phrase in ("bu oneriyi hangi kriter", "neden bu oneriyi", "neye gore verdin", "hangi kriterlere")):
+        return _explanation_followup_answer(snapshot)
+    if any(phrase in text for phrase in ("cani tatli cekti", "tatli canim", "tatli ne yesem", "tatli istiyorum")):
+        return _dessert_craving_answer(snapshot)
+    if any(phrase in text for phrase in ("kahveyi cok seviyorum", "kahve iciyorum", "kahvem", "kahve saglig")):
+        return _coffee_habit_answer(snapshot)
     if any(phrase in text for phrase in ("arkanda ne var", "nasil yapiyorsun", "sana guven", "guvenebilir miyim", "neye gore calis")):
         return _product_trust_answer()
     if any(phrase in text for phrase in ("curemenu nedir", "nasil kis", "nasil calis", "yemek kararlarimi nasil", "verilerimi nasil", "verilerimi neden")):
