@@ -628,6 +628,15 @@ def haftalik_plan_olustur(
     Tıbbi profil ve hafızadaki negatif geri bildirimleri (sevmediklerini) birleştirip,
     kullanıcıya özel 7 günlük (3 öğün) bir haftalık diyet planı hazırlıyoruz.
     """
+    from datetime import date
+
+    season_by_month = {
+        12: "kış", 1: "kış", 2: "kış",
+        3: "ilkbahar", 4: "ilkbahar", 5: "ilkbahar",
+        6: "yaz", 7: "yaz", 8: "yaz",
+        9: "sonbahar", 10: "sonbahar", 11: "sonbahar",
+    }
+    current_season = season_by_month[date.today().month]
     preference_text = ", ".join(plan_preferences or []) or "none"
     prompt = f"""
     You are an expert Clinical Dietitian.
@@ -654,6 +663,7 @@ def haftalik_plan_olustur(
     - If style is "seasonal", prefer ingredients that are plausible for the current season in Turkey; do not ban off-season foods.
     - If style is "family", prefer shared meals that can be adjusted by portion and garnish rather than separate dishes.
     - For preferences, adapt variety toward quick prep, budget, seasonal produce, Turkish cuisine, or fewer ingredients when requested.
+    - Current date is {date.today().isoformat()} and the current season in Turkey is {current_season}. Prefer seasonally plausible Turkish produce automatically; seasonality is a quality signal, not a strict ban.
     - HIGH VARIETY & PSYCHOLOGICAL SUSTAINABILITY: The most important aspect of a diet is adherence. Create a highly varied, engaging, and delicious menu so the patient never feels restricted or bored.
     - DIETARY BALANCE & ENJOYMENT: Leave room for enjoyment. Automatically include safe, profile-compliant desserts, snacks, or comforting meals (e.g., sugar-free alternatives for diabetics) to keep the patient motivated.
     - Let your clinical intelligence decide the best culinary variety. Do not stick to monotonous or repetitive meal patterns.

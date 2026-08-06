@@ -41,8 +41,6 @@ window.WeeklyPlanManager = {
             if (!user) return; // Will redirect to login
 
             const kimin_icin = document.getElementById('planTarget')?.value || 'kendim';
-            const plan_style = document.getElementById('planStyle')?.value || 'balanced';
-            const plan_preferences = Array.from(document.querySelectorAll('.planPreference:checked')).map(input => input.value);
             this.showLoading();
 
             const cacheKey = this.getPlanCacheKey(user, kimin_icin);
@@ -51,7 +49,7 @@ window.WeeklyPlanManager = {
             const { res, data } = await safeFetchJson(API + '/api/weekly-plan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ kimin_icin, is_regeneration: isRegeneration, plan_style, plan_preferences })
+                body: JSON.stringify({ kimin_icin, is_regeneration: isRegeneration })
             });
 
             if (data && (data.ok || data.success) && data.plan) {

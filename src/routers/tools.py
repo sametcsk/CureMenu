@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from fastapi.concurrency import run_in_threadpool
+import asyncio
 import sqlite3
 import json
 import time
@@ -43,6 +44,14 @@ MAX_HEALTH_RECORD_BYTES = 10 * 1024 * 1024
 MAX_HEALTH_RECORD_PAGES = 50
 MAX_HEALTH_RECORD_TEXT_CHARS = 50_000
 MAX_HEALTH_RECORD_PROMPT_CHARS = 5_000
+MODEL_CALL_TIMEOUT_SECONDS = 55
+
+
+async def _run_model_with_timeout(payload):
+    return await asyncio.wait_for(
+        run_in_threadpool(invoke_with_model_fallback, payload),
+        timeout=MODEL_CALL_TIMEOUT_SECONDS,
+    )
 HEALTH_RECORD_PROCESSING_SECONDS = 8.0
 PDF_CONTENT_TYPES = {"application/pdf", "application/x-pdf", "application/octet-stream"}
 
@@ -376,13 +385,16 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
     hafiza_metni = " ".join(gecmis) if gecmis else "Kayıtlı geri bildirim yok."
     
     try:
-        plan = await run_in_threadpool(
+        plan = await asyncio.wait_for(
+            run_in_threadpool(
             haftalik_plan_olustur,
             profil_ozeti,
             hafiza_metni,
             req.is_regeneration,
             req.plan_style,
             req.plan_preferences,
+            ),
+            timeout=MODEL_CALL_TIMEOUT_SECONDS,
         )
         safety = _check_tool_output_safety(snapshot, plan)
         if safety["blocked"]:
@@ -396,13 +408,16 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
                 "Aşağıdaki içerikleri yeni planda kesinlikle kullanma: "
                 + "; ".join(safety["reasons"])
             )
-            plan = await run_in_threadpool(
+            plan = await asyncio.wait_for(
+                run_in_threadpool(
                 haftalik_plan_olustur,
                 profil_ozeti,
                 retry_feedback,
                 True,
                 req.plan_style,
                 req.plan_preferences,
+                ),
+                timeout=MODEL_CALL_TIMEOUT_SECONDS,
             )
             safety = _check_tool_output_safety(snapshot, plan)
         if safety["blocked"]:
@@ -559,7 +574,10 @@ async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: Backgr
         if not malzemeler or len(malzemeler) < 3:
             return {"success": False, "detail": BUZDOLABI_FOTO_OKUNAMADI}
             
-        raw_recipe = await run_in_threadpool(mutfak_asistani, profil_ozeti, malzemeler)
+        raw_recipe = await asyncio.wait_for(
+            run_in_threadpool(mutfak_asistani, profil_ozeti, malzemeler),
+            timeout=MODEL_CALL_TIMEOUT_SECONDS,
+        )
         try:
             recipe = _parse_json_model(raw_recipe, RecipeRecommendation)
         except (json.JSONDecodeError, ValueError):
@@ -676,7 +694,7 @@ async def upload_health_record(
         if not text.strip():
             return JSONResponse(status_code=422, content={"success": False, "detail": "PDF içindeki metin okunamadı. Daha net veya metin içeren bir PDF yükleyin."})
 
-        cevap = invoke_with_model_fallback(_build_health_report_messages(text))
+        cevap = await _run_model_with_timeout(_build_health_report_messages(text))
         from src.llm import parse_llm_response
         ozet = parse_llm_response(cevap)
         
@@ -732,6 +750,9 @@ async def upload_health_record(
             status_code=exc.status_code,
             content={"success": False, "detail": str(exc)},
         )
+    except asyncio.TimeoutError:
+        log_failure(logger, "health_record_upload_timeout", TimeoutError("model call timed out"), component="tools")
+        return JSONResponse(status_code=504, content={"success": False, "detail": "Tahlil metni okundu ancak özet servisi zamanında yanıt vermedi. Lütfen daha kısa bir PDF ile tekrar deneyin."})
     except Exception as e:
         log_failure(logger, "health_record_upload", e, component="tools")
         return JSONResponse(status_code=503, content={"success": False, "detail": "Tahlil şu anda okunamadı. Lütfen dosyayı kontrol edip birazdan tekrar deneyin."})
@@ -769,7 +790,7 @@ List every ingredient that will actually be used, including sauces, oils, garnis
         )
         
         try:
-            tarif_cevap_obj = await run_in_threadpool(invoke_with_model_fallback, messages)
+            tarif_cevap_obj = await _run_model_with_timeout(messages)
             raw_recipe = parse_llm_response(tarif_cevap_obj)
             try:
                 recipe = _parse_json_model(raw_recipe, RecipeRecommendation)
@@ -815,7 +836,7 @@ WARNING: Provide your response ONLY in the following JSON format. Do not use mar
             action_data={"meal_text": req.meal_text, "plan_text": req.plan_text},
         )
         try:
-            cevap_obj = await run_in_threadpool(invoke_with_model_fallback, messages)
+            cevap_obj = await _run_model_with_timeout(messages)
             cevap = parse_llm_response(cevap_obj)
             try:
                 payload = _parse_json_model(cevap, AlternativeMealsPayload)
@@ -876,7 +897,7 @@ Put only foods that will actually be used under ingredients. Keep safety explana
             action_data={"plan_text": req.plan_text},
         )
         try:
-            snack_cevap_obj = await run_in_threadpool(invoke_with_model_fallback, messages)
+            snack_cevap_obj = await _run_model_with_timeout(messages)
             snack_metni = parse_llm_response(snack_cevap_obj)
             json_match = re.search(r'\{.*\}', snack_metni, re.DOTALL)
             if not json_match:
