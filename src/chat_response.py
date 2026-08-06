@@ -1,10 +1,15 @@
 from src.presentation import soften_generated_guidance, user_facing_safety_guidance
 from src.chat_intents import normalized_message
 
+_GENERIC_REVIEW_GUIDANCE = (
+    "Sa\u011fl\u0131k profiliniz nedeniyle bu \u00f6neri dikkat gerektirebilir. "
+    "Ki\u015fisel porsiyon ve zamanlama i\u00e7in doktorunuza, eczac\u0131n\u0131za veya diyetisyeninize dan\u0131\u015fman\u0131z uygun olur."
+)
+
 
 def _warning_free_intent(message: str) -> bool:
     text = normalized_message(message)
-    return text in {"ok", "tamam", "tesekkurler", "rica ederim", "sag ol", "devam"} or any(
+    return text in {"ok", "tamam", "tesekkurler", "tesekkur ederim", "rica ederim", "sag ol", "sagol", "devam"} or any(
         phrase in text for phrase in ("curemenu nedir", "nasil kullanilir", "hangi ekrandayim", "nasil calisir")
     )
 
@@ -42,12 +47,14 @@ def final_response_text(result: dict, streamed_text: str = "") -> str:
         or ""
     ).strip())
     if _warning_free_intent(str(result.get("istek") or result.get("mesaj") or "")):
-        return base_answer or "Rica ederim. Başka bir konuda yardımcı olmamı ister misin?"
+        return base_answer or "Rica ederim. Ba\u015fka bir konuda yard\u0131mc\u0131 olmam\u0131 ister misin?"
     blocked, review_required = safety_outcome(result)
     if blocked:
         return user_facing_safety_guidance(warning, blocked=True, profile=profile)
     if review_required:
         if base_answer and not warning:
+            return base_answer
+        if base_answer and normalized_message(warning) == normalized_message(_GENERIC_REVIEW_GUIDANCE):
             return base_answer
         parts = [user_facing_safety_guidance(warning, profile=profile)]
         if base_answer and base_answer != warning:

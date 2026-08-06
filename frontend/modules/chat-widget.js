@@ -38,7 +38,7 @@ window.ChatWidget = {
         const target = this.root?.querySelector("[data-cm-assistant-target]")?.value || "kendim";
         const context = window.ProfileManager?.getTargetCacheContext?.(target);
         if (!context) return null;
-        return `cm_chat_${context.accountKey}_${context.targetScope}_${context.targetId}_${context.profileFingerprint}`;
+        return `cm_chat_v2_${context.accountKey}_${context.targetScope}_${context.targetId}_${context.profileFingerprint}`;
     },
 
     readCachedConversation() {
@@ -134,19 +134,19 @@ window.ChatWidget = {
                         <div class="cm-assistant-avatar"><span class="material-symbols-outlined">smart_toy</span></div>
                         <div>
                             <strong>CureBot</strong>
-                            <span id="cm-assistant-status">Her sayfada yanında</span>
+                            <span id="cm-assistant-status">Her &#246;&#287;&#252;nde, her sorunda yan&#305;nda.</span>
                         </div>
                     </div>
                     <button class="cm-assistant-close" type="button" aria-label="CureBot'u kapat" data-cm-assistant-close>
                         <span class="material-symbols-outlined">close</span>
                     </button>
                 </header>
-                <div class="cm-assistant-context">
-                    <label for="chatTarget">Kimin için?</label>
+                <div class="cm-assistant-context" hidden>
+
                     <select id="chatTarget" data-cm-assistant-target aria-label="CureBot hedef profili" class="hidden">
                         <option value="kendim">Kendim İçin</option>
                     </select>
-                    <span class="cm-assistant-context-chip" data-cm-context-chip>Samet iÃ§in</span>
+                    <span class="cm-assistant-context-chip" data-cm-context-chip>Samet i&#231;in</span>
                 </div>
                 <div class="cm-assistant-body" data-cm-assistant-body></div>
                 <div>
@@ -263,7 +263,7 @@ window.ChatWidget = {
     setStatus(text) {
         if (!this.root) return;
         const statusEl = this.root.querySelector("#cm-assistant-status");
-        if (statusEl) statusEl.textContent = text || "Her sayfada yanında";
+        if (statusEl) statusEl.textContent = text || "Her \u00f6\u011f\u00fcnde, her sorunda yan\u0131nda.";
     },
 
     showTyping() {
@@ -368,7 +368,7 @@ window.ChatWidget = {
     resetState() {
         this.hideTyping();
         this.clearProgressTimers();
-        this.setStatus("Her sayfada yanında");
+        this.setStatus("Her \u00f6\u011f\u00fcnde, her sorunda yan\u0131nda.");
         this.answerNode = null;
         this.requestInFlight = false;
         if (this.controller) {
@@ -432,9 +432,9 @@ window.ChatWidget = {
             const apiEndpoint = (window.API || '') + '/api/chat';
             const target = this.root.querySelector("[data-cm-assistant-target]")?.value || "kendim";
             const normalized = message.toLocaleLowerCase('tr-TR');
-            const inferredLabel = /tÃ¼m aile|hepimiz|bize|biz ne yiyelim/.test(normalized) ? 'TÃ¼m aile iÃ§in'
-                : /zÃ¼leyha|annem|anne/.test(normalized) ? 'ZÃ¼leyha iÃ§in'
-                : 'Samet iÃ§in';
+            const inferredLabel = /t\u00fcm aile|hepimiz|bize|biz ne yiyelim/.test(normalized) ? 'T\u00fcm aile i\u00e7in'
+                : /z\u00fcleyha|annem|anne/.test(normalized) ? 'Z\u00fcleyha i\u00e7in'
+                : 'Samet i\u00e7in';
             const contextChip = this.root.querySelector('[data-cm-context-chip]');
             if (contextChip) contextChip.textContent = inferredLabel;
             const headerChip = this.root.querySelector('[data-cm-header-context]');

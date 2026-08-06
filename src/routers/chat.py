@@ -95,9 +95,23 @@ def _guardrail_block_state(initial_state: dict, content: str) -> dict:
 
 def _is_small_talk(message: str) -> bool:
     text = _normalized_message(message)
-    small_talk = {"merhaba", "selam", "selamlar", "slm", "mrb", "naber", "nasilsin", "nasilsiniz", "iyi misin", "gunaydin", "iyi aksamlar"}
+    small_talk = {
+        "merhaba", "selam", "selamlar", "slm", "mrb", "naber", "nasilsin", "nasilsiniz",
+        "iyi misin", "gunaydin", "iyi aksamlar", "ok", "tamam", "tesekkurler",
+        "tesekkur ederim", "sag ol", "sagol", "devam", "anladim",
+    }
     return text in small_talk or len(text) <= 12 and any(word in text for word in small_talk)
 
+
+def _small_talk_answer(message: str) -> str | None:
+    text = _normalized_message(message)
+    if text in {"tesekkurler", "tesekkur ederim", "sag ol", "sagol"}:
+        return "Rica ederim. Istersen bir sonraki ogun, menu secimi ya da alisveris plani icin de yardimci olabilirim."
+    if text in {"ok", "tamam", "devam", "anladim"}:
+        return "Tamam. Istersen bir sonraki ogun, menu secimi ya da alisveris plani icin devam edebiliriz."
+    if text in {"merhaba", "selam", "selamlar", "slm", "mrb", "naber", "nasilsin", "nasilsiniz", "iyi misin", "gunaydin", "iyi aksamlar"}:
+        return "Merhaba, buradayim. Istersen bugun ne yesem, disarida ne secsem ya da profilime gore nelere dikkat etmeliyim diye birlikte hizlica bakabiliriz."
+    return None
 def _is_lab_question(message: str) -> bool:
     text = _normalized_message(message)
     keywords = (
@@ -107,8 +121,9 @@ def _is_lab_question(message: str) -> bool:
     return any(re.search(rf"(?<!\w){re.escape(keyword)}(?!\w)", text) for keyword in keywords)
 
 def _simple_chat_message(user_message: str, profil_ozeti: str, klinik_hafiza: list[str]) -> str | None:
-    if _is_small_talk(user_message):
-        return "Merhaba, buradayım. İstersen bugün ne yesem, dışarıda ne seçsem ya da profilime göre nelere dikkat etmeliyim diye birlikte hızlıca bakabiliriz."
+    small_talk_answer = _small_talk_answer(user_message)
+    if small_talk_answer:
+        return small_talk_answer
     if _is_lab_question(user_message):
         if klinik_hafiza:
             return "Tahlil notlarını görüyorum. Burada teşhis koyamam ya da tedavi düzenleyemem; ama beslenme açısından daha dikkatli ilerlemene yardım edebilirim.\n\n- Değerlerinde doktorunun özellikle takip dediği bir alan varsa onu yaz, öğün seçimini ona göre daraltalım.\n- Bugün için güvenli yaklaşım: aşırı tuzlu, çok şekerli ve işlenmiş seçeneklerden uzak dur; protein, sebze ve tam tahıl dengesini koru.\n- Yeni belirti, çok yüksek/düşük değer veya ilaç değişikliği varsa doktorunla görüşmeni öneririm."
