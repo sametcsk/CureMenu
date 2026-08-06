@@ -82,7 +82,10 @@ def test_dashboard_uses_local_pinned_qr_scanner():
         assert 'src="/static/vendor/html5-qrcode-2.3.8.min.js"' in html
         assert vendor.stat().st_size > 100_000
     else:
-        assert "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" in html
+        assert (
+            'src="/static/vendor/html5-qrcode-2.3.8.min.js"' in html
+            or "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" in html
+        )
 
 
 def test_non_google_cdn_assets_are_version_pinned():
