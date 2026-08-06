@@ -41,6 +41,8 @@ window.WeeklyPlanManager = {
             if (!user) return; // Will redirect to login
 
             const kimin_icin = document.getElementById('planTarget')?.value || 'kendim';
+            const plan_style = document.getElementById('planStyle')?.value || 'balanced';
+            const plan_preferences = Array.from(document.querySelectorAll('.planPreference:checked')).map(input => input.value);
             this.showLoading();
 
             const cacheKey = this.getPlanCacheKey(user, kimin_icin);
@@ -49,12 +51,13 @@ window.WeeklyPlanManager = {
             const { res, data } = await safeFetchJson(API + '/api/weekly-plan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ kimin_icin, is_regeneration: isRegeneration })
+                body: JSON.stringify({ kimin_icin, is_regeneration: isRegeneration, plan_style, plan_preferences })
             });
 
             if (data && (data.ok || data.success) && data.plan) {
-                localStorage.setItem(cacheKey, JSON.stringify(data.plan));
-                this.renderPlan(data.plan);
+                const planToRender = { ...data.plan, compatibility: data.compatibility || data.plan.compatibility || null };
+                localStorage.setItem(cacheKey, JSON.stringify(planToRender));
+                this.renderPlan(planToRender);
             } else {
                 this.showError(data?.error?.message || "Plan oluşturulamadı. Lütfen daha sonra tekrar deneyin.");
             }
@@ -90,6 +93,8 @@ window.WeeklyPlanManager = {
             <div class="mb-4">
                 <p class="text-sm text-on-surface-variant mb-2">${window.escapeHtml ? escapeHtml(plan.summary) : plan.summary}</p>
         `;
+
+        html += this.renderCompatibility(plan.compatibility);
 
         if (plan.warnings && plan.warnings.length > 0) {
             html += `<div class="bg-error-container text-on-error-container p-3 rounded-lg mb-4 text-xs font-medium">`;
@@ -193,6 +198,44 @@ window.WeeklyPlanManager = {
         if (window.recalculateGamification) {
             window.recalculateGamification();
         }
+    },
+
+    getCompatibilityToneClass(tone) {
+        const tones = {
+            green: 'bg-green-50 text-green-800 border-green-200',
+            yellow: 'bg-yellow-50 text-yellow-800 border-yellow-200',
+            red: 'bg-red-50 text-red-800 border-red-200',
+            gray: 'bg-surface-container text-on-surface-variant border-outline-variant'
+        };
+        return tones[tone] || tones.gray;
+    },
+
+    renderCompatibility(compatibility) {
+        const resolved = compatibility || {
+            status: 'unknown',
+            tone: 'gray',
+            label: 'Yeterli bilgiyle değerlendirilemedi',
+            message: 'Bu eski planda ayrıntılı malzeme bilgisi bulunmadığı için uyum değerlendirmesi tamamlanamadı.'
+        };
+        const icons = {
+            fit: 'check_circle',
+            caution: 'warning',
+            conflict: 'block',
+            unknown: 'help'
+        };
+        const label = escapeHtml(resolved.label || 'Yeterli bilgiyle değerlendirilemedi');
+        const message = escapeHtml(resolved.message || 'Malzeme bilgisi yeterince ayrıntılı olmadığı için uyum değerlendirmesi tamamlanamadı.');
+        const toneClass = this.getCompatibilityToneClass(resolved.tone);
+        const icon = icons[resolved.status] || icons.unknown;
+        return `
+            <div class="${toneClass} border rounded-lg p-3 mb-4 text-xs">
+                <div class="flex items-center gap-2 font-bold">
+                    <span class="material-symbols-outlined text-[18px]">${icon}</span>
+                    <span>${label}</span>
+                </div>
+                <p class="mt-1">${message}</p>
+            </div>
+        `;
     },
 
     toggleMealCheck(checkbox, mealText) {

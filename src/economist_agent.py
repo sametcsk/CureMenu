@@ -1,4 +1,7 @@
 import json
+from datetime import datetime
+import re
+
 from src.llm import invoke_with_model_fallback, parse_llm_response
 
 def alisveris_ve_butce_hesapla(haftalik_plan_metni: str, location_info: str = None) -> str:
@@ -29,6 +32,7 @@ def alisveris_ve_butce_hesapla(haftalik_plan_metni: str, location_info: str = No
     if location_info:
         location_context = f"\nUSER LOCATION: {location_info}\nPlease provide market recommendations tailored to this specific location (e.g. suggesting physical store chains likely to be in this area) and include online delivery options (Getir, Yemeksepeti, Migros Sanal Market, Trendyol Go, etc.) for specific items.\n"
 
+    current_year = datetime.now().year
     prompt_report = f"""
     You are an Expert Economist and Smart Shopper in Turkey.
     
@@ -36,7 +40,8 @@ def alisveris_ve_butce_hesapla(haftalik_plan_metni: str, location_info: str = No
     
     YOUR TASK:
     Create a budget-friendly shopping list report in Turkish for these ingredients.
-    Estimate realistic AVERAGE market prices in Turkey (in TRY - ₺).
+    Estimate realistic AVERAGE market prices in Turkey (in TRY - ₺) for {current_year}.
+    These are model-based estimates, not live store prices. Never present 2024 or another older year as current data.
     
     OUTPUT FORMAT (Strictly Markdown):
     
@@ -60,5 +65,11 @@ def alisveris_ve_butce_hesapla(haftalik_plan_metni: str, location_info: str = No
     
     rapor_ham = invoke_with_model_fallback(prompt_report)
     rapor = parse_llm_response(rapor_ham)
+    rapor = re.sub(r"\b2024\b", str(current_year), rapor)
+    rapor = (
+        f"### {current_year} Türkiye geneli tahmini bütçe\n"
+        "Bu tutarlar canlı fiyat değildir; markete, şehre, markaya ve tarihe göre değişebilir.\n\n"
+        f"{rapor}"
+    )
     
     return rapor

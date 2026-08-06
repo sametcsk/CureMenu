@@ -111,6 +111,8 @@ class ChatRequest(BaseModel):
 class HaftalikPlanRequest(BaseModel):
     kimin_icin: str = "kendim"
     is_regeneration: bool = False
+    plan_style: str = Field(default="balanced", max_length=40)
+    plan_preferences: list[str] = Field(default_factory=list, max_length=6)
 
 class GeriBildirimRequest(BaseModel):
     yemek_adi: str = Field(..., min_length=1, max_length=500)
@@ -135,6 +137,7 @@ class ShoppingListRequest(BaseModel):
 class FridgeScanRequest(BaseModel):
     kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
     image_base64: str = Field(..., min_length=1, max_length=8_000_100)
+    image_preview_base64: str | None = Field(default=None, max_length=500_000)
 
 # ── QUALITY ASSURANCE (QA) MODELLERİ ──
 class StructuredCitation(BaseModel):

@@ -10,7 +10,7 @@ from src.database import get_db, etkilesim_logla, klinik_karar_kaydet
 from src.auth import get_current_user
 from src.messages import PLAN_OLUSTURULAMADI, MENU_BOS, MENU_FOTO_OKUNAMADI, BUZDOLABI_FOTO_OKUNAMADI, PROFIL_GEREKLI, PROFIL_BULUNAMADI
 from src.nodes import haftalik_plan_olustur, mutfak_asistani
-from src.scanner import ImageValidationError, scrape_menu_from_url, extract_text_from_image_base64, extract_ingredients_from_image_base64
+from src.scanner import ImageValidationError, _validate_base64_image, scrape_menu_from_url, extract_text_from_image_base64, extract_ingredients_from_image_base64
 from src.menu_agent import menu_danismani
 from src.economist_agent import alisveris_ve_butce_hesapla
 from src.memory import hafizadakini_getir, geri_bildirim_ekle
@@ -203,10 +203,14 @@ def _check_tool_output_safety(snapshot: ResolvedProfileSnapshot, output) -> dict
     safety_input = extract_recommendation_safety_input(output)
     recommendation = safety_input.display_text
     ingredients = list(safety_input.ingredients)
-    safety_text = "\n".join([recommendation, *ingredients])
+    # Structured payloads have an explicit ingredient contract. Explanations such
+    # as "süt içermez" must never be reinterpreted as foods that are actually used.
+    ingredient_text = "\n".join(ingredients)
+    safety_text = ingredient_text if safety_input.has_structured_ingredients else "\n".join([recommendation, ingredient_text])
+    rule_recommendation = "" if safety_input.has_structured_ingredients else recommendation
     rule_result = RuleEngine().check_rules(
         {"alerjiler": facts.allergies, "hastaliklar": facts.diseases},
-        recommendation,
+        rule_recommendation,
         ingredients,
         structured_ingredients=safety_input.has_structured_ingredients,
     )
@@ -261,21 +265,46 @@ def _check_tool_output_safety(snapshot: ResolvedProfileSnapshot, output) -> dict
         "reasons": blocked_reasons,
         "review_required": review_required,
         "warning": warning,
+        "has_structured_ingredients": safety_input.has_structured_ingredients,
         "events": events,
     }
 
 
+def _compatibility_status_from_safety(safety: dict) -> dict:
+    """Convert deterministic safety output into a user-facing fit status."""
+    if safety.get("blocked"):
+        return {
+            "status": "conflict",
+            "tone": "red",
+            "label": "Profilinizle uyuşmuyor",
+            "message": "Kayıtlı alerji veya beslenme kısıtınızla açık çakışma bulundu.",
+        }
+    if safety.get("review_required") or safety.get("warning"):
+        return {
+            "status": "caution",
+            "tone": "yellow",
+            "label": "Dikkat gerektiren noktalar var",
+            "message": "Kayıtlı profiliniz nedeniyle porsiyon, zamanlama veya içerik için ek dikkat gerekebilir.",
+        }
+    if not safety.get("has_structured_ingredients"):
+        return {
+            "status": "unknown",
+            "tone": "gray",
+            "label": "Yeterli bilgiyle değerlendirilemedi",
+            "message": "Malzeme bilgisi yeterince ayrıntılı olmadığı için uyum değerlendirmesi tamamlanamadı.",
+        }
+    return {
+        "status": "fit",
+        "tone": "green",
+        "label": "Belirgin bir çakışma bulunmadı",
+        "message": "Planın belirtilen malzemelerinde kayıtlı profilinizle açık bir çakışma bulunmadı.",
+    }
+
+
 def _safety_block_detail(reasons: list[str] | None = None) -> str:
-    clean_reasons = [str(reason).strip() for reason in (reasons or []) if str(reason).strip()]
-    if clean_reasons:
-        reason_text = " ".join(clean_reasons[:3])
-        return (
-            f"Bu öneri profilinizle çakışabileceği için gösterilmedi. Neden: {reason_text} "
-            "Malzemeleri değiştirerek tekrar deneyebilir veya sağlık profesyoneline danışabilirsiniz."
-        )
     return (
-        "Üretilen öneri sağlık profilinizle çakıştığı için gösterilmedi. "
-        "Lütfen yeniden deneyin veya sağlık profesyoneline danışın."
+        "Bu içerik kayıtlı alerji veya beslenme kısıtlarınızla uyuşmuyor. "
+        "Malzemeleri değiştirerek tekrar deneyebilirsiniz."
     )
 
 
@@ -347,7 +376,14 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
     hafiza_metni = " ".join(gecmis) if gecmis else "Kayıtlı geri bildirim yok."
     
     try:
-        plan = await run_in_threadpool(haftalik_plan_olustur, profil_ozeti, hafiza_metni, req.is_regeneration)
+        plan = await run_in_threadpool(
+            haftalik_plan_olustur,
+            profil_ozeti,
+            hafiza_metni,
+            req.is_regeneration,
+            req.plan_style,
+            req.plan_preferences,
+        )
         safety = _check_tool_output_safety(snapshot, plan)
         if safety["blocked"]:
             # A model draft can occasionally contain an allergen despite the
@@ -365,6 +401,8 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
                 profil_ozeti,
                 retry_feedback,
                 True,
+                req.plan_style,
+                req.plan_preferences,
             )
             safety = _check_tool_output_safety(snapshot, plan)
         if safety["blocked"]:
@@ -406,7 +444,7 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
             json.dumps(snapshot.history_metadata(), ensure_ascii=False),
         )
         
-        return {"ok": True, "plan": plan}
+        return {"ok": True, "plan": plan, "compatibility": _compatibility_status_from_safety(safety)}
     except Exception as e:
         log_failure(logger, "weekly_plan", e, component="tools")
         return JSONResponse(status_code=503, content={
@@ -513,14 +551,23 @@ async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks:
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
 async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
     snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
-    profil_ozeti = snapshot.profile_summary
+    # The recipe model needs constraints, not names or family narratives.
+    profil_ozeti = json.dumps(snapshot.quality_profile(), ensure_ascii=False)
     
     try:
         malzemeler = await run_in_threadpool(extract_ingredients_from_image_base64, req.image_base64)
         if not malzemeler or len(malzemeler) < 3:
             return {"success": False, "detail": BUZDOLABI_FOTO_OKUNAMADI}
             
-        tarif = await run_in_threadpool(mutfak_asistani, profil_ozeti, malzemeler)
+        raw_recipe = await run_in_threadpool(mutfak_asistani, profil_ozeti, malzemeler)
+        try:
+            recipe = _parse_json_model(raw_recipe, RecipeRecommendation)
+        except (json.JSONDecodeError, ValueError):
+            return JSONResponse(
+                status_code=502,
+                content={"success": False, "detail": "Tarif güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin."},
+            )
+        tarif = _render_recipe(recipe)
         detected_ingredients = [
             item.strip(" .;:-")
             for item in str(malzemeler).replace("\n", ",").split(",")
@@ -531,7 +578,7 @@ async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: Backgr
             # Detected fridge items are context, not ingredients used by the
             # generated recipe. Checking them here falsely blocks a safe recipe
             # whenever an unsafe item is merely present in the fridge.
-            {"name": "Buzdolabı önerisi", "recommendation": tarif},
+            recipe,
         )
         if safety["blocked"]:
             return JSONResponse(
@@ -556,17 +603,42 @@ async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: Backgr
         
         decision_record = build_decision_record(state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=tarif)
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
+        history_metadata = snapshot.history_metadata()
+        if req.image_preview_base64:
+            try:
+                preview_payload, preview_mime = _validate_base64_image(req.image_preview_base64)
+                history_metadata["image_preview_base64"] = f"data:{preview_mime};base64,{preview_payload}"
+            except ImageValidationError:
+                pass
+        history_metadata["detected_ingredients"] = detected_ingredients
+        history_metadata["recipe_ingredients"] = list(recipe.ingredients)
         etkilesim_logla(
             telefon,
             snapshot.target_name,
             "Buzdolabı",
             malzemeler[:100],
             tarif,
-            json.dumps(snapshot.history_metadata(), ensure_ascii=False),
+            json.dumps(history_metadata, ensure_ascii=False),
             conn=db,
         )
         
-        return {"success": True, "malzemeler": malzemeler, "tarif": tarif}
+        history_record = {
+            "eylem": "Buzdolabı",
+            "kullanici_adi": snapshot.target_name,
+            "kullanici_girdisi": malzemeler[:100],
+            "asistan_ciktisi": tarif,
+            "ai_yanit": tarif,
+            "metadata": history_metadata,
+            "tarih": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+        return {
+            "success": True,
+            "malzemeler": malzemeler,
+            "tarif": tarif,
+            "recipe_ingredients": list(recipe.ingredients),
+            "image_preview_base64": history_metadata.get("image_preview_base64"),
+            "history_record": history_record,
+        }
     except ImageValidationError:
         return JSONResponse(
             status_code=422,
