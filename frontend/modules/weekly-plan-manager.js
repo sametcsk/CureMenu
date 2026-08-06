@@ -149,11 +149,11 @@ window.WeeklyPlanManager = {
         <div class="mt-6 flex flex-wrap justify-center gap-3">
             <button type="button" data-grocery-action="open" class="btn-primary px-6 py-3 rounded-full font-label-md text-label-md inline-flex items-center gap-2 shadow-sm transition-all active:scale-95">
                 <span class="material-symbols-outlined">local_grocery_store</span>
-                Akıllı Sepeti Gör
+                Smart Grocery: Alışveriş Listesi
             </button>
             <button type="button" data-grocery-action="calculate-budget" class="bg-secondary text-on-secondary px-6 py-3 rounded-full font-label-md text-label-md inline-flex items-center gap-2 hover:bg-secondary/90 shadow-sm transition-all active:scale-95">
                 <span class="material-symbols-outlined">shopping_cart</span>
-                Bütçe Hesapla
+                Plan Bütçesi (Yaklaşık)
             </button>
         </div>
         <div id="budgetResult" class="mt-6 w-full"></div>
