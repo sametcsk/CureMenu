@@ -146,6 +146,7 @@ window.ChatWidget = {
                     <select id="chatTarget" data-cm-assistant-target aria-label="CureBot hedef profili">
                         <option value="kendim">Kendim İçin</option>
                     </select>
+                    <span class="cm-assistant-context-chip" data-cm-context-chip>Samet iÃ§in</span>
                 </div>
                 <div class="cm-assistant-body" data-cm-assistant-body></div>
                 <div>
@@ -414,6 +415,12 @@ window.ChatWidget = {
         try {
             const apiEndpoint = (window.API || '') + '/api/chat';
             const target = this.root.querySelector("[data-cm-assistant-target]")?.value || "kendim";
+            const normalized = message.toLocaleLowerCase('tr-TR');
+            const inferredLabel = /tÃ¼m aile|hepimiz|bize|biz ne yiyelim/.test(normalized) ? 'TÃ¼m aile iÃ§in'
+                : /zÃ¼leyha|annem|anne/.test(normalized) ? 'ZÃ¼leyha iÃ§in'
+                : 'Samet iÃ§in';
+            const contextChip = this.root.querySelector('[data-cm-context-chip]');
+            if (contextChip) contextChip.textContent = inferredLabel;
             
             if (!window.safeFetchStream) throw new Error("API client yüklü değil.");
             

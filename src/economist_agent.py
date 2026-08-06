@@ -12,6 +12,8 @@ def alisveris_ve_butce_hesapla(haftalik_plan_metni: str, location_info: str = No
     """
     # 1. Adım: Plandan malzemeleri çıkar (Kısa liste)
     prompt_extract = f"""
+    IMPORTANT: use only ingredients that actually appear in the weekly plan. Do not invent products such as kefir,
+    fruit or snacks. Combine duplicates and mark uncertain items as optional.
     Aşağıdaki haftalık beslenme planını oku ve bu menüleri yapmak için gereken temel malzemelerin
     kısa bir alışveriş listesini (sadece en önemli et, sebze, bakliyat ve süt ürünleri) çıkar.
     Liste formatı virgülle ayrılmış kelimeler olsun. Örn: Tavuk göğsü, Domates, Kıyma, Yulaf, Süt.
@@ -34,6 +36,8 @@ def alisveris_ve_butce_hesapla(haftalik_plan_metni: str, location_info: str = No
 
     current_year = datetime.now().year
     prompt_report = f"""
+    Use only the listed ingredients; do not invent products. Do not use inflation projections, guaranteed savings claims,
+    or live-price language. State that the total is an approximate weekly range.
     You are an Expert Economist and Smart Shopper in Turkey.
     
     INGREDIENTS NEEDED: {malzemeler}{location_context}

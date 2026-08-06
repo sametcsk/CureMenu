@@ -39,6 +39,18 @@ from src.rate_limit import authenticated_user_or_ip, limiter
 logger = get_logger(__name__)
 router = APIRouter()
 
+
+def _infer_chat_target(message: str, requested_target: str) -> tuple[str, str]:
+    """Resolve conversational target without changing the explicit API contract."""
+    text = normalized_message(message)
+    if any(phrase in text for phrase in ("tum aile", "hepimiz", "bize", "biz ne yiyelim", "ailece")):
+        return "aile", "Mesajdaki aile referansı"
+    if any(phrase in text for phrase in ("zuleyha icin", "zuleyha", "annem icin", "anneme", "anne icin", "annem")):
+        return "zuleyha", "Mesajdaki Züleyha/anne referansı"
+    if any(phrase in text for phrase in ("bana", "benim icin", "kendim icin")):
+        return "kendim", "Mesajdaki kendim referansı"
+    return (requested_target or "kendim"), "Seçili hedef kişi"
+
 # NEMO GUARDRAILS
 rails = None
 if settings.ENABLE_NEMO_GUARDRAILS:
@@ -286,7 +298,8 @@ def _explicit_input_safety_answer(snapshot: ResolvedProfileSnapshot, message: st
 @router.post("/api/chat")
 @limiter.limit("12/minute", key_func=authenticated_user_or_ip)
 async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
-    snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
+    resolved_target, context_reason = _infer_chat_target(req.mesaj, req.kimin_icin)
+    snapshot = resolve_profile_snapshot(telefon, resolved_target, db=db)
     profil_ozeti = snapshot.profile_summary
     kullanici_id = snapshot.memory_namespace
     history_metadata = json.dumps(snapshot.history_metadata(), ensure_ascii=False)
