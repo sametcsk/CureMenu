@@ -1317,6 +1317,57 @@ def test_chat_family_dinner_recommendation_uses_fast_answer(client, monkeypatch)
     assert "f\u0131r\u0131nda tavuk" in response.text.casefold()
     assert "Sa\u011fl\u0131k profiliniz nedeniyle" not in response.text
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "bana bi kahvaltı öner",
+        "anneme kahvaltı öner",
+        "bize bir akşam yemeği öner",
+        "canım tatlı çekti ne yesem ya",
+        "kahveyi çok seviyorum sağlığıma sıkıntı çıkarır mı",
+        "bu öneriyi hangi kriterlere göre hazırladın",
+        "öner",
+        "teşekkürler",
+    ],
+)
+def test_chat_everyday_messages_bypass_langgraph(client, monkeypatch, message):
+    login_with_profile(client, "5554445700", "Everyday Graph Bypass", ad="Samet", alerjiler=["fındık"])
+    if message.startswith("anneme"):
+        family = client.post(
+            "/api/family/add",
+            json={"ad": "Züleyha", "yas": 58, "cinsiyet": "kadın", "yakinlik": "anne"},
+        )
+        assert family.status_code == 200
+
+    async def should_not_run(_state):
+        raise AssertionError("Everyday CureBot path must not invoke the model graph")
+
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+    response = client.post("/api/chat", json={"mesaj": message, "kimin_icin": "kendim"})
+
+    assert response.status_code == 200
+    assert "Failed to fetch" not in response.text
+    assert "Yanıt oluşturulamadı" not in response.text
+    assert "Sağlık profiliniz nedeniyle" not in response.text
+
+
+def test_chat_explicit_hazelnut_baklava_still_blocks_without_graph(client, monkeypatch):
+    login_with_profile(client, "5554445701", "Explicit Allergy Regression", alerjiler=["fındık"])
+
+    async def should_not_run(_state):
+        raise AssertionError("Explicit allergen conflict must not invoke the model graph")
+
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+    response = client.post(
+        "/api/chat",
+        json={"mesaj": "fındıklı baklava yiyebilir miyim?", "kimin_icin": "kendim"},
+    )
+
+    assert response.status_code == 200
+    assert '"input_safety": true' in response.text
+    assert "Failed to fetch" not in response.text
+
+
 def test_chat_intent_levothyroxine_badem_sutu_timing_not_dairy_block(client, monkeypatch):
     login_with_profile(
         client,
