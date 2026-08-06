@@ -88,7 +88,10 @@ MINIMAL PROFILE FACTS: {json.dumps(flags, ensure_ascii=False)}
 SAFETY CONTEXT: {safety_context[:500]}
 RESPONSE VARIATION SEED: {datetime.now().minute}
 
-Rules: sound natural and varied, usually 80-150 words, with 2-3 practical options when recommending food.
+Rules: sound natural and varied, and stay under 180 words. Never write one long paragraph.
+Use this Markdown structure: one short opening sentence, then 2-3 separate bullet options.
+Each option must start with a short bold heading (**Başlık**) followed by 1-2 concise explanatory sentences.
+End with one brief attention note only when genuinely needed. Do not add a long disclaimer.
 Do not use the user's name or any family member name. Do not mention internal plans, rules, scores or classifiers.
 Never begin with generic health disclaimers. Do not use the phrase 'kayıtlı alerjenleri dışarıda bırakan'.
 Use a short safety note only at the end when clearly necessary. Do not invent unknown ingredients or medical facts.

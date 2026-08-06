@@ -596,7 +596,12 @@ window.ChatWidget = {
             .cm-assistant-subtitle { display: block; margin-top: 3px; font-size: 10px; line-height: 1.25; color: rgba(255,255,255,0.72); max-width: 230px; }
             .cm-assistant-context-chip { display: inline-flex; align-items: center; width: fit-content; border: 1px solid rgba(255,255,255,0.24); border-radius: 999px; padding: 3px 8px; color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.1); font-size: 10px; font-weight: 700; }
             .cm-assistant-body { overflow-y: auto; padding: 14px; background: #f7fbfc; display: flex; flex-direction: column; gap: 10px; }
-            .cm-assistant-message { max-width: 86%; border-radius: 14px; padding: 11px 12px; font-size: 13px; line-height: 1.5; border: 1px solid transparent; word-wrap: break-word; }
+            .cm-assistant-message { max-width: 86%; border-radius: 14px; padding: 11px 12px; font-size: 13px; line-height: 1.55; border: 1px solid transparent; word-wrap: break-word; }
+            .cm-assistant-message.bot p { margin: 0 0 8px; }
+            .cm-assistant-message.bot p:last-child { margin-bottom: 0; }
+            .cm-assistant-message.bot ul { margin: 7px 0 9px; padding-left: 19px; }
+            .cm-assistant-message.bot li { margin: 6px 0; }
+            .cm-assistant-message.bot strong { color: #005c55; font-weight: 800; }
             .cm-assistant-message.bot { align-self: flex-start; background: #ffffff; border-color: rgba(189, 201, 198, 0.7); color: #102033; }
             .cm-assistant-message.user { align-self: flex-end; background: #005c55; color: #ffffff; }
             .cm-assistant-message.soft { max-width: 100%; background: #e9f7f4; border-color: rgba(0, 92, 85, 0.16); color: #31514d; }
