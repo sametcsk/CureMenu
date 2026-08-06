@@ -141,9 +141,10 @@ window.ChatWidget = {
                         <span class="material-symbols-outlined">close</span>
                     </button>
                 </header>
-                <div class="cm-assistant-context" hidden>
+                <div class="cm-assistant-context">
 
-                    <select id="chatTarget" data-cm-assistant-target aria-label="CureBot hedef profili" class="hidden">
+                    <label for="chatTarget">Kimin için?</label>
+                    <select id="chatTarget" data-cm-assistant-target aria-label="CureBot hedef profili">
                         <option value="kendim">Kendim İçin</option>
                     </select>
                     <span class="cm-assistant-context-chip" data-cm-context-chip>Samet i&#231;in</span>
@@ -167,8 +168,6 @@ window.ChatWidget = {
         `;
 
         document.body.appendChild(this.root);
-        const contextBar = this.root.querySelector('.cm-assistant-context');
-        if (contextBar) contextBar.style.display = 'none';
         const status = this.root.querySelector('#cm-assistant-status');
         if (status) status.textContent = 'Her öğünde, her sorunda yanında.';
         const titleBlock = this.root.querySelector('.cm-assistant-title > div:last-child');

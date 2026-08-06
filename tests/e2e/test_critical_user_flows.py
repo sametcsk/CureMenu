@@ -157,7 +157,7 @@ def test_family_target_selectors_and_chat_payload(browser_page, e2e_base_url: st
     page.locator("[data-cm-assistant-body]").get_by_text("Ece i").wait_for()
 
     assert chat_requests[-1]["kimin_icin"] == "member-ece"
-    assert page.evaluate("Object.keys(localStorage).some(key => key.startsWith('cm_chat_05000000000_member_member-ece_'))")
+    assert page.evaluate("Object.keys(localStorage).some(key => key.startsWith('cm_chat_v2_05000000000_member_member-ece_'))")
     page.locator("#chatTarget").select_option("kendim")
     assert page.locator("[data-cm-assistant-body]").get_by_text("Ece i").count() == 0
     page.locator("#chatTarget").select_option("member-ece")
