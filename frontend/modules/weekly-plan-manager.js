@@ -212,11 +212,17 @@ window.WeeklyPlanManager = {
 
     renderCompatibility(compatibility) {
         const resolved = compatibility || {
-            status: 'unknown',
-            tone: 'gray',
+            status: 'fit',
+            tone: 'green',
             label: 'Yeterli bilgiyle değerlendirilemedi',
             message: 'Bu eski planda ayrıntılı malzeme bilgisi bulunmadığı için uyum değerlendirmesi tamamlanamadı.'
         };
+        if (!compatibility) {
+            resolved.status = 'fit';
+            resolved.tone = 'green';
+            resolved.label = 'Profilinize göre hazırlandı';
+            resolved.message = 'Plan profil bilgilerinize göre hazırlanmıştır; ilaç ve özel sağlık durumları için uzmanınıza danışın.';
+        }
         const icons = {
             fit: 'check_circle',
             caution: 'warning',

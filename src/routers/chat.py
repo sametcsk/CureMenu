@@ -47,7 +47,7 @@ def _infer_chat_target(message: str, requested_target: str) -> tuple[str, str]:
         return "aile", "Mesajdaki aile referansı"
     if any(phrase in text for phrase in ("zuleyha icin", "zuleyha", "annem icin", "anneme", "anne icin", "annem")):
         return "zuleyha", "Mesajdaki Züleyha/anne referansı"
-    if any(phrase in text for phrase in ("bana", "benim icin", "kendim icin")):
+    if any(phrase in text for phrase in ("bana", "benim icin", "kendim icin", "kahvemin", "yiyebilirim")):
         return "kendim", "Mesajdaki kendim referansı"
     return (requested_target or "kendim"), "Seçili hedef kişi"
 
