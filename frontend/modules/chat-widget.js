@@ -143,7 +143,7 @@ window.ChatWidget = {
                 </header>
                 <div class="cm-assistant-context">
                     <label for="chatTarget">Kimin için?</label>
-                    <select id="chatTarget" data-cm-assistant-target aria-label="CureBot hedef profili">
+                    <select id="chatTarget" data-cm-assistant-target aria-label="CureBot hedef profili" class="hidden">
                         <option value="kendim">Kendim İçin</option>
                     </select>
                     <span class="cm-assistant-context-chip" data-cm-context-chip>Samet iÃ§in</span>

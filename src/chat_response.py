@@ -1,4 +1,12 @@
 from src.presentation import soften_generated_guidance, user_facing_safety_guidance
+from src.chat_intents import normalized_message
+
+
+def _warning_free_intent(message: str) -> bool:
+    text = normalized_message(message)
+    return text in {"ok", "tamam", "tesekkurler", "rica ederim", "sag ol", "devam"} or any(
+        phrase in text for phrase in ("curemenu nedir", "nasil kullanilir", "hangi ekrandayim", "nasil calisir")
+    )
 
 
 def safety_outcome(result: dict) -> tuple[bool, bool]:
@@ -33,6 +41,8 @@ def final_response_text(result: dict, streamed_text: str = "") -> str:
         or streamed_text
         or ""
     ).strip())
+    if _warning_free_intent(str(result.get("istek") or result.get("mesaj") or "")):
+        return base_answer or "Rica ederim. Başka bir konuda yardımcı olmamı ister misin?"
     blocked, review_required = safety_outcome(result)
     if blocked:
         return user_facing_safety_guidance(warning, blocked=True, profile=profile)
