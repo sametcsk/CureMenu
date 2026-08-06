@@ -42,7 +42,7 @@ Bu proje bir **beslenme karar destek prototipidir**. Doktorun, diyetisyenin veya
 | Frontend | Vanilla JavaScript, HTML ve CSS; `frontend/` altında modüler yapı |
 | Backend | Python 3.11/3.12, FastAPI, Uvicorn |
 | AI/LLM | LangGraph tabanlı akışlar ve Google Gemini |
-| Akıllı Hafıza | ChromaDB, vektör tabanlı arama ve kişiselleştirilmiş bağlam belleği |
+| RAG / Hafıza | ChromaDB, vektör tabanlı arama ve kişiselleştirilmiş bağlam belleği |
 | Veritabanı | SQLite; profil, etkileşim ve karar kayıtları |
 | Güvenlik ve Doğruluk | Kesin kurallı sağlık bariyerleri, KVKK uyumlu veri maskeleme ve şeffaf izlenebilirlik |
 
