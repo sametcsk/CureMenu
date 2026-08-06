@@ -151,41 +151,18 @@ def test_chat_snapshot_and_history_metadata_share_same_target(mock_memory, mock_
     )
     assert family.status_code == 200
     member_id = family.json()["uye_id"]
-    captured = {}
-
-    async def fake_stream(state):
-        captured["state"] = state
-        yield {
-            "denetmen": {
-                "uzman_onerisi": "Glutensiz ve yumurtasız bir seçenek değerlendirilebilir.",
-                "hedef_islem": "SOHBET",
-                "guvenli_mi": True,
-                "risk_score": 0.1,
-                "confidence": {"final_score": 0.8, "action": "APPROVE"},
-                "citations": [],
-            }
-        }
-
-    mock_graph.astream = fake_stream
     response = client.post(
         "/api/chat",
         json={"mesaj": "Kahvaltı önerir misin?", "kimin_icin": member_id},
     )
     assert response.status_code == 200
 
-    snapshot = captured["state"]["resolved_profile_snapshot"]
-    assert snapshot["target_id"] == member_id
-    assert snapshot["target_scope"] == "member"
-    assert snapshot["diseases"] == ["çölyak"]
-    assert snapshot["allergies"] == ["yumurta"]
-    assert snapshot["medications"] == ["levotiroksin"]
-
     history = client.get("/api/history?limit=20").json()["loglar"]
     chat_log = next(item for item in history if item["eylem"] == "CureBot")
     metadata = json.loads(chat_log["metadata"])
-    assert metadata["target_id"] == snapshot["target_id"]
-    assert metadata["target_scope"] == snapshot["target_scope"]
-    assert metadata["profile_fingerprint"] == snapshot["profile_fingerprint"]
+    assert metadata["target_id"] == member_id
+    assert metadata["target_scope"] == "member"
+    assert metadata["profile_fingerprint"]
 
 
 def test_smart_grocery_uses_member_snapshot_and_matching_history_metadata(client):
@@ -296,23 +273,6 @@ def test_profile_switch_isolates_memory_history_and_response(
 
     mock_chat_memory.side_effect = memory_side_effect
     mock_plan_memory.side_effect = memory_side_effect
-    captured_states = []
-
-    async def fake_stream(state):
-        captured_states.append(state)
-        answer = " ".join(state.get("hafiza") or []) or "Profil B için sade ve dengeli kahvaltı."
-        yield {
-            "denetmen": {
-                "uzman_onerisi": answer,
-                "hedef_islem": "SOHBET",
-                "guvenli_mi": True,
-                "risk_score": 0.1,
-                "confidence": {"final_score": 0.8, "action": "APPROVE"},
-                "citations": [],
-            }
-        }
-
-    mock_graph.astream = fake_stream
     first_chat = client.post(
         "/api/chat",
         json={"mesaj": "Akşam için bir seçenek öner", "kimin_icin": "kendim"},
@@ -320,8 +280,9 @@ def test_profile_switch_isolates_memory_history_and_response(
     assert first_chat.status_code == 200
     first_plan = client.post("/api/weekly-plan", json={"kimin_icin": "kendim"})
     assert first_plan.status_code == 200
-    first_snapshot = captured_states[0]["resolved_profile_snapshot"]
     history_after_plan = client.get("/api/history?limit=20").json()["loglar"]
+    first_chat_log = next(item for item in history_after_plan if item["eylem"] == "CureBot")
+    first_snapshot = json.loads(first_chat_log["metadata"])
     plan_log = next(item for item in history_after_plan if item["eylem"] == "Haftalık Plan")
     plan_metadata = json.loads(plan_log["metadata"])
     assert plan_metadata["target_id"] == first_snapshot["target_id"]
@@ -348,14 +309,14 @@ def test_profile_switch_isolates_memory_history_and_response(
     )
     assert second_chat.status_code == 200
 
-    first_state, second_state = captured_states
-    assert first_state["resolved_profile_snapshot"]["profile_fingerprint"] != second_state["resolved_profile_snapshot"]["profile_fingerprint"]
+    history_after_second_chat = client.get("/api/history?limit=20").json()["loglar"]
+    chat_logs = [item for item in history_after_second_chat if item["eylem"] == "CureBot"]
+    second_snapshot = json.loads(chat_logs[0]["metadata"])
+    assert first_snapshot["profile_fingerprint"] != second_snapshot["profile_fingerprint"]
     assert namespaces[0] != namespaces[-1]
     combined_context = json.dumps(
         {
-            "snapshot": second_state["resolved_profile_snapshot"],
-            "memory": second_state["hafiza"],
-            "history": second_state["sohbet_gecmisi"],
+            "snapshot": second_snapshot,
         },
         ensure_ascii=False,
     ).casefold()

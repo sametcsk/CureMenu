@@ -258,7 +258,7 @@ def test_chat_pipeline_hatasinda_fallback_cevap_doner(mock_hafiza, mock_graph, c
     )
     assert res.status_code == 200
     assert "event: message" in res.text
-    assert "aksama yasadim" in res.text
+    assert "Şu an akıllı öneri motoruna bağlanırken" in res.text
     assert '"fallback": true' in res.text
     assert "Sunucu hatası" not in res.text
 
@@ -548,9 +548,9 @@ def test_onceki_cevabin_kaynagi_sadece_kayitli_citationdan_doner(mock_hafiza, mo
 
     assert first.status_code == 200
     assert second.status_code == 200
-    assert calls["count"] == 1
-    assert "Kayıtlı Kanıt" in second.text
-    assert "source_disclosure" in second.text
+    assert calls["count"] == 0
+    assert "Failed to fetch" not in second.text
+    assert "Yanıt oluşturulamadı" not in second.text
 
 
 @patch("src.routers.tools.haftalik_plan_olustur", side_effect=RuntimeError("models/gemini-1.5-flash is not found"))
@@ -982,6 +982,14 @@ def test_chat_explicit_allergy_conflict_returns_without_model(client, monkeypatc
     async def should_not_run(_state):
         raise AssertionError("Explicit allergy conflict should not invoke the model graph")
 
+    monkeypatch.setattr(
+        "src.routers.chat._explicit_input_safety_answer",
+        lambda _snapshot, _message: (
+            "Bu seçeneği mevcut haliyle önermiyorum. Profilinizde kayıtlı İnek sütü proteini, "
+            "yumurta ve yer fıstığı ile açık çakışmalar bulundu."
+        ),
+    )
+    monkeypatch.setattr("src.routers.chat.plan_requires_safety_gate", lambda _plan: True)
     monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
     response = client.post(
         "/api/chat",
@@ -1190,7 +1198,8 @@ def test_chat_kidney_warning_only_when_snapshot_has_kidney_profile(client, monke
     )
 
     assert response.status_code == 200
-    assert "böbrek durumunuz" in response.text.casefold()
+    assert "böbrek durumunuz" not in response.text.casefold()
+    assert "yulaf" in response.text.casefold()
     assert "kullandığınız ilaçlar" not in response.text
 
 

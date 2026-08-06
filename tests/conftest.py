@@ -8,6 +8,12 @@ def pytest_configure():
     auth.PASSWORD_HASH_ITERATIONS = auth.LEGACY_PASSWORD_HASH_ITERATIONS
 
 
+@pytest.fixture(autouse=True)
+def disable_external_curebot_generation(monkeypatch):
+    """Keep API tests deterministic without requiring a model provider."""
+    monkeypatch.setattr("src.routers.chat.generate_curebot_natural_answer", lambda *_args, **_kwargs: "")
+
+
 @pytest.fixture()
 def test_db_path(tmp_path, monkeypatch):
     db_file = tmp_path / "test_healmenu.db"
