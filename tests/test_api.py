@@ -1278,6 +1278,45 @@ def test_chat_infers_accented_family_member_for_breakfast(client, monkeypatch):
     assert "Sa\u011fl\u0131k profiliniz nedeniyle" not in response.text
     assert "yulaf" in response.text.casefold()
 
+
+def test_chat_family_dinner_recommendation_uses_fast_answer(client, monkeypatch):
+    login_with_profile(
+        client,
+        "5554445614",
+        "Family Dinner Target",
+        ad="Samet",
+        hastaliklar=["insulin direnci"],
+        alerjiler=["findik"],
+        ilaclar=["metformin"],
+    )
+    add = client.post(
+        "/api/family/add",
+        json={
+            "ad": "Z\u00fcleyha",
+            "yas": 58,
+            "cinsiyet": "kad\u0131n",
+            "yakinlik": "anne",
+            "hastaliklar": ["kolesterol", "gastrit"],
+            "alerjiler": [],
+            "ilaclar": ["Laroxyl", "Dideral"],
+        },
+    )
+    assert add.status_code == 200
+
+    async def should_not_run(_state):
+        raise AssertionError("Family dinner recommendation should not wait for model graph")
+
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+    response = client.post(
+        "/api/chat",
+        json={"mesaj": "bize bir aksam yemegi oner", "kimin_icin": "kendim"},
+    )
+
+    assert response.status_code == 200
+    assert "Hepiniz" in response.text
+    assert "f\u0131r\u0131nda tavuk" in response.text.casefold()
+    assert "Sa\u011fl\u0131k profiliniz nedeniyle" not in response.text
+
 def test_chat_intent_levothyroxine_badem_sutu_timing_not_dairy_block(client, monkeypatch):
     login_with_profile(
         client,

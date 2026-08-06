@@ -58,24 +58,40 @@ def _product_trust_answer() -> str:
 
 def _safe_breakfast_answer(snapshot: ResolvedProfileSnapshot) -> str:
     notes = []
-    if _profile_has(snapshot.diseases, "çölyak", "celiac", "gluten"):
-        notes.append("glutensiz sertifikalı ürün kullanın")
+    if _profile_has(snapshot.diseases, "\u00e7\u00f6lyak", "celiac", "gluten"):
+        notes.append("glutensiz sertifikal\u0131 \u00fcr\u00fcnleri tercih edin")
     if _profile_has(snapshot.diseases, "diyabet", "diabetes"):
-        notes.append("meyve ve tahıl porsiyonunu ölçülü tutun")
-    if _profile_has(snapshot.diseases, "böbrek", "renal", "ckd"):
-        notes.append("böbrek durumunuz varsa protein ve porsiyon sınırını sağlık profesyonelinizle netleştirin")
+        notes.append("meyve ve tah\u0131l porsiyonunu \u00f6l\u00e7\u00fcl\u00fc tutun")
+    if _profile_has(snapshot.diseases, "b\u00f6brek", "renal", "ckd"):
+        notes.append("protein porsiyonunu takip eden uzman\u0131n\u0131zla netle\u015ftirin")
     if _profile_has(snapshot.medications, "levotiroksin", "levothyroxine"):
-        notes.append("levotiroksin zamanlaması için doktor/eczacı önerinizi izleyin")
-    note_text = f"\n\nKısa not: {', '.join(notes)}." if notes else ""
+        notes.append("levotiroksin zamanlamas\u0131 i\u00e7in re\u00e7ete/eczac\u0131 \u00f6nerisini izleyin")
+    name = (snapshot.target_name or "Sizin").strip()
+    intro = f"{name} i\u00e7in sabah\u0131 yormayacak, pratik ve daha dengeli bir kahvalt\u0131 se\u00e7elim."
+    note_text = f"\n\nK\u0131sa dikkat notu: {'; '.join(notes)}." if notes else ""
     return (
-        "Evet, kayıtlı alerjenleri dışarıda bırakan bir kahvaltı alternatifi hazırlanabilir. "
-        "Örnekler:\n"
-        "- Su veya şekersiz bitki bazlı içecekle hazırlanmış glutensiz yulaf; üzerine tarçın, chia ve küçük porsiyon meyve.\n"
-        "- Avokadolu glutensiz tost; yanında salatalık, domates ve zeytin.\n"
-        "- Karabuğday lapası; üzerine tahin yerine alerjen içermeyen tohum karışımı ve tarçın.\n"
+        f"{intro} Ben olsam bug\u00fcn \u015fu \u00fc\u00e7 se\u00e7enekten birini d\u00fc\u015f\u00fcn\u00fcrd\u00fcm:\n\n"
+        "1. glutensiz yulaf kasesi: su veya \u015fekersiz bitkisel i\u00e7ecekle haz\u0131rlay\u0131n; \u00fczerine tar\u00e7\u0131n, chia ve az miktarda meyve ekleyin. Hafif, tok tutan ve kontroll\u00fc bir ba\u015flang\u0131\u00e7 olur.\n"
+        "2. Avokadolu glutensiz tost: yan\u0131na salatal\u0131k, domates ve zeytin koyun. Daha tuzlu gelirse zeytini azaltmak iyi olur.\n"
+        "3. Karabu\u011fday lapas\u0131: tar\u00e7\u0131nla tatland\u0131r\u0131p alerjen i\u00e7ermeyen tohumlarla tamamlay\u0131n. Mideyi daha sakin tutan, pratik bir alternatif.\n"
         f"{note_text}"
     )
 
+
+
+def _safe_dinner_answer(snapshot: ResolvedProfileSnapshot) -> str:
+    if snapshot.target_scope == "family":
+        intro = "Hepiniz i\u00e7in ortak ve yormayan bir ak\u015fam yeme\u011fi se\u00e7elim. Ama\u00e7 tek tabakta hem kan \u015fekeri dengesini hem mide hassasiyetini hem de ya\u011f y\u00fck\u00fcn\u00fc sakin tutmak."
+    else:
+        name = (snapshot.target_name or "Sizin").strip()
+        intro = f"{name} i\u00e7in bu ak\u015fam hafif, pratik ve profille \u00e7ak\u0131\u015fmayan bir tabak iyi gider."
+    return (
+        f"{intro} Ben olsam \u015fu se\u00e7eneklerden birini se\u00e7erdim:\n\n"
+        "1. F\u0131r\u0131nda tavuk ve sebze: derisiz tavuk, kabak, havu\u00e7 ve az zeytinya\u011f\u0131yla haz\u0131rlan\u0131r. K\u0131zartma olmad\u0131\u011f\u0131 i\u00e7in daha hafif kal\u0131r.\n"
+        "2. Izgara bal\u0131k ve sade salata: sosu ayr\u0131 isteyin; yo\u011fun limon, sirke ve ac\u0131 baharat kullanmay\u0131n. Kolesterol ve mide hassasiyeti i\u00e7in daha sakin bir se\u00e7im olur.\n"
+        "3. Zeytinya\u011fl\u0131 taze fasulye yan\u0131nda yo\u011furtsuz/iste\u011fe g\u00f6re laktozsuz destek: porsiyon kontroll\u00fc, ev yeme\u011fi gibi g\u00fcvenli bir alternatif.\n\n"
+        "D\u0131\u015far\u0131daysan\u0131z en pratik kural: k\u0131zartma, krema/sos ve \u00e7ok baharat yerine \u0131zgara veya f\u0131r\u0131n se\u00e7eneklerini sorun."
+    )
 
 def _diabetes_snack_answer() -> str:
     return (
@@ -148,12 +164,19 @@ def intent_fast_answer(snapshot: ResolvedProfileSnapshot, message: str) -> str |
     breakfast_request = safe_request and any(
         term in text for term in ("kahvalti", "sabah", "pratik kahvalti", "kisa kahvalti")
     )
+    dinner_request = safe_request and any(
+        term in text for term in ("aksam yemegi", "ak?am yeme?i", "aksam", "ak?am", "yemek", "ogun", "???n")
+    )
     safe_request = safe_request and any(
         term in text for term in ("yumurtasiz", "sutsuz", "glutensiz", "diyabete uygun", "tatli iste")
     )
     if safe_request and "tatli" in text:
         return _diabetes_snack_answer()
-    if safe_request or breakfast_request:
+    if breakfast_request:
+        return _safe_breakfast_answer(snapshot)
+    if dinner_request:
+        return _safe_dinner_answer(snapshot)
+    if safe_request:
         return _safe_breakfast_answer(snapshot)
     return None
 
