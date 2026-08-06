@@ -2,7 +2,6 @@
 
 Profil ve güvenlik bağlamını bir araya getiren beslenme karar destek prototipi.
 
-[![CI](https://github.com/sametcsk/CureMenu/actions/workflows/ci.yml/badge.svg)](https://github.com/sametcsk/CureMenu/actions/workflows/ci.yml)
 
 ## Ürün özeti
 
