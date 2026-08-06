@@ -135,17 +135,7 @@ def user_facing_safety_guidance(raw_warning: str, *, blocked: bool = False, prof
     ):
         messages.append(MEDICATION_GUIDANCE)
 
-    needs_general_guidance = blocked or any(
-        term in normalized
-        for term in (
-            "uzman incelemesi",
-            "kaynak kaydi",
-            "registry",
-            "dogrulanamadi",
-            "saglik profesyoneli",
-        )
-    )
-    if needs_general_guidance or not messages:
+    if not messages:
         messages.append(GENERAL_REVIEW_GUIDANCE)
 
     return "\n\n".join(dict.fromkeys(messages))

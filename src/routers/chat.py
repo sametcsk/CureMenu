@@ -1,4 +1,5 @@
 import json
+import re
 import asyncio
 from fastapi import APIRouter, Request, Depends, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
@@ -87,8 +88,11 @@ def _is_small_talk(message: str) -> bool:
 
 def _is_lab_question(message: str) -> bool:
     text = _normalized_message(message)
-    keywords = ("tahlil", "kan", "rapor", "kolesterol", "glukoz", "şeker", "seker", "hb", "hba1c")
-    return any(keyword in text for keyword in keywords)
+    keywords = (
+        "tahlil", "kan", "rapor", "kolesterol", "glukoz", "şeker", "seker",
+        "hb", "hba1c", "hemoglobin", "ferritin", "b12", "tsh", "kreatinin",
+    )
+    return any(re.search(rf"(?<!\w){re.escape(keyword)}(?!\w)", text) for keyword in keywords)
 
 def _simple_chat_message(user_message: str, profil_ozeti: str, klinik_hafiza: list[str]) -> str | None:
     if _is_small_talk(user_message):
@@ -263,20 +267,11 @@ def _explicit_input_safety_answer(snapshot: ResolvedProfileSnapshot, message: st
     if not risks:
         return None
     risk_lines = "\n".join(f"- {risk}" for risk in format_rule_risks_for_user(risks))
-    if snapshot.diseases and snapshot.medications:
-        review_context = "Kayıtlı hastalıklarınız ve ilaçlarınız"
-    elif snapshot.diseases:
-        review_context = "Kayıtlı sağlık durumlarınız"
-    elif snapshot.medications:
-        review_context = "Kayıtlı ilaçlarınız"
-    else:
-        review_context = "Kişisel sağlık bilgileriniz"
     return (
         "Bu seçeneği mevcut haliyle önermiyorum. Profilinizle şu açık çakışmalar bulundu:\n"
         f"{risk_lines}\n\n"
-        "Bu malzemeleri kullanmadan hazırlanmış bir alternatif seçin. "
-        f"{review_context} kişisel miktar ve zamanlama kararını etkileyebilir; "
-        "doktorunuza, eczacınıza ya da diyetisyeninize danışın."
+        "Bu malzemeleri kullanmadan hazırlanmış bir alternatif seçin. İsterseniz aynı öğünün kayıtlı "
+        "alerjenleri içermeyen bir alternatifini önerebilirim."
     )
 
 @router.post("/api/chat")

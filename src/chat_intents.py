@@ -1,3 +1,4 @@
+import re
 import unicodedata
 
 from src.medical_knowledge.normalizer import extract_medication_mentions, normalize_text
@@ -35,12 +36,23 @@ def _profile_bullets(snapshot: ResolvedProfileSnapshot) -> list[str]:
 
 def _product_info_answer() -> str:
     return (
-        "CureMenu yemek kararlarını kişiselleştirirken profilinizdeki hastalık, alerji, ilaç, hedef, "
-        "tercih ve varsa tahlil bilgilerini birlikte değerlendirir. Amaç tanı koymak ya da tedavi "
-        "düzenlemek değil; günlük yemek seçimini daha anlaşılır ve kontrollü hale getirmektir.\n\n"
-        "Kayıt sonrası haftalık plan, CureBot, tahlil yükleme, menü/buzdolabı analizi ve Smart Grocery "
-        "akışları aynı profil bilgileriyle çalışır. Riskli veya belirsiz durumda sistem kesin konuşmak "
-        "yerine doktor, eczacı veya diyetisyen görüşüne yönlendirir."
+        "Ben CureBot, CureMenu'nün beslenme karar desteği asistanıyım. Yanıt hazırlarken seçtiğiniz "
+        "kişinin hastalık, alerji, ilaç, hedef, tercih ve varsa tahlil bilgilerini birlikte değerlendiririm. "
+        "Böylece genel bir liste vermek yerine o kişi için daha uygun seçenekleri daraltabilirim.\n\n"
+        "CureMenu'de haftalık plan hazırlayabilir, tahlil yükleyebilir, menü veya buzdolabı fotoğrafını "
+        "inceletebilir ve alışveriş listesiyle yaklaşık bütçe oluşturabilirsiniz. Tanı koymam veya tedavi "
+        "düzenlemem; belirsiz ya da ilaçla ilgili bir durumda sağlık profesyoneline danışmanızı öneririm."
+    )
+
+
+def _product_trust_answer() -> str:
+    return (
+        "Sorunuzu önce seçtiğiniz kişinin profili ve konuşmanın bağlamıyla birlikte anlarım. Önerdiğim "
+        "yemeklerin malzemelerini kayıtlı alerji ve beslenme kısıtlarıyla karşılaştırır, ilgili olduğunda "
+        "ilaç ve tahlil bilgisini de dikkate alırım. Bilmediğim bir ayrıntıyı varmış gibi kabul etmem.\n\n"
+        "Bu kontroller hata ihtimalini azaltır ama tamamen ortadan kaldırmaz. CureMenu tanı koymaz, tedavi "
+        "düzenlemez ve doktor ya da diyetisyenin yerini almaz. İlaç, yeni belirti veya tahlil değişikliği "
+        "içeren kararlarda sağlık profesyonelinizin önerisini izlemelisiniz."
     )
 
 
@@ -75,19 +87,33 @@ def _diabetes_snack_answer() -> str:
     )
 
 
-def _levothyroxine_timing_answer(snapshot: ResolvedProfileSnapshot) -> str:
-    milk_note = (
-        "Badem sütü inek sütü proteiniyle aynı şey değildir; bu nedenle tek başına inek sütü alerjisi gibi değerlendirilmez. "
-        "Yine de ürün etiketi ve çapraz bulaş bilgisini kontrol edin."
-    )
+def _levothyroxine_timing_answer(snapshot: ResolvedProfileSnapshot, message: str) -> str:
+    text = normalized_message(message)
+    milk_note = ""
+    if "badem" in text:
+        milk_note = (
+            "Badem sütü inek sütü proteiniyle aynı şey değildir; bu nedenle tek başına inek sütü alerjisi gibi değerlendirilmez. "
+            "Yine de ürün etiketi ve çapraz bulaş bilgisini kontrol edin.\n\n"
+        )
     timing_note = (
-        "Levotiroksin için asıl konu öğünün içeriği ve zamanlamadır. Bazı mineral takviyeleri, kalsiyum/demir içeren ürünler "
-        "ve bazı besinler emilimi etkileyebilir. İlacı kahvaltı veya smoothie ile ne kadar arayla alacağınız konusunda "
-        "doktorunuzun ya da eczacınızın önerisini izleyin."
+        "Levotiroksini kahvaltıyla aynı anda almak ilacın emilimini etkileyebilir. Aç veya tok kullanım ve kahvaltıyla "
+        "bırakılacak süre kişisel tedavi planınıza göre değişebileceği için reçetenizdeki talimata ve doktorunuzun ya da "
+        "eczacınızın önerisine uyun. Kalsiyum veya demir içeren ürün ve takviyeleri de ayrıca belirtin."
     )
     if not _profile_has(snapshot.medications, "levotiroksin", "levothyroxine"):
-        return f"{milk_note}\n\nProfilinizde levotiroksin kaydı görünmüyor. Bu ilacı kullanıyorsanız profilinize ekleyip zamanlama kararını eczacınızla netleştirmeniz uygun olur."
-    return f"{milk_note}\n\n{timing_note}"
+        return f"{milk_note}Profilinizde levotiroksin kaydı görünmüyor. Bu ilacı kullanıyorsanız profilinize ekleyip zamanlama kararını eczacınızla netleştirmeniz uygun olur."
+    return f"{milk_note}{timing_note}"
+
+
+def _warfarin_food_answer(snapshot: ResolvedProfileSnapshot) -> str:
+    profile_note = ""
+    if not _profile_has(snapshot.medications, "warfarin", "coumadin"):
+        profile_note = "Profilinizde Warfarin kaydı görünmüyor; aşağıdaki bilgi genel niteliktedir.\n\n"
+    return (
+        f"{profile_note}Ispanak Warfarin kullanırken otomatik olarak tamamen yasak değildir. Önemli olan K vitamini "
+        "içeren besinleri birden kesmek veya miktarını sık sık büyük ölçüde değiştirmek yerine tüketimi mümkün olduğunca "
+        "düzenli tutmaktır. Size uygun miktarı ve sıklığı ilacınızı düzenleyen doktor veya eczacıyla netleştirin."
+    )
 
 
 def _ibs_tolerance_answer() -> str:
@@ -101,18 +127,25 @@ def _ibs_tolerance_answer() -> str:
 
 def intent_fast_answer(snapshot: ResolvedProfileSnapshot, message: str) -> str | None:
     text = normalized_message(message)
+    if any(phrase in text for phrase in ("arkanda ne var", "nasil yapiyorsun", "sana guven", "guvenebilir miyim", "neye gore calis")):
+        return _product_trust_answer()
     if any(phrase in text for phrase in ("curemenu nedir", "nasil kis", "nasil calis", "yemek kararlarimi nasil", "verilerimi nasil", "verilerimi neden")):
         return _product_info_answer()
     if any(phrase in text for phrase in ("neden verdin", "hangi saglik bilgilerimi", "neyi dikkate aldin", "neden oner")):
         bullets = _profile_bullets(snapshot)
         if not bullets:
             return "Bu öneride kayıtlı profil bilgilerinizden belirgin bir sağlık kısıtı görünmüyor. Yine de tercih, hedef ve önceki kullanım bilgileriniz önerinin kişiselleştirilmesinde kullanılabilir."
-        return "Bu yanıtı oluştururken aktif profilinizdeki şu bilgileri dikkate alırım:\n" + "\n".join(f"- {item}" for item in bullets)
+        return "Önceki öneriyi, seçtiğiniz profilin ihtiyaçlarıyla çakışmayacak bir seçenek sunmak için verdim. Özellikle şunları dikkate aldım:\n" + "\n".join(f"- {item}" for item in bullets)
     if "levotiroksin" in text or "levothyroxine" in text:
-        return _levothyroxine_timing_answer(snapshot)
+        return _levothyroxine_timing_answer(snapshot, message)
+    if "warfarin" in text or "coumadin" in text:
+        return _warfarin_food_answer(snapshot)
     if "ibs" in text or "irritabl" in text:
         return _ibs_tolerance_answer()
-    safe_request = any(term in text for term in ("onersin", "onerir misin", "alternatif", "ara ogun")) and any(
+    safe_request = bool(re.search(r"\boner(?:i|ir|irsin|ir misin|ebilir misin)?\b", text)) or any(
+        term in text for term in ("alternatif", "ara ogun")
+    )
+    safe_request = safe_request and any(
         term in text for term in ("yumurtasiz", "sutsuz", "glutensiz", "diyabete uygun", "tatli iste")
     )
     if safe_request and "tatli" in text:

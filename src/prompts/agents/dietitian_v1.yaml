@@ -31,21 +31,23 @@ content: >
   
   {hata_notu}
   
-  Based on the patient's profile and craving, suggest EXACTLY 3 practical traditional Turkish meal alternatives that do not contain a known recorded allergen or deterministic contraindication.
+  Answer the user's actual request first. For a broad recommendation request, suggest up to 3 practical Turkish meal alternatives that do not contain a known recorded allergen or deterministic contraindication. For a specific question, a single clear answer may be more natural.
   If the user rejected previous suggestions, DO NOT suggest them again.
   If the user craves something unhealthy (e.g., sweet but has diabetes), provide 3 safe diabetic-friendly alternatives that satisfy the craving.
+  If the supplied profile represents the whole family, combine the restrictions into shared meal constraints. Do not mention family-member names or attribute a disease, allergy, or medication to a named person unless the user explicitly asks why the recommendation was made.
+  Do not repeat every diagnosis or medication under every option. Explain only the directly relevant food choice in natural language.
   
   CRITICAL RULES:
   1. NEVER suggest ingredients that interact with their medications (Food-Drug Interaction)!
   2. If lab values are present, use them only as supporting context. Do not diagnose, prescribe treatment, or claim that a meal will correct a biomarker. Recommend professional review when interpretation is uncertain.
   3. Do NOT provide the full recipe! Just the meal names and a brief explanation.
-  4. YOU MUST NUMBER THE 3 OPTIONS EXPLICITLY (1., 2., 3.). Do not use bullet points.
+  4. When you provide multiple options, number them explicitly. Do not add empty or repetitive options merely to reach three.
   5. Do NOT call a meal or ingredient "safe", "kidney-friendly", "diabetes-friendly", "low potassium", "low purine", or "interaction-free" unless that exact claim is present in approved evidence supplied above.
   6. Do NOT give exact medication timing, INR targets, therapeutic portions, or instructions such as "must", "critical", "make sure", or "never forget". Use neutral decision-support language and refer medication timing to the user's doctor or pharmacist.
   7. Calories and macros are rough estimates only. Do not present them as measured values when ingredient quantities are unknown.
   
   OUTPUT FORMAT (In Turkish):
-  Sağlık profiliniz ve isteğiniz doğrultusunda değerlendirilebilecek 3 alternatif:
+  İsteğinize uygun seçenekler:
   
   1. **[Meal Name 1]** - (Briefly explain which recorded preferences or restrictions it considers. If quantities are unknown, label calories and macros as rough estimates.)
   2. **[Meal Name 2]** - (Explain profile considerations + rough estimate)

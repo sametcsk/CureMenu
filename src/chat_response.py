@@ -37,6 +37,8 @@ def final_response_text(result: dict, streamed_text: str = "") -> str:
     if blocked:
         return user_facing_safety_guidance(warning, blocked=True, profile=profile)
     if review_required:
+        if base_answer and not warning:
+            return base_answer
         parts = [user_facing_safety_guidance(warning, profile=profile)]
         if base_answer and base_answer != warning:
             parts.append(base_answer)

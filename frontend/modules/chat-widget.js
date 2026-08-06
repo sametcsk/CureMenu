@@ -344,9 +344,8 @@ window.ChatWidget = {
     },
 
     showGovernance(data) {
-        if (!data?.decision_id || !window.ChatGovernancePanel) return;
-        const card = this.addMessage('', 'soft', true);
-        window.ChatGovernancePanel.renderChatGovernanceSummary(data, card);
+        // Technical decision records remain on the dedicated traceability screen.
+        return;
     },
 
     resetState() {
