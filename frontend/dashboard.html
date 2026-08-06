@@ -7,7 +7,7 @@
 <script src="https://cdn.tailwindcss.com/3.4.17?plugins=forms,container-queries,typography"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.12/dist/purify.min.js"></script>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
+<script src="/static/vendor/html5-qrcode-2.3.8.min.js" type="text/javascript"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet"/>
@@ -234,7 +234,11 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 
 <div id="tab-plan" class="tab-content">
   <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">Haftalık Plan</h2><p class="mt-2 text-on-surface-variant">Profil ve aile bilgilerine göre kontrollü öğün planı oluştur.</p></div>
-  <div class="mb-5 flex flex-wrap gap-3"><select id="planTarget" class="rounded-lg border-outline-variant bg-white px-4 py-3"></select><button id="generatePlanBtn" class="btn-primary px-6 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">auto_awesome</span>Planı oluştur</button><button type="button" data-weekly-action="snack" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">nutrition</span>Atıştırmalık Öner</button></div>
+  <div class="mb-5 flex flex-wrap gap-3">
+    <select id="planTarget" class="rounded-lg border-outline-variant bg-white px-4 py-3"></select>
+    <button id="generatePlanBtn" class="btn-primary px-6 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">auto_awesome</span>Planı oluştur</button>
+    <button type="button" data-weekly-action="snack" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">nutrition</span>Atıştırmalık Öner</button>
+  </div>
   <div id="planResult" class="card min-h-[220px] p-6"><div class="py-12 text-center text-on-surface-variant"><span class="material-symbols-outlined mb-3 block text-5xl opacity-40">calendar_month</span>Plan oluşturmak için yukarıdaki butonu kullan.</div></div>
 </div>
 
@@ -242,7 +246,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
   <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">Menü Analizi</h2><p class="mt-2 text-on-surface-variant">Restoran menüsünü bağlantı, QR veya fotoğrafla profil bilgilerine göre değerlendir.</p></div>
   <section class="card p-5">
     <div class="menu-scan-controls"><input id="menuUrlInput" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3" placeholder="https://ornekrestoran.com/menu" type="url"/><select id="menuTarget" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3"></select><button onclick="window.MenuScanner.scanMenu()" class="btn-primary px-6 py-3 font-bold">Linki tara</button></div>
-    <div class="mt-5 flex flex-wrap gap-3"><label class="btn-secondary cursor-pointer px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">photo_camera</span>Menü fotoğrafı<input type="file" id="menuImageInput" accept="image/*" class="hidden" onchange="window.MenuScanner.scanMenuImage(this)"/></label><button onclick="window.MenuScanner.startQRScanner()" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">qr_code_scanner</span>QR oku</button></div>
+    <div class="mt-5 flex flex-wrap gap-3"><label class="btn-secondary cursor-pointer px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">photo_camera</span>Menü fotoğrafı<input type="file" id="menuImageInput" accept="image/*" class="hidden" onchange="window.MenuScanner.scanMenuImage(this)"/></label><button onclick="window.MenuScanner.startQRScanner()" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">qr_code_scanner</span>QR oku</button><label class="btn-secondary cursor-pointer px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">image_search</span>Galeriden QR okut<input type="file" id="qrImageInput" accept="image/*" class="hidden" onchange="window.MenuScanner.scanQRImage(this)"/></label></div>
     <div id="qr-reader" style="width:100%;max-width:420px;display:none" class="mt-4 overflow-hidden rounded-lg border border-outline-variant bg-white"></div>
   </section>
   <div id="menuScanResult" class="mt-6"></div>
@@ -363,7 +367,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 <script src="/static/modules/weekly-actions.js"></script>
 <script src="/static/modules/profile-goals.js?v=12"></script>
 <script src="/static/modules/profile-family-manager.js?v=14"></script>
-<script src="/static/modules/menu-scanner.js?v=14"></script>
+<script src="/static/modules/menu-scanner.js?v=15"></script>
 <script src="/static/modules/lab-upload.js?v=14"></script>
 <script src="/static/modules/governance-dashboard.js"></script>
 <script src="/static/app.js?v=14"></script>
