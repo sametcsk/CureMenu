@@ -125,10 +125,12 @@ class ComplianceRequest(BaseModel):
 class ScanMenuRequest(BaseModel):
     kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
     url: str = Field(..., min_length=4, max_length=2048)
+    restoran_adi: Optional[str] = Field(default=None, max_length=120)
 
 class ScanMenuImageRequest(BaseModel):
     kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
     image_base64: str = Field(..., min_length=1, max_length=8_000_100)
+    restoran_adi: Optional[str] = Field(default=None, max_length=120)
 
 class ShoppingListRequest(BaseModel):
     plan_metni: str

@@ -32,6 +32,9 @@ def menu_danismani(ham_metin: str, profil_ozeti: str) -> str:
     2. Every dish in the menu must appear in exactly one category below.
     3. If a dish contains an allergen for this patient, it MUST go to the red category.
     4. If a dish conflicts with the patient's medications (drug-food interaction), it MUST go to the red category.
+    4a. Distinguish lactose sensitivity/intolerance from a recorded allergy. Never say lactose allergy unless explicitly recorded.
+    4b. Do not assert hidden ingredients. If contents are unclear, recommend confirming with the restaurant.
+    4c. Use human Turkish headings: Daha Uygun Seçenekler; Dikkatli Tercih Edilebilecekler; Bu Profil İçin Kaçınılması Daha Doğru Olanlar.
     5. Be concise — one short sentence per dish explaining why.
     6. If the menu text is empty or unreadable, respond only with:
        "⚠️ Menu could not be read. Please try scanning again."

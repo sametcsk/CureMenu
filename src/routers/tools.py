@@ -319,6 +319,24 @@ def _prepend_menu_safety_alerts(analysis: str, safety: dict) -> str:
     alert_lines = "\n".join(f"- {reason}" for reason in alerts)
     return f"### Profil İçin Zorunlu Güvenlik Uyarıları\n{alert_lines}\n\n{analysis}"
 
+def _menu_history_metadata(snapshot, restaurant_name: str | None, source: str) -> dict:
+    metadata = dict(snapshot.history_metadata())
+    title = (restaurant_name or "").strip()[:120] or "Menü analizi"
+    metadata.update({"analysis_type": "menu", "analysis_title": title, "restaurant_name": title, "source": source, "target_label": snapshot.target_name})
+    return metadata
+
+
+def _normalize_menu_language(analysis: str) -> str:
+    for old, new in {
+        "laktoz alerjisi": "laktoz hassasiyeti/intoleransı",
+        "Profilinizle Uyuşmayan Seçenekler": "Bu Profil İçin Kaçınılması Daha Doğru Olanlar",
+        "Sizin İçin Güvenli": "Daha Uygun Seçenekler",
+        "Porsiyon Kontrolüyle Tüketin": "Dikkatli Tercih Edilebilecekler",
+    }.items():
+        analysis = analysis.replace(old, new)
+    return analysis
+
+
 def _geri_bildirimi_hafizaya_ekle(account_id: str, kullanici_id: str, mesaj: str) -> None:
     try:
         geri_bildirim_ekle(kullanici_id, mesaj, account_id=account_id)
@@ -485,7 +503,8 @@ async def scan_menu(request: Request, req: ScanMenuRequest, bg_tasks: Background
         
         analiz_sonucu = await run_in_threadpool(menu_danismani, ham_metin, profil_ozeti)
         safety = _check_tool_output_safety(snapshot, ham_metin)
-        analiz_sonucu = _prepend_menu_safety_alerts(analiz_sonucu, safety)
+        analiz_sonucu = _normalize_menu_language(_prepend_menu_safety_alerts(analiz_sonucu, safety))
+        history_metadata = _menu_history_metadata(snapshot, req.restoran_adi, "menu")
 
         initial_state = create_initial_state(
             istek=f"Menü Tarama: {req.url}",
@@ -501,9 +520,9 @@ async def scan_menu(request: Request, req: ScanMenuRequest, bg_tasks: Background
 
         decision_record = build_decision_record(state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=analiz_sonucu)
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "QR Menü", req.url, analiz_sonucu, json.dumps(snapshot.history_metadata(), ensure_ascii=False))
+        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "Menü Analizi", req.url, analiz_sonucu, json.dumps(history_metadata, ensure_ascii=False))
 
-        return {"success": True, "analiz": analiz_sonucu}
+        return {"success": True, "analiz": analiz_sonucu, "analysis_title": history_metadata["analysis_title"], "target_name": snapshot.target_name, "target_key": snapshot.target_key, "source": "menu"}
     except Exception as exc:
         log_failure(logger, "menu_url_scan", exc, component="tools")
         return JSONResponse(
@@ -527,7 +546,8 @@ async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks:
             
         analiz_sonucu = await run_in_threadpool(menu_danismani, ham_metin, profil_ozeti)
         safety = _check_tool_output_safety(snapshot, ham_metin)
-        analiz_sonucu = _prepend_menu_safety_alerts(analiz_sonucu, safety)
+        analiz_sonucu = _normalize_menu_language(_prepend_menu_safety_alerts(analiz_sonucu, safety))
+        history_metadata = _menu_history_metadata(snapshot, req.restoran_adi, "photo")
         
         initial_state = create_initial_state(
             istek="Menü Fotoğrafı Tarama",
@@ -543,9 +563,9 @@ async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks:
         
         decision_record = build_decision_record(state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=analiz_sonucu)
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "Menü Foto", "Fotoğraf yüklendi", analiz_sonucu, json.dumps(snapshot.history_metadata(), ensure_ascii=False))
+        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "Menü Analizi", "Fotoğraf yüklendi", analiz_sonucu, json.dumps(history_metadata, ensure_ascii=False))
         
-        return {"success": True, "analiz": analiz_sonucu}
+        return {"success": True, "analiz": analiz_sonucu, "analysis_title": history_metadata["analysis_title"], "target_name": snapshot.target_name, "target_key": snapshot.target_key, "source": "photo"}
     except ImageValidationError:
         return JSONResponse(
             status_code=422,
