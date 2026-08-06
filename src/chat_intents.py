@@ -145,12 +145,15 @@ def intent_fast_answer(snapshot: ResolvedProfileSnapshot, message: str) -> str |
     safe_request = bool(re.search(r"\boner(?:i|ir|irsin|ir misin|ebilir misin)?\b", text)) or any(
         term in text for term in ("alternatif", "ara ogun")
     )
+    breakfast_request = safe_request and any(
+        term in text for term in ("kahvalti", "sabah", "pratik kahvalti", "kisa kahvalti")
+    )
     safe_request = safe_request and any(
         term in text for term in ("yumurtasiz", "sutsuz", "glutensiz", "diyabete uygun", "tatli iste")
     )
     if safe_request and "tatli" in text:
         return _diabetes_snack_answer()
-    if safe_request:
+    if safe_request or breakfast_request:
         return _safe_breakfast_answer(snapshot)
     return None
 

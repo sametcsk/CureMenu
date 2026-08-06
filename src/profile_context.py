@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import sqlite3
+import unicodedata
 from typing import Any
 
 from fastapi import HTTPException
@@ -27,6 +28,12 @@ def _dedupe(values: list[str]) -> tuple[str, ...]:
             seen.add(key)
             result.append(cleaned)
     return tuple(result)
+
+
+def _fold_profile_key(value: str) -> str:
+    text = unicodedata.normalize("NFKD", str(value or "").strip().casefold())
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return text.replace("ı", "i")
 
 
 def _profile_fingerprint(members: list[AileUyesi]) -> str:
@@ -117,9 +124,13 @@ def _resolve_members(profile: KullaniciProfili, requested_target: str) -> tuple[
             raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
         return [main], main.id, main.ad, "self", "kendim", main.id
 
-    folded = target.casefold()
+    folded = _fold_profile_key(target)
     member = next(
-        (item for item in profile.aile_uyeleri if item.id == target or item.ad.casefold() == folded),
+        (
+            item
+            for item in profile.aile_uyeleri
+            if item.id == target or _fold_profile_key(item.ad) == folded
+        ),
         None,
     )
     if member is None:
