@@ -35,8 +35,12 @@ window.WeeklyPlanManager = {
 
     async generatePlan() {
         if (!window.AuthManager) return;
+        if (this.planRequestInFlight) return;
 
         try {
+            this.planRequestInFlight = true;
+            const generateBtn = document.getElementById('generatePlanBtn');
+            if (generateBtn) generateBtn.disabled = true;
             const user = window.AuthManager.requireAuth();
             if (!user) return; // Will redirect to login
 
@@ -62,6 +66,10 @@ window.WeeklyPlanManager = {
         } catch (e) {
             console.error("WeeklyPlanManager error:", e);
             this.showError("Bağlantı kurulamadı. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.");
+        } finally {
+            this.planRequestInFlight = false;
+            const generateBtn = document.getElementById('generatePlanBtn');
+            if (generateBtn) generateBtn.disabled = false;
         }
     },
 
