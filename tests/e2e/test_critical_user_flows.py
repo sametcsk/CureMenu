@@ -567,7 +567,7 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     )
     page.set_input_files(
         "#menuImageInput",
-        {"name": "broken.txt", "mimeType": "text/plain", "buffer": b"not-an-image"},
+        {"name": "broken.jpg", "mimeType": "image/jpeg", "buffer": b"not-an-image"},
     )
     page.locator("#menuScanResult").get_by_text("E2E gecersiz menu gorseli.").wait_for()
 
@@ -601,7 +601,7 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     )
     page.set_input_files(
         "#fridgeImageInput",
-        {"name": "broken.txt", "mimeType": "text/plain", "buffer": b"not-an-image"},
+        {"name": "broken.jpg", "mimeType": "image/jpeg", "buffer": b"not-an-image"},
     )
     page.locator("#fridgeScanResult").get_by_text("E2E gecersiz buzdolabi gorseli.").wait_for()
     assert not runtime_errors

@@ -1,5 +1,35 @@
 (function() {
 const HISTORY_LIMIT = 10;
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
+let fridgeHistoryRecords = [];
+let html5QrcodeScanner = null;
+let menuScanInFlight = false;
+let fridgeScanInFlight = false;
+
+function isAllowedImageFile(file) {
+    if (!file || typeof file.size !== 'number') return false;
+    if (file.size <= 0 || file.size > MAX_UPLOAD_BYTES) return false;
+    const mime = String(file.type || '').toLowerCase();
+    if (mime && !ALLOWED_IMAGE_MIME.has(mime)) return false;
+    return true;
+}
+
+function withMenuScanLock(fn) {
+    if (menuScanInFlight) return Promise.resolve(false);
+    menuScanInFlight = true;
+    return Promise.resolve(fn()).finally(() => {
+        menuScanInFlight = false;
+    });
+}
+
+function withFridgeScanLock(fn) {
+    if (fridgeScanInFlight) return Promise.resolve(false);
+    fridgeScanInFlight = true;
+    return Promise.resolve(fn()).finally(() => {
+        fridgeScanInFlight = false;
+    });
+}
 
 function parseHistoryMetadata(value) {
     if (!value) return {};
@@ -22,105 +52,220 @@ function historyMatchesCurrentTarget(log, selectId) {
     const metadata = parseHistoryMetadata(log?.metadata);
     if (!metadata.target_id || !metadata.target_scope) return false;
     return String(metadata.target_id) === String(context.targetId)
-        && String(metadata.target_scope) === String(context.targetScope)
-        && (!metadata.profile_fingerprint || String(metadata.profile_fingerprint) === String(context.profileFingerprint));
+        && String(metadata.target_scope) === String(context.targetScope);
+}
+
+function validatePublicMenuUrl(value) {
+    let parsed;
+    try {
+        parsed = new URL(String(value || '').trim());
+    } catch (_error) {
+        return null;
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) return null;
+    if (parsed.port && !['80', '443'].includes(parsed.port)) return null;
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (!host || host === 'localhost' || host.endsWith('.localhost')) return null;
+    if (/^(127\.|0\.|10\.|169\.254\.|192\.168\.)/.test(host)) return null;
+    const private172 = host.match(/^172\.(\d{1,3})\./);
+    if (private172 && Number(private172[1]) >= 16 && Number(private172[1]) <= 31) return null;
+    if (host === '::1' || /^(?:fc|fd|fe8|fe9|fea|feb)/.test(host)) return null;
+    return parsed.href;
+}
+
+function safePreviewDataUrl(value) {
+    const text = String(value || '');
+    return /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(text) ? text : '';
+}
+
+function createImagePreview(dataUrl) {
+    return new Promise(resolve => {
+        const image = new Image();
+        image.onload = () => {
+            const scale = Math.min(1, 480 / Math.max(image.width, image.height));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(image.width * scale));
+            canvas.height = Math.max(1, Math.round(image.height * scale));
+            canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.72));
+        };
+        image.onerror = () => resolve('');
+        image.src = dataUrl;
+    });
+}
+
+function renderMenuAnalysis(data) {
+    const result = document.getElementById('menuScanResult');
+    const context = document.getElementById('menuTargetContext');
+    if (context) context.innerHTML = `<div class="rounded-lg bg-primary-container/30 px-4 py-3 text-on-surface"><strong>${escapeHtml(data.analysis_title || 'Menü analizi')}</strong> · ${escapeHtml(data.target_name || 'Seçili kişi')} için değerlendirildi</div>`;
+    result.innerHTML = `<div class="bg-surface-container-lowest rounded-lg p-8 shadow-l1 border border-outline-variant/20"><div class="prose prose-sm md:prose-base max-w-none font-body-md text-on-surface">${formatMarkdownSafe(data.analiz)}</div></div>`;
+}
+
+async function loadMenuHistory() {
+    const list = document.getElementById('menuHistoryList');
+    if (!list) return;
+    try {
+        const { res, data } = await safeFetchJson(`${API}/api/history?page=1&limit=20`);
+        const target = document.getElementById('menuTarget')?.value;
+        const rows = (data?.loglar || []).filter(log => {
+            const meta = parseHistoryMetadata(log.metadata);
+            return meta.analysis_type === 'menu' && (!target || meta.target_key === target);
+        }).slice(0, 5);
+        list.innerHTML = rows.length ? rows.map((log, index) => {
+            const meta = parseHistoryMetadata(log.metadata);
+            const output = log.asistan_ciktisi || '';
+            return `<article class="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4"><div class="flex items-start justify-between gap-3"><div><strong>${escapeHtml(meta.restaurant_name || 'Menü analizi')}</strong><p class="text-sm text-on-surface-variant">${escapeHtml(meta.target_label || log.kullanici_adi || 'Hedef belirtilmemiş')} · ${new Date(log.tarih).toLocaleDateString('tr-TR')}</p></div><button class="btn-secondary px-3 py-2 text-sm" data-menu-history-index="${index}">Detayı aç</button></div><p class="mt-2 line-clamp-2 text-sm text-on-surface-variant">${escapeHtml(output.replace(/[#*_`]/g, '').slice(0, 180))}</p></article>`;
+        }).join('') : '<p class="text-sm text-on-surface-variant">Henüz bu hedef kişi için kayıtlı menü analizi yok.</p>';
+        list.querySelectorAll('[data-menu-history-index]').forEach(button => button.addEventListener('click', () => renderMenuAnalysis({ analysis_title: parseHistoryMetadata(rows[button.dataset.menuHistoryIndex].metadata).restaurant_name, target_name: parseHistoryMetadata(rows[button.dataset.menuHistoryIndex].metadata).target_label, analiz: rows[button.dataset.menuHistoryIndex].asistan_ciktisi || '' })));
+    } catch (_error) {
+        list.innerHTML = '<p class="text-sm text-on-surface-variant">Menü geçmişi şu anda yüklenemedi.</p>';
+    }
 }
 
 async function scanMenu() {
-    const user = getUser();
-    const url = document.getElementById('menuUrlInput').value.trim();
-    const kimin_icin = document.getElementById('menuTarget').value;
+    return withMenuScanLock(async () => {
+    const urlRaw = document.getElementById('menuUrlInput')?.value?.trim() || '';
+    const kimin_icin = document.getElementById('menuTarget')?.value || 'kendim';
+    const restoran_adi = document.getElementById('menuRestaurantName')?.value?.trim() || '';
     const result = document.getElementById('menuScanResult');
+    if (!result) return;
 
-    if (!url) {
+    if (!urlRaw) {
         alert("Lütfen bir restoran menü linki girin.");
         return;
     }
+    const safeUrl = validatePublicMenuUrl(urlRaw);
+    if (!safeUrl) {
+        renderTextState(result, 'Geçerli bir https menü bağlantısı girin. Yerel ağ veya özel adresler kabul edilmez.', 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
+        return;
+    }
 
+    renderTextState(result, '', 'text-center py-12');
     result.innerHTML = `<div class="text-center py-12"><div class="loading-dots flex gap-2 justify-center mb-4"><span class="w-3 h-3 rounded-full bg-primary inline-block"></span><span class="w-3 h-3 rounded-full bg-primary inline-block"></span><span class="w-3 h-3 rounded-full bg-primary inline-block"></span></div><p class="text-on-surface-variant font-body-md">Menü taranıyor ve tıbbi profilinize göre analiz ediliyor... Bu işlem 15-20 saniye sürebilir.</p></div>`;
 
     try {
         const { res, data } = await safeFetchJson(API + '/api/scan-menu', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ kimin_icin, url })
+            body: JSON.stringify({ kimin_icin, url: safeUrl, restoran_adi })
         });
         if (data && data.success) {
-            const formatted = formatMarkdownSafe(data.analiz);
-            result.innerHTML = `
-            <div class="bg-surface-container-lowest rounded-lg p-8 shadow-l1 border border-outline-variant/20">
-                <div class="prose prose-sm md:prose-base max-w-none font-body-md text-on-surface">
-                    ${formatted}
-                </div>
-            </div>`;
+            renderMenuAnalysis(data);
+            loadMenuHistory();
         } else {
             renderTextState(result, apiHataMesaji(data, 'Menü okunamadı.'), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
         }
     } catch (e) {
         renderTextState(result, baglantiHatasi(e), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
     }
+    });
 }
 
 async function scanMenuImage(inputEl) {
     const file = inputEl?.files?.[0];
     if (!file) return;
-    const user = getUser();
-    const kimin_icin = document.getElementById('menuTarget').value;
     const result = document.getElementById('menuScanResult');
-
-    result.innerHTML = `<div class="text-center py-12"><div class="loading-dots flex gap-2 justify-center mb-4"><span class="w-3 h-3 rounded-full bg-primary inline-block"></span><span class="w-3 h-3 rounded-full bg-primary inline-block"></span><span class="w-3 h-3 rounded-full bg-primary inline-block"></span></div><p class="text-on-surface-variant font-body-md">Menü fotoğrafı analiz ediliyor...</p></div>`;
+    if (!isAllowedImageFile(file)) {
+        if (result) {
+            renderTextState(result, 'Lütfen en fazla 8 MB boyutunda JPEG, PNG veya WebP görseli yükleyin.', 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
+        }
+        if (inputEl) inputEl.value = '';
+        return;
+    }
+    await withMenuScanLock(() => new Promise(resolve => {
+    const kimin_icin = document.getElementById('menuTarget')?.value || 'kendim';
+    const restoran_adi = document.getElementById('menuRestaurantName')?.value?.trim() || '';
+    if (result) {
+        result.innerHTML = `<div class="text-center py-12"><div class="loading-dots flex gap-2 justify-center mb-4"><span class="w-3 h-3 rounded-full bg-primary inline-block"></span><span class="w-3 h-3 rounded-full bg-primary inline-block"></span><span class="w-3 h-3 rounded-full bg-primary inline-block"></span></div><p class="text-on-surface-variant font-body-md">Menü fotoğrafı analiz ediliyor...</p></div>`;
+    }
 
     const reader = new FileReader();
+    reader.onerror = () => {
+        if (result) renderTextState(result, 'Görsel okunamadı. Lütfen başka bir dosya deneyin.', 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
+        if (inputEl) inputEl.value = '';
+        resolve();
+    };
     reader.onload = async () => {
         try {
             const base64 = String(reader.result).split(',')[1] || reader.result;
             const { res, data } = await safeFetchJson(API + '/api/scan-menu-image', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ kimin_icin, image_base64: base64 }),
+                body: JSON.stringify({ kimin_icin, image_base64: base64, restoran_adi }),
             });
             if (data && data.success) {
-                result.innerHTML = `<div class="bg-surface-container-lowest rounded-lg p-8 shadow-l1 border border-outline-variant/20"><div class="prose prose-sm md:prose-base max-w-none font-body-md text-on-surface">${formatMarkdownSafe(data.analiz)}</div></div>`;
-            } else {
+                renderMenuAnalysis(data);
+                loadMenuHistory();
+            } else if (result) {
                 renderTextState(result, apiHataMesaji(data, 'Menü fotoğrafı okunamadı.'), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
             }
         } catch (e) {
-            renderTextState(result, baglantiHatasi(e), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
+            if (result) renderTextState(result, baglantiHatasi(e), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
         }
-        inputEl.value = '';
+        if (inputEl) inputEl.value = '';
+        resolve();
     };
     reader.readAsDataURL(file);
+    }));
 }
 
-function startQRScanner() {
+async function clearQRScannerSession() {
+    const scanner = html5QrcodeScanner;
+    html5QrcodeScanner = null;
+    window.html5QrcodeScanner = null;
+    try {
+        if (scanner?.isScanning) await scanner.stop();
+    } catch (_error) {
+        // Camera may already be stopped after a successful scan or permission error.
+    }
+    try {
+        await scanner?.clear?.();
+    } catch (_error) {
+        // Scanner may be only partially initialized when camera access fails.
+    }
+    const host = document.getElementById('qr-reader');
+    if (host) {
+        host.replaceChildren();
+        host.style.display = 'none';
+    }
+}
+
+async function startQRScanner() {
     const qrReaderDiv = document.getElementById('qr-reader');
+    if (!qrReaderDiv) return;
+    await clearQRScannerSession();
     qrReaderDiv.style.display = "block";
 
-    if (!window.Html5QrcodeScanner) {
+    if (!window.Html5Qrcode) {
         qrReaderDiv.innerHTML = '<div class="rounded-lg border border-outline-variant bg-surface-container-low p-4 text-sm text-on-surface-variant">QR okuyucu yüklenemedi. Menü bağlantısını elle girebilirsin.</div>';
         console.warn("[CureMenu] QR scanner dependency unavailable.");
         return;
     }
 
-    if (html5QrcodeScanner) {
-        html5QrcodeScanner.clear();
+    html5QrcodeScanner = new window.Html5Qrcode("qr-reader");
+    window.html5QrcodeScanner = html5QrcodeScanner;
+    try {
+        await html5QrcodeScanner.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            onScanSuccess,
+            onScanFailure,
+        );
+    } catch (_error) {
+        await clearQRScannerSession();
+        qrReaderDiv.style.display = "block";
+        renderTextState(qrReaderDiv, 'Kameraya erişilemedi. Tarayıcı iznini kontrol edin veya HTTPS üzerinden deneyin; isterseniz galeriden QR görseli seçebilirsiniz.', 'rounded-lg border border-outline-variant bg-surface-container-low p-4 text-sm text-on-surface-variant');
     }
-
-    html5QrcodeScanner = new Html5QrcodeScanner(
-        "qr-reader",
-        { fps: 10, qrbox: {width: 250, height: 250} },
-        false
-    );
-
-    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
 }
 
-function onScanSuccess(decodedText, decodedResult) {
-    html5QrcodeScanner.clear();
-    document.getElementById('qr-reader').style.display = "none";
-
-    // Okunan linki URL kutusuna yaz ve analizi başlat
-    document.getElementById('menuUrlInput').value = decodedText;
-    scanMenu();
+async function onScanSuccess(decodedText, decodedResult) {
+    const safeUrl = validatePublicMenuUrl(decodedText);
+    if (!safeUrl) {
+        renderTextState(document.getElementById('menuScanResult'), 'QR kodundaki bağlantı güvenli bir web adresi değil.', 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
+        return;
+    }
+    await clearQRScannerSession();
+    document.getElementById('menuUrlInput').value = safeUrl;
+    renderTextState(document.getElementById('menuScanResult'), 'Menü bağlantısı okundu. Hazır olduğunda “Linki tara” düğmesine basabilirsin.', 'bg-primary-container text-on-primary-container p-6 rounded-lg text-center');
 }
 
 function onScanFailure(error) {
@@ -129,18 +274,36 @@ function onScanFailure(error) {
 }
 
 function handleFridgeImage(event) {
-    const file = event.target.files[0];
+    const file = event?.target?.files?.[0];
+    const result = document.getElementById('fridgeScanResult');
     if (!file) return;
+    if (!isAllowedImageFile(file)) {
+        if (result) {
+            renderTextState(result, 'Lütfen en fazla 8 MB boyutunda JPEG, PNG veya WebP fotoğrafı yükleyin.', 'card border-error-container bg-error-container p-6 text-center text-on-error-container');
+        }
+        if (event.target) event.target.value = '';
+        return;
+    }
 
     const reader = new FileReader();
-    reader.onload = function(e) {
-        const base64String = e.target.result;
-        scanFridge(base64String);
+    reader.onerror = () => {
+        if (result) renderTextState(result, 'Fotoğraf okunamadı. Lütfen tekrar deneyin.', 'card border-error-container bg-error-container p-6 text-center text-on-error-container');
+        if (event.target) event.target.value = '';
+    };
+    reader.onload = async function(e) {
+        const base64String = e.target?.result;
+        if (!base64String) {
+            reader.onerror();
+            return;
+        }
+        const preview = await createImagePreview(base64String);
+        await scanFridge(base64String, preview);
     };
     reader.readAsDataURL(file);
 }
 
-async function scanFridge(imageBase64) {
+async function scanFridge(imageBase64, imagePreviewBase64 = '') {
+    return withFridgeScanLock(async () => {
     const kimin_icin = document.getElementById('fridgeTarget')?.value || 'kendim';
     const result = document.getElementById('fridgeScanResult');
     const inputEl = document.getElementById('fridgeImageInput');
@@ -153,7 +316,7 @@ async function scanFridge(imageBase64) {
         const { res, data } = await safeFetchJson(API + '/api/fridge-scan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ kimin_icin, image_base64: imageBase64 })
+            body: JSON.stringify({ kimin_icin, image_base64: imageBase64, image_preview_base64: imagePreviewBase64 || null })
         });
 
         if (!res.ok || !data?.success) {
@@ -163,9 +326,11 @@ async function scanFridge(imageBase64) {
 
         const malzemeler = data.malzemeler || data.analiz?.bulunan_malzemeler || data.sonuc?.bulunan_malzemeler || '';
         const tarif = data.tarif || data.analiz?.tarif_metni || data.sonuc?.tarif_metni || data.analiz?.uyari_mesaji || '';
+        const preview = safePreviewDataUrl(data.image_preview_base64 || imagePreviewBase64);
         result.innerHTML = `
             <div class="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
                 <section class="card p-5">
+                    ${preview ? `<img src="${preview}" alt="Yüklenen buzdolabı fotoğrafı" class="mb-4 aspect-video w-full rounded-lg object-cover"/>` : ''}
                     <div class="mb-3 flex items-center gap-2 text-primary"><span class="material-symbols-outlined">kitchen</span><h3 class="font-display text-xl font-bold">Gördüğüm malzemeler</h3></div>
                     <p class="leading-7 text-on-surface-variant">${malzemeler ? escapeHtml(malzemeler) : 'Malzeme listesi ayrıca dönmedi.'}</p>
                 </section>
@@ -174,16 +339,99 @@ async function scanFridge(imageBase64) {
                     <div class="prose prose-sm max-w-none text-on-surface">${tarif ? formatMarkdownSafe(tarif) : 'Tarif oluşturulamadı. Fotoğrafı yeniden yükleyebilirsin.'}</div>
                 </section>
             </div>`;
-        await loadFridgeHistory();
+        const targetContext = window.ProfileManager?.getTargetCacheContext?.('fridgeTarget') || {};
+        const targetSelect = document.getElementById('fridgeTarget');
+        const fallbackRecord = data.history_record || {
+            eylem: 'Buzdolabı',
+            kullanici_adi: targetSelect?.selectedOptions?.[0]?.textContent?.trim() || 'Seçili profil',
+            kullanici_girdisi: malzemeler || 'Buzdolabı analizi',
+            asistan_ciktisi: tarif,
+            ai_yanit: tarif,
+            tarih: new Date().toISOString(),
+            metadata: {
+                target_id: targetContext.targetId || '',
+                target_scope: targetContext.targetScope || '',
+                target_name: targetSelect?.selectedOptions?.[0]?.textContent?.trim() || '',
+                detected_ingredients: String(malzemeler || '').split(',').map(item => item.trim()).filter(Boolean),
+                recipe_ingredients: Array.isArray(data.recipe_ingredients) ? data.recipe_ingredients : [],
+                image_preview_base64: preview,
+            },
+        };
+        await loadFridgeHistory(fallbackRecord);
     } catch (e) {
         renderTextState(result, baglantiHatasi(e), 'card border-error-container bg-error-container p-6 text-center text-on-error-container');
     }
+    });
 }
 
-async function loadFridgeHistory() {
+async function scanQRImage(inputEl) {
+    const file = inputEl?.files?.[0];
+    const result = document.getElementById('menuScanResult');
+    if (!file || !result) return;
+    if (!isAllowedImageFile(file)) {
+        renderTextState(result, 'QR okumak için JPEG, PNG veya WebP görseli seçin (en fazla 8 MB).', 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
+        inputEl.value = '';
+        return;
+    }
+    await clearQRScannerSession();
+    renderTextState(result, 'QR görseli okunuyor...', 'bg-surface-container-low p-6 rounded-lg text-center text-on-surface-variant');
+
+    const readerHost = document.createElement('div');
+    readerHost.id = `qr-file-reader-${Date.now()}`;
+    readerHost.setAttribute('aria-hidden', 'true');
+    readerHost.style.cssText = 'position:fixed;left:-10000px;top:0;width:640px;height:480px;overflow:hidden;opacity:0;pointer-events:none;z-index:-1;';
+    document.body.appendChild(readerHost);
+    let scanner = null;
+    try {
+        if (!window.Html5Qrcode) throw new Error('QR_LIBRARY_UNAVAILABLE');
+        scanner = new window.Html5Qrcode(readerHost.id);
+        const decodedText = await scanner.scanFile(file, false);
+        const safeUrl = validatePublicMenuUrl(decodedText);
+        if (!safeUrl) {
+            renderTextState(result, 'QR kodundaki bağlantı güvenli bir web adresi değil.', 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
+            return;
+        }
+        document.getElementById('menuUrlInput').value = safeUrl;
+        renderTextState(result, 'Menü bağlantısı okundu. Hazır olduğunda “Linki tara” düğmesine basabilirsin.', 'bg-primary-container text-on-primary-container p-6 rounded-lg text-center');
+    } catch (_error) {
+        renderTextState(result, 'Bu görselde okunabilir bir QR kod bulunamadı. Daha net bir fotoğraf veya kamera ile tekrar deneyin.', 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
+    } finally {
+        try {
+            await scanner?.clear?.();
+        } catch (_error) {
+            // The file scanner may not have initialized far enough to clear.
+        }
+        readerHost.remove();
+        inputEl.value = '';
+    }
+}
+
+function renderFridgeHistoryRecords(root, records) {
+    fridgeHistoryRecords = records.slice(0, 3);
+    root.innerHTML = fridgeHistoryRecords.map((log, index) => {
+        const metadata = parseHistoryMetadata(log.metadata);
+        const preview = safePreviewDataUrl(metadata.image_preview_base64);
+        return `
+        <button type="button" data-fridge-history-index="${index}" class="w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-4 text-left hover:bg-surface-container-low">
+            ${preview ? `<img src="${preview}" alt="Geçmiş buzdolabı fotoğrafı" class="mb-3 aspect-video w-full max-w-xs rounded-lg object-cover"/>` : ''}
+            <p class="text-xs text-on-surface-variant mb-2"><span class="font-medium text-primary">${escapeHtml(historyTargetName(log))} İçin</span> • ${escapeHtml(formatDecisionDate(log.tarih))}</p>
+            <p class="font-medium text-on-surface">${escapeHtml(log.kullanici_girdisi || 'Buzdolabı analizi')}</p>
+            <p class="mt-2 text-sm text-primary">Fotoğrafı ve tarifi aç</p>
+        </button>`;
+    }).join('');
+    root.querySelectorAll('[data-fridge-history-index]').forEach(button => {
+        button.addEventListener('click', () => showFridgeHistoryDetail(fridgeHistoryRecords[Number(button.dataset.fridgeHistoryIndex)]));
+    });
+}
+
+async function loadFridgeHistory(fallbackRecord = null) {
     const root = document.getElementById('fridgeHistoryList');
     if (!root) return;
-    root.innerHTML = '<p class="text-on-surface-variant">Buzdolabı geçmişi yükleniyor...</p>';
+    if (fallbackRecord) {
+        renderFridgeHistoryRecords(root, [fallbackRecord]);
+    } else {
+        root.innerHTML = '<p class="text-on-surface-variant">Buzdolabı geçmişi yükleniyor...</p>';
+    }
     try {
         const history = await fetchHistoryRecords({ limit: 25, maxPages: 4 });
         if (!history.ok) {
@@ -191,29 +439,50 @@ async function loadFridgeHistory() {
                 status: history.status,
                 success: Boolean(history.data?.success),
             });
+            if (fallbackRecord) {
+                renderFridgeHistoryRecords(root, [fallbackRecord]);
+                return;
+            }
             root.innerHTML = '<p class="text-on-surface-variant">Buzdolabı geçmişi şu anda yüklenemedi. Birazdan tekrar deneyebilirsin.</p>';
             return;
         }
         const records = (history.records || []).filter(log => {
             const action = String(log.eylem || '').toLocaleLowerCase('tr-TR');
-            return (action.includes('buzdolabı') || action.includes('buzdolabi'))
-                && historyMatchesCurrentTarget(log, 'fridgeTarget');
+            return action.includes('buzdolabı') || action.includes('buzdolabi');
         });
         if (!records.length) {
+            if (fallbackRecord) {
+                renderFridgeHistoryRecords(root, [fallbackRecord]);
+                return;
+            }
             root.innerHTML = '<p class="text-on-surface-variant">Henüz buzdolabı analizi yok. Yeni bir fotoğraf yüklediğinde sonuç burada görünür.</p>';
             return;
         }
-        root.innerHTML = records.slice(0, 3).map(log => `
-            <article class="rounded-lg border border-outline-variant bg-surface-container-lowest p-4">
-                <p class="text-xs text-on-surface-variant mb-2"><span class="font-medium text-primary">${escapeHtml(historyTargetName(log))} İçin</span> • ${escapeHtml(formatDecisionDate(log.tarih))}</p>
-                <p class="font-medium text-on-surface">${escapeHtml(log.kullanici_girdisi || 'Buzdolabı analizi')}</p>
-                <div class="prose prose-sm max-w-none text-on-surface-variant mt-2">${formatMarkdownSafe(log.asistan_ciktisi || log.ai_yanit || 'Analiz özeti bulunamadı.')}</div>
-            </article>
-        `).join('');
+        const visibleRecords = fallbackRecord
+            ? [fallbackRecord, ...records.filter(log => (
+                log.asistan_ciktisi !== fallbackRecord.asistan_ciktisi
+                || log.kullanici_girdisi !== fallbackRecord.kullanici_girdisi
+            ))]
+            : records;
+        renderFridgeHistoryRecords(root, visibleRecords);
     } catch (error) {
         console.warn('[CureMenu] Buzdolabı geçmişine bağlanılamadı.', { name: error?.name || 'Error' });
+        if (fallbackRecord) return;
         root.innerHTML = '<p class="text-on-surface-variant">Buzdolabı geçmişi şu anda yüklenemedi. Birazdan tekrar deneyebilirsin.</p>';
     }
+}
+
+function showFridgeHistoryDetail(log) {
+    if (!log) return;
+    const result = document.getElementById('fridgeScanResult');
+    if (!result) return;
+    const metadata = parseHistoryMetadata(log.metadata);
+    const preview = safePreviewDataUrl(metadata.image_preview_base64);
+    const detected = Array.isArray(metadata.detected_ingredients) ? metadata.detected_ingredients.join(', ') : (log.kullanici_girdisi || '');
+    result.innerHTML = `<div class="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <section class="card p-5">${preview ? `<img src="${preview}" alt="Geçmiş buzdolabı fotoğrafı" class="mb-4 aspect-video w-full rounded-lg object-cover"/>` : ''}<h3 class="font-display text-xl font-bold">Gördüğüm malzemeler</h3><p class="mt-3 leading-7 text-on-surface-variant">${escapeHtml(detected)}</p></section>
+        <section class="card p-5"><h3 class="font-display text-xl font-bold">Tarif önerisi</h3><div class="prose prose-sm mt-3 max-w-none text-on-surface">${formatMarkdownSafe(log.asistan_ciktisi || log.ai_yanit || 'Tarif bulunamadı.')}</div></section>
+    </div>`;
 }
     window.MenuScanner = {
         init() {
@@ -221,20 +490,23 @@ async function loadFridgeHistory() {
         scanMenu,
         scanMenuImage,
         startQRScanner,
+        scanQRImage,
         onScanSuccess,
         onScanFailure,
         handleFridgeImage,
         scanFridge,
-        loadFridgeHistory
+        loadFridgeHistory,
+        validatePublicMenuUrl,
     };
 
     window.scanMenu = scanMenu;
     window.scanMenuImage = scanMenuImage;
     window.startQRScanner = startQRScanner;
+    window.scanQRImage = scanQRImage;
     window.onScanSuccess = onScanSuccess;
     window.onScanFailure = onScanFailure;
     window.handleFridgeImage = handleFridgeImage;
     window.scanFridge = scanFridge;
     window.loadFridgeHistory = loadFridgeHistory;
-    window.html5QrcodeScanner = null; // Used by QR scanner
+    window.html5QrcodeScanner = null;
 })();
