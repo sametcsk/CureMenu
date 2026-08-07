@@ -37,3 +37,7 @@ data/rag_candidates/
 *.download
 *.tmp
 *.bak
+
+# Pytest tmp directories
+pytest-of-*/
+.pytest-final-tmp/
