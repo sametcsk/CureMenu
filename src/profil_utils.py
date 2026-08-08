@@ -161,16 +161,3 @@ def hedef_profili_bul(profil: KullaniciProfili, kimin_icin: str) -> AileUyesi | 
         None,
     )
 
-
-def hedef_ilaclari(profil: KullaniciProfili, kimin_icin: str) -> list[str]:
-    """Seçilen hedef için ilaç listesini döndürür (aile modunda birleşik)."""
-    if kimin_icin == "aile":
-        ilaclar: list[str] = []
-        for uye in profil.tum_uyeler():
-            ilaclar.extend(getattr(uye, "ilaclar", []) or [])
-        return ilaclar
-
-    hedef = hedef_profili_bul(profil, kimin_icin)
-    if hedef is None:
-        return []
-    return getattr(hedef, "ilaclar", []) or []

@@ -318,30 +318,6 @@ def extract_text_from_image_base64(image_base64: str) -> str:
         raise Exception(f"Fotoğraftan menü okunamadı: {str(e)}")
 
 
-def qr_kodu_oku(kamera_goruntusu) -> str:
-    """Kullanıcının kamerasından gelen görüntüdeki QR kodunu okuyup URL'yi ayrıştırıyoruz."""
-    try:
-        file_bytes = np.asarray(bytearray(kamera_goruntusu.read()), dtype=np.uint8)
-        img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-        if img is None:
-            return "Görüntü okunamadı. Lütfen tekrar deneyin."
-
-        detector = cv2.QRCodeDetector()
-        data, _, _ = detector.detectAndDecode(img)
-        if data and "http" in data.lower():
-            return data.strip()
-        return "QR kod bulunamadı. Kodu net şekilde gösterin veya linki manuel yapıştırın."
-    except Exception as e:
-        return f"QR okuma hatası: {str(e)}"
-
-
-def menuyu_siteden_cek(url: str) -> str:
-    """Streamlit QR Menü sayfası için uyumlu sarmalayıcı."""
-    try:
-        return scrape_menu_from_url(url)
-    except Exception as e:
-        return f"Hata: {str(e)}"
-
 def extract_ingredients_from_image_base64(image_base64: str) -> str:
     """
     Kullanıcının yüklediği buzdolabı veya mutfak tezgahı fotoğrafını analiz ederek,
