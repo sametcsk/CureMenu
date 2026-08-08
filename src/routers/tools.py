@@ -823,7 +823,8 @@ List every ingredient that will actually be used, including sauces, oils, garnis
                 tarif_metni = f"{safety['warning']}\n\n{tarif_metni}"
             bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "Plan-Tarif", req.meal_text, tarif_metni, json.dumps(snapshot.history_metadata(), ensure_ascii=False))
             return {"success": True, "result": tarif_metni}
-        except Exception:
+        except Exception as e:
+            log_failure(logger, "plan_action_recipe", e, component="tools")
             return JSONResponse(status_code=503, content={"success": False, "detail": "Tarif şu anda hazırlanamadı. Lütfen birazdan tekrar deneyin."})
 
     elif req.action_type == "alternative":
@@ -872,7 +873,8 @@ WARNING: Provide your response ONLY in the following JSON format. Do not use mar
                 data["warning"] = safety["warning"]
             bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "Plan-Alternatif", req.meal_text, json.dumps(data, ensure_ascii=False), json.dumps(snapshot.history_metadata(), ensure_ascii=False))
             return {"success": True, "result": data}
-        except Exception:
+        except Exception as e:
+            log_failure(logger, "plan_action_alternative", e, component="tools")
             return JSONResponse(status_code=503, content={"success": False, "detail": "Alternatif öğün şu anda hazırlanamadı. Lütfen birazdan tekrar deneyin."})
             
     elif req.action_type == "snack":
@@ -939,7 +941,8 @@ Put only foods that will actually be used under ingredients. Keep safety explana
             data.pop("snacks", None)
             bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "Plan-Snack", "Atıştırmalık İsteği", snack_metni, json.dumps(snapshot.history_metadata(), ensure_ascii=False))
             return {"success": True, "result": data}
-        except Exception:
+        except Exception as e:
+            log_failure(logger, "plan_action_snack", e, component="tools")
             return JSONResponse(status_code=503, content={"success": False, "detail": "Ara öğün önerisi şu anda hazırlanamadı. Lütfen birazdan tekrar deneyin."})
     
     return JSONResponse(status_code=400, content={"success": False, "detail": "Geçersiz action_type"})
