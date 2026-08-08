@@ -307,7 +307,7 @@ def test_smart_grocery_open_budget_feedback_and_close(authenticated_page) -> Non
     page.route("**/api/weekly-plan*", lambda route: _json(route, {"success": True, "plan": _weekly_plan()}))
 
     # Plan oluştururken Mert'i seç, sonra plan ekranında Kendim'e dön
-    page.evaluate("window.updatePlanDropdown({aile_uyeleri: [{id: 'member-mert', ad: 'Mert'}]})")
+    page.evaluate("window.currentProfile = {aile_uyeleri: [{id: 'member-mert', ad: 'Mert'}]}; window.updatePlanDropdown(window.currentProfile);")
     page.locator("#planTarget").select_option("member-mert")
     page.locator("#planTarget").select_option("kendim")
     
@@ -361,9 +361,6 @@ def test_smart_grocery_open_budget_feedback_and_close(authenticated_page) -> Non
 
     page.locator('[data-grocery-action="open"]').click()
     page.wait_for_timeout(3000)
-    print("\n--- MODAL HTML ---")
-    print(page.locator("#smartGroceryModal").inner_html())
-    print("--- END MODAL HTML ---")
     page.locator("#smartGroceryContent").get_by_text(
         "Sepet önerileri, profiliniz ve güvenlik kontrolleri dikkate alınarak değerlendirildi."
     ).wait_for()

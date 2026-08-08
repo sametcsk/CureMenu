@@ -5,6 +5,9 @@ from typing import Any, Dict
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
+from src.logger import get_logger
+logger = get_logger(__name__)
+
 class PromptManager:
     """
     Tıbbi ajanlar için YAML tabanlı modüler prompt yönetim sistemi.
@@ -39,10 +42,14 @@ class PromptManager:
         """
         try:
             return template.format(**kwargs)
-        except KeyError as e:
+        except KeyError as exc:
             # Eksik değişkenleri boş string ile değiştir (fail-safe)
-            print(f"Uyarı: Prompt içinde beklenen değişken bulunamadı: {e}")
+            logger.warning(
+                "Prompt template variable missing",
+                extra={"component": "prompt_manager", "error_type": type(exc).__name__},
+            )
             # Basit bir string formatlaması yapıp eksikleri es geçiyoruz.
-            import string
-            formatter = string.Formatter()
-            return formatter.vformat(template, (), kwargs)
+            class SafeDict(dict):
+                def __missing__(self, key):
+                    return "{" + key + "}"
+            return template.format_map(SafeDict(**kwargs))
