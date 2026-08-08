@@ -62,6 +62,7 @@ async function loadProfile() {
 
         const hasMain = !!data.profil.ana_kullanici;
         localStorage.setItem('cm_has_profile', hasMain ? 'true' : 'false');
+        window.ChatWidget?.loadCachedConversation?.();
         return data.profil;
     } catch (e) { console.error(e); renderEmptyFamily(); return null; }
 }
@@ -307,7 +308,7 @@ function populateTargetSelect(selectId, familyMembers) {
 
 function updatePlanDropdown(profil) {
     const familyMembers = Array.isArray(profil?.aile_uyeleri) ? profil.aile_uyeleri : [];
-    ['planTarget', 'menuTarget', 'fridgeTarget', 'tahlilTarget', 'groceryTarget']
+    ['planTarget', 'chatTarget', 'menuTarget', 'fridgeTarget', 'tahlilTarget', 'groceryTarget']
         .forEach(selectId => {
             if (document.getElementById(selectId)) {
                 populateTargetSelect(selectId, familyMembers);

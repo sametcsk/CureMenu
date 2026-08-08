@@ -35,7 +35,7 @@ window.ChatWidget = {
 
     getConversationCacheKey() {
         if (!this.isAuthenticatedMode()) return null;
-        const target = document.getElementById('planTarget')?.value || "kendim";
+        const target = document.getElementById('chatTarget')?.value || "kendim";
         const context = window.ProfileManager?.getTargetCacheContext?.(target);
         if (!context) return null;
         return `cm_chat_v2_${context.accountKey}_${context.targetScope}_${context.targetId}_${context.profileFingerprint}`;
@@ -142,7 +142,7 @@ window.ChatWidget = {
                     </button>
                 </header>
                 <div class="cm-assistant-context">
-
+                    <select id="chatTarget" data-cm-assistant-target class="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-1 text-sm font-bold w-40"></select>
                     <span class="cm-assistant-context-chip" data-cm-context-chip>${(window.AuthManager && window.AuthManager.getUser().kullanici_adi) ? (window.escapeHtml ? escapeHtml(window.AuthManager.getUser().kullanici_adi) : window.AuthManager.getUser().kullanici_adi) + ' için' : 'Benim için'}</span>
                 </div>
                 <div class="cm-assistant-body" data-cm-assistant-body></div>
@@ -440,8 +440,8 @@ window.ChatWidget = {
 
         try {
             const apiEndpoint = (window.API || '') + '/api/chat';
-            const target = document.getElementById('planTarget')?.value || "kendim";
-            const targetSelect = document.getElementById('planTarget');
+            const target = document.getElementById('chatTarget')?.value || "kendim";
+            const targetSelect = document.getElementById('chatTarget');
             const normalizedMessage = message.toLocaleLowerCase('tr-TR');
             const familyMembers = Array.isArray(window.currentProfile?.aile_uyeleri) ? window.currentProfile.aile_uyeleri : [];
             const relationRules = [
