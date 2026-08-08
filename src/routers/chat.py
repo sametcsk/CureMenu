@@ -41,10 +41,10 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-def _infer_chat_target(message: str, requested_target: str) -> tuple[str, str]:
+def _infer_chat_target(requested_target: str) -> tuple[str, str]:
     """Resolve conversational target strictly from the explicit API contract."""
     if not requested_target:
-        logger.warning(f"Chat target is missing from request, defaulting to 'kendim'. Message: {message[:50]}")
+        logger.warning("Chat target is missing from request, defaulting to 'kendim'.")
         return "kendim", "Varsayılan (hedef belirtilmemiş)"
     return requested_target, "Seçili hedef kişi"
 
@@ -310,7 +310,7 @@ def _explicit_input_safety_answer(snapshot: ResolvedProfileSnapshot, message: st
 @router.post("/api/chat")
 @limiter.limit("12/minute", key_func=authenticated_user_or_ip)
 async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
-    resolved_target, context_reason = _infer_chat_target(req.mesaj, req.kimin_icin)
+    resolved_target, context_reason = _infer_chat_target(req.kimin_icin)
     snapshot = resolve_profile_snapshot(telefon, resolved_target, db=db)
     profil_ozeti = snapshot.profile_summary
     kullanici_id = snapshot.memory_namespace
