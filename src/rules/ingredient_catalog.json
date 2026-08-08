@@ -70,6 +70,12 @@
     {"canonical_name":"çilek","aliases":[],"tags":["fruit","berry"],"allergens":[],"gluten_status":"free","milk_product":false,"purine_level":"low","vitamin_k_level":"low","ckd_caution_tags":[]},
     {"canonical_name":"yaban mersini","aliases":["blueberry"],"tags":["fruit","berry"],"allergens":[],"gluten_status":"free","milk_product":false,"purine_level":"low","vitamin_k_level":"low","ckd_caution_tags":[]},
     {"canonical_name":"chia tohumu","aliases":["chia"],"tags":["seed"],"allergens":[],"gluten_status":"free","milk_product":false,"purine_level":"low","vitamin_k_level":"low","ckd_caution_tags":["phosphorus","potassium"]},
-    {"canonical_name":"keten tohumu","aliases":["öğütülmüş keten tohumu"],"tags":["seed"],"allergens":[],"gluten_status":"free","milk_product":false,"purine_level":"low","vitamin_k_level":"low","ckd_caution_tags":["phosphorus","potassium"]}
+    {"canonical_name":"keten tohumu","aliases":["öğütülmüş keten tohumu"],"tags":["seed"],"allergens":[],"gluten_status":"free","milk_product":false,"purine_level":"low","vitamin_k_level":"low","ckd_caution_tags":["phosphorus","potassium"]},
+    {"canonical_name":"karides","aliases":["shrimp"],"tags":["animal_protein","shellfish"],"allergens":["shellfish"],"gluten_status":"free","milk_product":false,"purine_level":"high","vitamin_k_level":"low","ckd_caution_tags":["phosphorus","sodium"]},
+    {"canonical_name":"midye","aliases":["mussel"],"tags":["animal_protein","shellfish"],"allergens":["shellfish"],"gluten_status":"free","milk_product":false,"purine_level":"high","vitamin_k_level":"low","ckd_caution_tags":["phosphorus","sodium"]},
+    {"canonical_name":"ıstakoz","aliases":["lobster"],"tags":["animal_protein","shellfish"],"allergens":["shellfish"],"gluten_status":"free","milk_product":false,"purine_level":"high","vitamin_k_level":"low","ckd_caution_tags":["phosphorus","sodium"]},
+    {"canonical_name":"yengeç","aliases":["crab"],"tags":["animal_protein","shellfish"],"allergens":["shellfish"],"gluten_status":"free","milk_product":false,"purine_level":"high","vitamin_k_level":"low","ckd_caution_tags":["phosphorus","sodium"]},
+    {"canonical_name":"kalamar","aliases":["squid"],"tags":["animal_protein","shellfish"],"allergens":["shellfish"],"gluten_status":"free","milk_product":false,"purine_level":"high","vitamin_k_level":"low","ckd_caution_tags":["phosphorus","sodium"]},
+    {"canonical_name":"istiridye","aliases":["oyster"],"tags":["animal_protein","shellfish"],"allergens":["shellfish"],"gluten_status":"free","milk_product":false,"purine_level":"high","vitamin_k_level":"low","ckd_caution_tags":["phosphorus","sodium"]}
   ]
 }
