@@ -1,0 +1,6 @@
+=== 2. FRONTEND-BACKEND BAĞLANTI KOPUKLUĞU ===
+POTENTIAL BROKEN FETCH: frontend\app.js calls /api/public/metinler but no matching backend route found.
+POTENTIAL BROKEN FETCH: frontend\guven.html calls /api/public/metinler but no matching backend route found.
+
+=== ONCLICK FUNCTIONS DEFINED CHECK ===
+POTENTIAL UNDEFINED ONCLICK: frontend\dashboard.html calls 'toggleSidebar()' (Function 'toggleSidebar' not found in JS)

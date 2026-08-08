@@ -42,15 +42,11 @@ router = APIRouter()
 
 
 def _infer_chat_target(message: str, requested_target: str) -> tuple[str, str]:
-    """Resolve conversational target without changing the explicit API contract."""
-    text = normalized_message(message)
-    if any(phrase in text for phrase in ("tum aile", "hepimiz", "bize", "biz ne yiyelim", "ailece")):
-        return "aile", "Mesajdaki aile referansı"
-    if any(phrase in text for phrase in ("zuleyha icin", "zuleyha", "annem icin", "anneme", "anne icin", "annem")):
-        return "zuleyha", "Mesajdaki Züleyha/anne referansı"
-    if any(phrase in text for phrase in ("bana", "benim icin", "kendim icin", "kahvemin", "yiyebilirim")):
-        return "kendim", "Mesajdaki kendim referansı"
-    return (requested_target or "kendim"), "Seçili hedef kişi"
+    """Resolve conversational target strictly from the explicit API contract."""
+    if not requested_target:
+        logger.warning(f"Chat target is missing from request, defaulting to 'kendim'. Message: {message[:50]}")
+        return "kendim", "Varsayılan (hedef belirtilmemiş)"
+    return requested_target, "Seçili hedef kişi"
 
 # NEMO GUARDRAILS
 rails = None

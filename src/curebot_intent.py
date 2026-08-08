@@ -30,9 +30,9 @@ class CureBotIntentPlan(BaseModel):
     privacy_mode: Literal["minimal"] = "minimal"
 
 
-def fallback_intent_plan(message: str, target: str = "self") -> CureBotIntentPlan:
+def fallback_intent_plan(message: str, target: str = "kendim") -> CureBotIntentPlan:
     text = str(message or "").casefold()
-    resolved_target = "family" if any(x in text for x in ("bize", "hepimize", "ailece", "tüm aile")) else ("member" if any(x in text for x in ("annem", "anne")) else ("self" if target == "kendim" else "member"))
+    resolved_target = "family" if target == "aile" else ("self" if target == "kendim" else "member")
     risk = ""
     if any(x in text for x in ("fındıklı baklava", "fındıklı tatlı", "yiyebilir miyim")):
         risk = message

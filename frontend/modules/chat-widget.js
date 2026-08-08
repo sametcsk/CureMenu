@@ -147,7 +147,7 @@ window.ChatWidget = {
                     <select id="chatTarget" data-cm-assistant-target aria-label="CureBot hedef profili">
                         <option value="kendim">Kendim İçin</option>
                     </select>
-                    <span class="cm-assistant-context-chip" data-cm-context-chip>Samet i&#231;in</span>
+                    <span class="cm-assistant-context-chip" data-cm-context-chip>${(window.AuthManager && window.AuthManager.getUser().kullanici_adi) ? (window.escapeHtml ? escapeHtml(window.AuthManager.getUser().kullanici_adi) : window.AuthManager.getUser().kullanici_adi) + ' için' : 'Benim için'}</span>
                 </div>
                 <div class="cm-assistant-body" data-cm-assistant-body></div>
                 <div>
@@ -179,7 +179,7 @@ window.ChatWidget = {
             const chip = document.createElement('span');
             chip.className = 'cm-assistant-context-chip';
             chip.dataset.cmHeaderContext = 'true';
-            chip.textContent = 'Samet için';
+            chip.textContent = (window.AuthManager && window.AuthManager.getUser().kullanici_adi) ? window.AuthManager.getUser().kullanici_adi + ' için' : 'Benim için';
             titleBlock.appendChild(chip);
         }
         this.renderWelcome();
@@ -234,6 +234,21 @@ window.ChatWidget = {
                 window.location.href = publicNav.dataset.cmPublicNav || "/kayit";
             }
         });
+
+        const targetSelect = this.root.querySelector("[data-cm-assistant-target]");
+        if (targetSelect) {
+            targetSelect.addEventListener("change", () => {
+                let newLabel = targetSelect.options[targetSelect.selectedIndex]?.text || "Kendim için";
+                if (targetSelect.value === "kendim") {
+                    const userName = window.AuthManager?.getUser()?.kullanici_adi;
+                    newLabel = userName ? `${userName} için` : 'Benim için';
+                }
+                const contextChip = this.root.querySelector('[data-cm-context-chip]');
+                if (contextChip) contextChip.textContent = newLabel;
+                const headerChip = this.root.querySelector('[data-cm-header-context]');
+                if (headerChip) headerChip.textContent = newLabel;
+            });
+        }
     },
 
     open(message) {
@@ -429,11 +444,20 @@ window.ChatWidget = {
 
         try {
             const apiEndpoint = (window.API || '') + '/api/chat';
-            const target = this.root.querySelector("[data-cm-assistant-target]")?.value || "kendim";
+            const targetSelect = this.root.querySelector("[data-cm-assistant-target]");
+            const target = targetSelect?.value || "kendim";
+            
+            let inferredLabel = targetSelect?.options[targetSelect.selectedIndex]?.text || "Kendim için";
+            if (target === "kendim") {
+                const userName = window.AuthManager?.getUser()?.kullanici_adi;
+                inferredLabel = userName ? `${userName} için` : 'Benim için';
+            }
+            
             const normalized = message.toLocaleLowerCase('tr-TR');
-            const inferredLabel = /t\u00fcm aile|hepimiz|bize|biz ne yiyelim/.test(normalized) ? 'T\u00fcm aile i\u00e7in'
-                : /z\u00fcleyha|annem|anne/.test(normalized) ? 'Z\u00fcleyha i\u00e7in'
-                : 'Samet i\u00e7in';
+            if (/t\u00fcm aile|hepimiz|bize|biz ne yiyelim/.test(normalized)) {
+                inferredLabel = 'Tüm aile için';
+            }
+            
             const contextChip = this.root.querySelector('[data-cm-context-chip]');
             if (contextChip) contextChip.textContent = inferredLabel;
             const headerChip = this.root.querySelector('[data-cm-header-context]');

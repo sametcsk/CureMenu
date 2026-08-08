@@ -1318,7 +1318,7 @@ def test_chat_family_dinner_recommendation_uses_fast_answer(client, monkeypatch)
     monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
     response = client.post(
         "/api/chat",
-        json={"mesaj": "bize bir aksam yemegi oner", "kimin_icin": "kendim"},
+        json={"mesaj": "bize bir aksam yemegi oner", "kimin_icin": "aile"},
     )
 
     assert response.status_code == 200

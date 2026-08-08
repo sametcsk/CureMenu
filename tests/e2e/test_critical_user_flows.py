@@ -402,13 +402,14 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     page.locator("[data-cm-assistant-launcher]").click()
     page.locator('[data-cm-feature="plan"]').click()
     assert page.locator("#tab-plan").evaluate("element => element.classList.contains('active')")
-    page.evaluate("window.updatePlanDropdown({aile_uyeleri: [{id: 'member-ece', ad: 'Ece'}]})")
-    expected_targets = ["Kendim İçin", "Ece İçin", "Tüm Aile İçin"]
+    page.evaluate("window.updatePlanDropdown({aile_uyeleri: [{id: 'member-ece', ad: 'Ece'}, {id: 'member-mert', ad: 'Mert'}, {id: 'member-ayse', ad: 'Ayşe'}]})")
+    expected_targets = ["Kendim İçin", "Ece İçin", "Mert İçin", "Ayşe İçin", "Tüm Aile İçin"]
     for selector in ["#planTarget", "#chatTarget", "#menuTarget", "#fridgeTarget", "#tahlilTarget"]:
         assert page.locator(selector).locator("option").all_text_contents() == expected_targets
     target = page.locator("#chatTarget")
     target.wait_for(state="visible")
     target.select_option("member-ece")
+    assert page.locator("[data-cm-context-chip]").inner_text() == "Ece İçin"
     page.fill("[data-cm-assistant-input]", "Aksam ne yiyebilirim?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("member-ece icin test yaniti.").wait_for()
@@ -426,6 +427,18 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     page.locator("[data-cm-assistant-body]").get_by_text("kendim icin test yaniti.").wait_for()
     assert chat_requests[-1]["kimin_icin"] == "kendim"
     assert page.locator("[data-cm-assistant-body]").get_by_text("member-ece icin test yaniti.").count() == 0
+
+    target.select_option("member-mert")
+    page.fill("[data-cm-assistant-input]", "Mert icin ne onerirsin?")
+    page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
+    page.locator("[data-cm-assistant-body]").get_by_text("member-mert icin test yaniti.").wait_for()
+    assert chat_requests[-1]["kimin_icin"] == "member-mert"
+
+    target.select_option("member-ayse")
+    page.fill("[data-cm-assistant-input]", "Ayse icin ne onerirsin?")
+    page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
+    page.locator("[data-cm-assistant-body]").get_by_text("member-ayse icin test yaniti.").wait_for()
+    assert chat_requests[-1]["kimin_icin"] == "member-ayse"
 
     target.select_option("aile")
     page.fill("[data-cm-assistant-input]", "Tum aile icin ne onerirsin?")
