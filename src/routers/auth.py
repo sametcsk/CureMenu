@@ -66,7 +66,7 @@ def password_needs_rehash(hashed: str | None) -> bool:
         return True
 
 
-DUMMY_PASSWORD_HASH = hash_password("curemenu-dummy-password")
+
 
 def _secure_cookie_enabled(request: Request) -> bool:
     if settings.CUREMENU_COOKIE_SECURE is not None:
@@ -127,7 +127,11 @@ async def login(request: Request, response: Response, req: LoginRequest, bg_task
     """Giriş yap."""
     profil = profil_getir_db(req.telefon, conn=db)
     stored_hash = sifre_hash_getir(req.telefon, conn=db)
-    password_valid = verify_password(req.sifre, stored_hash or DUMMY_PASSWORD_HASH)
+    if stored_hash is None:
+        hash_password(req.sifre)
+        password_valid = False
+    else:
+        password_valid = verify_password(req.sifre, stored_hash)
     if profil is None or not password_valid:
         raise HTTPException(status_code=401, detail="Telefon veya şifre hatalı.")
     if password_needs_rehash(stored_hash):
