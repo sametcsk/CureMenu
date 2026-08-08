@@ -289,6 +289,7 @@ function populateTargetSelect(selectId, familyMembers) {
     localStorage.setItem(storageKey, select.value);
     if (selectId === 'planTarget') window.WeeklyPlanManager?.loadExistingPlan?.();
     if (selectId === 'chatTarget') window.ChatWidget?.loadCachedConversation?.();
+    if (selectId === 'menuTarget') window.loadMenuHistory?.();
 
     if (select.dataset.targetPersistenceBound !== 'true') {
         select.addEventListener('change', () => {
@@ -298,6 +299,7 @@ function populateTargetSelect(selectId, familyMembers) {
             if (selectId === 'tahlilTarget') window.loadLabHistory?.();
             if (selectId === 'fridgeTarget') window.loadFridgeHistory?.();
             if (selectId === 'groceryTarget') window.openSmartGrocery?.();
+            if (selectId === 'menuTarget') window.loadMenuHistory?.();
         });
         select.dataset.targetPersistenceBound = 'true';
     }

@@ -115,6 +115,22 @@ async function openSmartGrocery() {
         content.innerHTML = emptyState('shopping_cart', 'Plan bulunamadı', 'Akıllı sepet için önce haftalık plan oluşturman gerekiyor.');
         return;
     }
+    const context = window.ProfileManager?.getTargetCacheContext?.(target);
+    const cacheKey = context 
+        ? `cm_grocery_${context.accountKey}_${context.targetScope}_${context.targetId}_${context.profileFingerprint}` 
+        : `cm_grocery_${target}`;
+
+    const cachedStr = localStorage.getItem(cacheKey);
+    if (cachedStr) {
+        try {
+            const cached = JSON.parse(cachedStr);
+            if (cached.planText === window.currentPlanText) {
+                renderSmartGrocery(cached.data);
+                return;
+            }
+        } catch(e) {}
+    }
+
     content.innerHTML = `<div class="py-16 text-center text-on-surface-variant"><div class="loading-dots flex gap-2 justify-center mb-4"><span class="w-3 h-3 rounded-full bg-primary inline-block"></span><span class="w-3 h-3 rounded-full bg-primary inline-block"></span><span class="w-3 h-3 rounded-full bg-primary inline-block"></span></div><p>Sepet sağlık profiline göre hazırlanıyor...</p></div>`;
 
     try {
@@ -131,6 +147,7 @@ async function openSmartGrocery() {
             renderTextState(content, apiHataMesaji(data, 'Akıllı sepet hazırlanamadı.'), 'rounded-lg border border-error/20 bg-error-container p-5 text-on-error-container');
             return;
         }
+        localStorage.setItem(cacheKey, JSON.stringify({ planText: window.currentPlanText, data }));
         renderSmartGrocery(data);
     } catch (e) {
         renderTextState(content, baglantiHatasi(e), 'rounded-lg border border-error/20 bg-error-container p-5 text-on-error-container');

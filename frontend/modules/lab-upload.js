@@ -225,7 +225,7 @@ async function loadLabHistory() {
         }
 
         const labs = (history.records || []).filter(log =>
-            String(log.eylem || '').toLocaleLowerCase('tr-TR').includes('tahlil')
+            String(log.eylem || '').toLocaleLowerCase('tr-TR').includes('tahlil') && historyMatchesCurrentTarget(log, 'tahlilTarget')
         );
 
         // Draw Chart

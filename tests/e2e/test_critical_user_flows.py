@@ -1158,3 +1158,47 @@ def test_lab_chart_failure_does_not_hide_history_list(authenticated_page) -> Non
     page.locator("#labHistoryList").get_by_text("Lab A").wait_for()
     assert page.locator("#labHistoryList").get_by_text("Ferritin normal aralıkta.").count() == 1
     assert not runtime_errors
+
+
+def test_smart_grocery_data_isolation(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    
+    # We will intercept the smart grocery API to return different responses based on target
+    def intercept_grocery(route):
+        request = json.loads(route.request.post_data or "{}")
+        target = request.get("kimin_icin", "kendim")
+        
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "success": True,
+                "categories": {
+                    "protein": [{"name": f"{target} için protein"}]
+                },
+                "estimated_min_total": 100,
+                "estimated_max_total": 200,
+            }, ensure_ascii=False)
+        )
+        
+    page.route("**/api/smart-grocery", intercept_grocery)
+    
+    # Needs a weekly plan
+    page.evaluate("window.currentPlanText = 'Test planı'")
+    
+    # Open grocery
+    page.evaluate("window.openSmartGrocery()")
+    page.locator("#smartGroceryModal").wait_for(state="visible")
+    
+    # Check default (kendim)
+    page.locator("#smartGroceryContent").get_by_text("kendim için protein").wait_for()
+    
+    # Switch to member-ece
+    page.locator("#groceryTarget").select_option("member-ece")
+    page.locator("#smartGroceryContent").get_by_text("member-ece için protein").wait_for()
+    
+    # Switch back to kendim, should not make a new request and just show the cached data
+    page.locator("#groceryTarget").select_option("kendim")
+    page.locator("#smartGroceryContent").get_by_text("kendim için protein").wait_for()
+    
+    assert not runtime_errors

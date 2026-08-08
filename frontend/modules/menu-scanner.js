@@ -192,7 +192,7 @@ async function loadMenuHistory(delayMs = 0) {
         const { res, data } = await safeFetchJson(`${API}/api/history?page=1&limit=30`);
         const rows = (data?.loglar || []).filter(log => {
             const meta = parseHistoryMetadata(log.metadata);
-            return meta.analysis_type === 'menu';
+            return meta.analysis_type === 'menu' && historyMatchesCurrentTarget(log, 'menuTarget');
         }).slice(0, 5);
         list.innerHTML = rows.length ? rows.map((log, index) => {
             const meta = parseHistoryMetadata(log.metadata);
@@ -200,6 +200,16 @@ async function loadMenuHistory(delayMs = 0) {
             return `<article class="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4"><div class="flex items-start justify-between gap-3"><div><strong>${escapeHtml(meta.restaurant_name || 'Menü analizi')}</strong><p class="text-sm text-on-surface-variant">${escapeHtml(meta.target_label || log.kullanici_adi || 'Hedef belirtilmemiş')} · ${new Date(log.tarih).toLocaleDateString('tr-TR')}</p></div><button class="btn-secondary px-3 py-2 text-sm" data-menu-history-index="${index}">Detayı aç</button></div><p class="mt-2 line-clamp-2 text-sm text-on-surface-variant">${escapeHtml(preview)}</p></article>`;
         }).join('') : '<p class="text-sm text-on-surface-variant">Henüz kayıtlı menü analizi yok.</p>';
         list.querySelectorAll('[data-menu-history-index]').forEach(button => button.addEventListener('click', () => renderMenuAnalysis({ analysis_title: parseHistoryMetadata(rows[button.dataset.menuHistoryIndex].metadata).restaurant_name, target_name: parseHistoryMetadata(rows[button.dataset.menuHistoryIndex].metadata).target_label, analiz: rows[button.dataset.menuHistoryIndex].asistan_ciktisi || '' })));
+        if (delayMs === 0) { // target switch
+            const resultDiv = document.getElementById('menuScanResult');
+            if (resultDiv) {
+                if (rows.length > 0) {
+                    renderMenuAnalysis({ analysis_title: parseHistoryMetadata(rows[0].metadata).restaurant_name, target_name: parseHistoryMetadata(rows[0].metadata).target_label, analiz: rows[0].asistan_ciktisi || '' });
+                } else {
+                    resultDiv.innerHTML = '<div class="p-8 text-center text-on-surface-variant"><span class="material-symbols-outlined text-5xl mb-3 opacity-50">restaurant_menu</span><p>Hedef için henüz menü analizi yok.</p></div>';
+                }
+            }
+        }
     } catch (_error) {
         list.innerHTML = '<p class="text-sm text-on-surface-variant">Menü geçmişi şu anda yüklenemedi.</p>';
     }
@@ -531,7 +541,8 @@ async function loadFridgeHistory(fallbackRecord = null) {
         }
         const records = (history.records || []).filter(log => {
             const action = String(log.eylem || '').toLocaleLowerCase('tr-TR');
-            return action.includes('buzdolabı') || action.includes('buzdolabi');
+            const isFridge = action.includes('buzdolabı') || action.includes('buzdolabi');
+            return isFridge && historyMatchesCurrentTarget(log, 'fridgeTarget');
         });
         if (!records.length) {
             if (fallbackRecord) {
@@ -539,6 +550,10 @@ async function loadFridgeHistory(fallbackRecord = null) {
                 return;
             }
             root.innerHTML = '<p class="text-on-surface-variant">Henüz buzdolabı analizi yok. Yeni bir fotoğraf yüklediğinde sonuç burada görünür.</p>';
+            const resultDiv = document.getElementById('fridgeScanResult');
+            if (resultDiv) {
+                resultDiv.innerHTML = '<div class="card p-8 text-center text-on-surface-variant"><span class="material-symbols-outlined text-5xl mb-3 opacity-50">kitchen</span><p>Hedef için henüz buzdolabı analizi yok.</p></div>';
+            }
             return;
         }
         const visibleRecords = fallbackRecord
@@ -548,6 +563,12 @@ async function loadFridgeHistory(fallbackRecord = null) {
             ))]
             : records;
         renderFridgeHistoryRecords(root, visibleRecords);
+        if (!fallbackRecord) {
+            const resultDiv = document.getElementById('fridgeScanResult');
+            if (resultDiv && visibleRecords.length > 0) {
+                showFridgeHistoryDetail(visibleRecords[0]);
+            }
+        }
     } catch (error) {
         console.warn('[CureMenu] Buzdolabı geçmişine bağlanılamadı.', { name: error?.name || 'Error' });
         if (fallbackRecord) return;
