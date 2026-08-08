@@ -98,7 +98,7 @@ def _ensure_db():
     try:
         cursor.execute("ALTER TABLE profiles ADD COLUMN sifre_hash TEXT")
     except sqlite3.OperationalError:
-        pass
+        logger.debug("Column sifre_hash already exists, skipping")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS interaction_logs (
@@ -117,7 +117,7 @@ def _ensure_db():
     try:
         cursor.execute("ALTER TABLE interaction_logs ADD COLUMN metadata TEXT")
     except sqlite3.OperationalError:
-        pass
+        logger.debug("Column metadata already exists in interaction_logs, skipping")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS icd11_cache (
@@ -413,7 +413,8 @@ def klinik_karar_getir(decision_id: str, conn: sqlite3.Connection = None) -> dic
         for key in ("confidence_data", "component_versions", "citations"):
             try:
                 decision[key] = json.loads(decision.get(key) or "{}")
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON decode error (clinical_decisions.{key}): {e}")
                 decision[key] = {} if key != "citations" else []
 
         cursor.execute("""
@@ -428,7 +429,8 @@ def klinik_karar_getir(decision_id: str, conn: sqlite3.Connection = None) -> dic
             event = dict(zip(event_columns, event_row))
             try:
                 event["metadata"] = json.loads(event.get("metadata") or "{}")
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON decode error (decision_events.metadata): {e}")
                 event["metadata"] = {}
             events.append(event)
         decision["events"] = events
@@ -477,7 +479,8 @@ def klinik_kpi_getir(telefon: str, conn: sqlite3.Connection = None) -> dict:
             for key in ("confidence_data", "citations"):
                 try:
                     decision[key] = json.loads(decision.get(key) or ("[]" if key == "citations" else "{}"))
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON decode error (clinical_decisions.{key} in kpi): {e}")
                     decision[key] = [] if key == "citations" else {}
             decisions.append(decision)
 
@@ -496,7 +499,8 @@ def klinik_kpi_getir(telefon: str, conn: sqlite3.Connection = None) -> dict:
             event = dict(zip(event_columns, row))
             try:
                 event["metadata"] = json.loads(event.get("metadata") or "{}")
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON decode error (decision_events.metadata): {e}")
                 event["metadata"] = {}
             events.append(event)
 
@@ -521,14 +525,16 @@ def account_export_db(telefon: str, conn: sqlite3.Connection = None) -> dict | N
         profile = dict(zip(profile_columns, profile_row))
         try:
             profile["profil_data"] = json.loads(profile["profil_data"] or "{}")
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error (profiles.profil_data in export): {e}")
             profile["profil_data"] = {}
 
         interactions = loglari_getir_db(telefon, limit=100_000, offset=0, conn=_conn)
         for interaction in interactions:
             try:
                 interaction["metadata"] = json.loads(interaction.get("metadata") or "{}")
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON decode error (interaction_logs.metadata in export): {e}")
                 interaction["metadata"] = {}
 
         decision_cursor = _conn.execute(
@@ -579,7 +585,8 @@ def account_memory_metadata_db(telefon: str, conn: sqlite3.Connection = None) ->
     for (raw_metadata,) in rows:
         try:
             metadata = json.loads(raw_metadata or "{}")
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error (account_memory_metadata_db): {e}")
             continue
         if isinstance(metadata, dict):
             result.append(metadata)
