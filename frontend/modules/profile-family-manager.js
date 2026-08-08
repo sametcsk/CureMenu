@@ -305,7 +305,7 @@ function populateTargetSelect(selectId, familyMembers) {
 
 function updatePlanDropdown(profil) {
     const familyMembers = Array.isArray(profil?.aile_uyeleri) ? profil.aile_uyeleri : [];
-    ['planTarget', 'chatTarget', 'menuTarget', 'fridgeTarget', 'tahlilTarget', 'groceryTarget']
+    ['planTarget', 'menuTarget', 'fridgeTarget', 'tahlilTarget', 'groceryTarget']
         .forEach(selectId => {
             if (document.getElementById(selectId)) {
                 populateTargetSelect(selectId, familyMembers);

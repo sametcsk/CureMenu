@@ -254,6 +254,8 @@ function switchTab(tab) {
         loadClinicalKpis(true);
     } else if (tab === 'tahlil') {
         loadLabHistory();
+    } else if (tab === 'tarayici') {
+        window.MenuScanner?.loadMenuHistory?.();
     } else if (tab === 'buzdolabi') {
         loadFridgeHistory();
     } else if (tab === 'plan') {

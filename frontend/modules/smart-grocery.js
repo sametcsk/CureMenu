@@ -9,30 +9,7 @@ async function calculateBudget() {
 
     resultDiv.innerHTML = `<div class="text-center py-8"><div class="loading-dots flex gap-2 justify-center mb-4"><span class="w-3 h-3 rounded-full bg-secondary inline-block"></span><span class="w-3 h-3 rounded-full bg-secondary inline-block"></span><span class="w-3 h-3 rounded-full bg-secondary inline-block"></span></div><p class="text-on-surface-variant font-body-md" id="budgetLoadingText">${currentYear} Türkiye geneli tahmini hazırlanıyor...<br/>Fiyatlar canlı market verisi değildir.</p></div>`;
 
-    let locationStr = `${currentYear} Türkiye geneli tahmini fiyat aralığı; canlı fiyat ve stok değildir.`;
-    const loadingText = document.getElementById('budgetLoadingText');
-
-    // Konum Alma (Promise Wrapper)
-    const getLocation = () => new Promise((resolve) => {
-        if (!navigator.geolocation) {
-            resolve(null);
-            return;
-        }
-        navigator.geolocation.getCurrentPosition(
-            pos => resolve(pos.coords),
-            err => resolve(null),
-            { timeout: 5000, maximumAge: 60000 }
-        );
-    });
-
-    const coords = await getLocation();
-
-    if (coords) {
-        if (loadingText) loadingText.innerHTML = "Konum izni alındı.<br/>Yakındaki mağaza uygunluğunu haritada manuel kontrol edebilirsiniz.";
-        locationStr = `${currentYear} tahmini; stok ve fiyat bilgisi doğrulanmadı, markete göre değişebilir.`;
-    } else {
-        if (loadingText) loadingText.innerHTML = "Konum izni alınamadı.<br/>Türkiye geneli tahmini fiyat aralığı hazırlanıyor.";
-    }
+    const locationStr = `${currentYear} Türkiye geneli tahmini fiyat aralığı; canlı fiyat ve stok değildir.`;
 
     try {
         const { res, data } = await safeFetchJson(API + '/api/shopping-list', {
@@ -42,7 +19,7 @@ async function calculateBudget() {
 
         if (data && data.success) {
             const formatted = formatMarkdownSafe(data.rapor);
-            const targetSelect = document.getElementById('groceryTarget');
+            const targetSelect = document.getElementById('planTarget');
             const targetLabel = targetSelect?.selectedOptions?.[0]?.textContent?.trim() || 'Seçili hedef kişi';
             resultDiv.innerHTML = `
             <div class="bg-surface-container-low rounded-lg p-6 border border-secondary/20 shadow-inner">

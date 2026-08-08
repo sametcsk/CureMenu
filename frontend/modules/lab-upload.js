@@ -3,6 +3,9 @@ const HISTORY_LIMIT = 10;
 let currentHistoryPage = 1;
 let tahlilChartInstance = null;
 const BIOMARKER_ALIAS_MAP = new Map([
+    ['glucose', 'Glucose'],
+    ['glukoz', 'Glucose'],
+    ['kan sekeri', 'Glucose'],
     ['hba1c', 'HbA1c'],
     ['hemoglobin a1c', 'HbA1c'],
     ['hemoglobin-a1c', 'HbA1c'],
@@ -113,7 +116,7 @@ function buildLabChartModel(labs) {
 
     validLabs.forEach((log, index) => {
         try {
-            const parsed = JSON.parse(log.metadata);
+            const parsed = parseHistoryMetadata(log.metadata);
             if (!Array.isArray(parsed?.biomarkers)) {
                 return;
             }
@@ -195,6 +198,7 @@ async function uploadHealthRecord(event) {
             if (uploadMessage) {
                 uploadMessage.textContent = data.message || 'Tahlil notların kaydedildi. CureBot sonraki yanıtlarda bu bilgileri dikkate alabilir.';
             }
+            await new Promise(r => setTimeout(r, 800));
             await loadLabHistory();
         } else {
             renderTextState(result, apiHataMesaji(data, 'PDF yüklenemedi.'), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
@@ -222,7 +226,6 @@ async function loadLabHistory() {
 
         const labs = (history.records || []).filter(log =>
             String(log.eylem || '').toLocaleLowerCase('tr-TR').includes('tahlil')
-            && historyMatchesCurrentTarget(log, 'tahlilTarget')
         );
 
         // Draw Chart
@@ -291,6 +294,11 @@ function drawTahlilChart(labs) {
     }
     ctx.style.display = 'block';
 
+    const allValues = [].concat(...chartModel.datasets.map(d => d.data.filter(v => v !== null)));
+    const maxVal = Math.max(...allValues);
+    const minVal = Math.min(...allValues);
+    const delta = maxVal === minVal ? (maxVal * 0.1) || 10 : (maxVal - minVal) * 0.1;
+
     tahlilChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
@@ -300,11 +308,18 @@ function drawTahlilChart(labs) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+                padding: { top: 10, bottom: 10, left: 5, right: 20 }
+            },
             plugins: {
                 legend: { position: 'right' }
             },
             scales: {
-                y: { beginAtZero: false }
+                y: { 
+                    beginAtZero: false,
+                    suggestedMin: minVal - delta,
+                    suggestedMax: maxVal + delta
+                }
             }
         }
     });

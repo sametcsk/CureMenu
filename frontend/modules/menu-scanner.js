@@ -94,28 +94,111 @@ function createImagePreview(dataUrl) {
     });
 }
 
+function _parseMenuSections(text) {
+    // Güvenlik uyarısı bloku
+    const warningMatch = text.match(/###?\s*Profil[^\n]*Güvenlik[^\n]*\n([\s\S]*?)(?=\n###?|\n🟢|\n🟡|\n🔴|$)/i);
+    const warningText = warningMatch ? warningMatch[1].trim() : '';
+    const cleaned = text.replace(/###?\s*Profil[^\n]*Güvenlik[^\n]*\n[\s\S]*?(?=\n🟢|\n🟡|\n🔴|$)/i, '').trim();
+
+    const sectionPattern = /(🟢|🟡|🔴)\s*([^\n]+)\n([\s\S]*?)(?=(?:🟢|🟡|🔴)|$)/g;
+    const sections = [];
+    let match;
+    while ((match = sectionPattern.exec(cleaned)) !== null) {
+        const icon = match[1];
+        const title = match[2].trim().replace(/^Sizin İçin (Uygun|Daha Uygun) Seçenekler.*$/i, 'Uygun Seçenekler')
+            .replace(/Dikkatli.*$/i, 'Dikkatli Tüketilebilecekler')
+            .replace(/Kaçınılması.*$/i, 'Kaçınılması Önerilecekler');
+        const items = match[3].trim().split('\n')
+            .map(l => l.replace(/^\[|\]$/g, '').replace(/^[-*•]\s*/, '').trim())
+            .filter(l => l.length > 3);
+        sections.push({ icon, title, items });
+    }
+
+    // Not satırı
+    const noteMatch = text.match(/Not:\s*(.+)/i);
+    const note = noteMatch ? noteMatch[1].trim() : '';
+
+    return { warningText, sections, note, raw: text };
+}
+
+function _renderMenuSections({ warningText, sections, note, raw }) {
+    if (!sections.length) {
+        return `<div class="prose prose-sm md:prose-base max-w-none text-on-surface">${formatMarkdownSafe(raw)}</div>`;
+    }
+
+    const colorMap = {
+        '🟢': { bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-200', dot: 'bg-emerald-500', text: 'text-emerald-800', label: 'text-emerald-700' },
+        '🟡': { bg: 'bg-amber-50 dark:bg-amber-950/30', border: 'border-amber-200', dot: 'bg-amber-400', text: 'text-amber-800', label: 'text-amber-700' },
+        '🔴': { bg: 'bg-red-50 dark:bg-red-950/30', border: 'border-red-200', dot: 'bg-red-400', text: 'text-red-800', label: 'text-red-700' },
+    };
+
+    const warningHtml = warningText ? `
+        <div class="mb-5 flex gap-3 rounded-xl border border-warning/30 bg-warning-container/50 p-4">
+            <span class="material-symbols-outlined text-warning mt-0.5 shrink-0" style="font-size:20px">info</span>
+            <p class="text-sm text-on-surface-variant leading-relaxed">${escapeHtml(warningText)}</p>
+        </div>` : '';
+
+    const sectionsHtml = sections.map(({ icon, title, items }) => {
+        const c = colorMap[icon] || colorMap['🟡'];
+        const itemsHtml = items.map(item => {
+            const colonIdx = item.indexOf(':');
+            const name = colonIdx > 0 ? item.slice(0, colonIdx).trim() : item;
+            const desc = colonIdx > 0 ? item.slice(colonIdx + 1).trim() : '';
+            return `<li class="flex flex-col gap-0.5 py-2 border-b border-outline-variant/20 last:border-0">
+                <span class="font-semibold text-sm ${c.text}">${escapeHtml(name)}</span>
+                ${desc ? `<span class="text-xs text-on-surface-variant leading-relaxed">${escapeHtml(desc)}</span>` : ''}
+            </li>`;
+        }).join('');
+        return `<div class="rounded-xl border ${c.border} ${c.bg} p-4">
+            <div class="flex items-center gap-2 mb-3">
+                <span class="inline-flex h-5 w-5 rounded-full ${c.dot} shrink-0"></span>
+                <h4 class="text-sm font-bold ${c.label} uppercase tracking-wide">${escapeHtml(title)}</h4>
+            </div>
+            <ul class="space-y-0 divide-y divide-outline-variant/10">${itemsHtml}</ul>
+        </div>`;
+    }).join('');
+
+    const noteHtml = note ? `
+        <p class="mt-4 text-xs text-on-surface-variant italic border-t border-outline-variant/20 pt-3">${escapeHtml(note)}</p>` : '';
+
+    return warningHtml + `<div class="grid gap-3">${sectionsHtml}</div>` + noteHtml;
+}
+
 function renderMenuAnalysis(data) {
     const result = document.getElementById('menuScanResult');
     const context = document.getElementById('menuTargetContext');
     if (context) context.innerHTML = `<div class="rounded-lg bg-primary-container/30 px-4 py-3 text-on-surface"><strong>${escapeHtml(data.analysis_title || 'Menü analizi')}</strong> · ${escapeHtml(data.target_name || 'Seçili kişi')} için değerlendirildi</div>`;
-    result.innerHTML = `<div class="bg-surface-container-lowest rounded-lg p-8 shadow-l1 border border-outline-variant/20"><div class="prose prose-sm md:prose-base max-w-none font-body-md text-on-surface">${formatMarkdownSafe(data.analiz)}</div></div>`;
+    const parsed = _parseMenuSections(data.analiz || '');
+    result.innerHTML = `<div class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-6 shadow-sm">${_renderMenuSections(parsed)}</div>`;
 }
 
-async function loadMenuHistory() {
+function _menuPreviewText(raw) {
+    return raw
+        .replace(/[^\S\n]*#{1,3}[^\n]*/g, '')        // ### başlıkları sil
+        .replace(/[\u{1F300}-\u{1FFFF}]/gu, '')       // emoji sil
+        .replace(/^[\s\-*•]+/gm, '')                  // satır başı tire/bullet sil
+        .replace(/\n{2,}/g, ' ')                      // çift satır → boşluk
+        .replace(/\n/g, ' ')                          // tek satır → boşluk
+        .replace(/\s{2,}/g, ' ')                      // fazla boşluk sil
+        .trim()
+        .slice(0, 140);
+}
+
+async function loadMenuHistory(delayMs = 0) {
     const list = document.getElementById('menuHistoryList');
     if (!list) return;
+    if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
     try {
-        const { res, data } = await safeFetchJson(`${API}/api/history?page=1&limit=20`);
-        const target = document.getElementById('menuTarget')?.value;
+        const { res, data } = await safeFetchJson(`${API}/api/history?page=1&limit=30`);
         const rows = (data?.loglar || []).filter(log => {
             const meta = parseHistoryMetadata(log.metadata);
-            return meta.analysis_type === 'menu' && (!target || meta.target_key === target);
+            return meta.analysis_type === 'menu';
         }).slice(0, 5);
         list.innerHTML = rows.length ? rows.map((log, index) => {
             const meta = parseHistoryMetadata(log.metadata);
-            const output = log.asistan_ciktisi || '';
-            return `<article class="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4"><div class="flex items-start justify-between gap-3"><div><strong>${escapeHtml(meta.restaurant_name || 'Menü analizi')}</strong><p class="text-sm text-on-surface-variant">${escapeHtml(meta.target_label || log.kullanici_adi || 'Hedef belirtilmemiş')} · ${new Date(log.tarih).toLocaleDateString('tr-TR')}</p></div><button class="btn-secondary px-3 py-2 text-sm" data-menu-history-index="${index}">Detayı aç</button></div><p class="mt-2 line-clamp-2 text-sm text-on-surface-variant">${escapeHtml(output.replace(/[#*_`]/g, '').slice(0, 180))}</p></article>`;
-        }).join('') : '<p class="text-sm text-on-surface-variant">Henüz bu hedef kişi için kayıtlı menü analizi yok.</p>';
+            const preview = _menuPreviewText(log.asistan_ciktisi || '');
+            return `<article class="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4"><div class="flex items-start justify-between gap-3"><div><strong>${escapeHtml(meta.restaurant_name || 'Menü analizi')}</strong><p class="text-sm text-on-surface-variant">${escapeHtml(meta.target_label || log.kullanici_adi || 'Hedef belirtilmemiş')} · ${new Date(log.tarih).toLocaleDateString('tr-TR')}</p></div><button class="btn-secondary px-3 py-2 text-sm" data-menu-history-index="${index}">Detayı aç</button></div><p class="mt-2 line-clamp-2 text-sm text-on-surface-variant">${escapeHtml(preview)}</p></article>`;
+        }).join('') : '<p class="text-sm text-on-surface-variant">Henüz kayıtlı menü analizi yok.</p>';
         list.querySelectorAll('[data-menu-history-index]').forEach(button => button.addEventListener('click', () => renderMenuAnalysis({ analysis_title: parseHistoryMetadata(rows[button.dataset.menuHistoryIndex].metadata).restaurant_name, target_name: parseHistoryMetadata(rows[button.dataset.menuHistoryIndex].metadata).target_label, analiz: rows[button.dataset.menuHistoryIndex].asistan_ciktisi || '' })));
     } catch (_error) {
         list.innerHTML = '<p class="text-sm text-on-surface-variant">Menü geçmişi şu anda yüklenemedi.</p>';
@@ -150,7 +233,7 @@ async function scanMenu() {
         });
         if (data && data.success) {
             renderMenuAnalysis(data);
-            loadMenuHistory();
+            loadMenuHistory(800);
         } else {
             renderTextState(result, apiHataMesaji(data, 'Menü okunamadı.'), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
         }
@@ -194,7 +277,7 @@ async function scanMenuImage(inputEl) {
             });
             if (data && data.success) {
                 renderMenuAnalysis(data);
-                loadMenuHistory();
+                loadMenuHistory(800);
             } else if (result) {
                 renderTextState(result, apiHataMesaji(data, 'Menü fotoğrafı okunamadı.'), 'bg-error-container text-on-error-container p-6 rounded-lg text-center');
             }
@@ -496,6 +579,7 @@ function showFridgeHistoryDetail(log) {
         handleFridgeImage,
         scanFridge,
         loadFridgeHistory,
+        loadMenuHistory,
         validatePublicMenuUrl,
     };
 
@@ -508,5 +592,6 @@ function showFridgeHistoryDetail(log) {
     window.handleFridgeImage = handleFridgeImage;
     window.scanFridge = scanFridge;
     window.loadFridgeHistory = loadFridgeHistory;
+    window.loadMenuHistory = loadMenuHistory;
     window.html5QrcodeScanner = null;
 })();
