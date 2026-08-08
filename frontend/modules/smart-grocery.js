@@ -276,11 +276,7 @@ function renderSmartGrocery(data) {
 async function sendFeedback(yemekAdi) {
     if (!yemekAdi) return;
     const user = getUser();
-    const kimin_icin = document.getElementById('groceryTarget')?.value
-        || document.getElementById('planTarget')?.value
-        || document.getElementById('menuTarget')?.value
-        || document.getElementById('fridgeTarget')?.value
-        || 'kendim';
+    const kimin_icin = document.getElementById('groceryTarget')?.value || 'kendim';
     try {
         const { res, data } = await safeFetchJson(API + '/api/feedback', {
             method: 'POST',
