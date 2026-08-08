@@ -123,23 +123,11 @@ function bindSmartGroceryEvents() {
 
 async function openSmartGrocery() {
     const modal = ensureSmartGroceryModal();
-    const planTarget = document.getElementById('planTarget');
     const groceryTarget = document.getElementById('groceryTarget');
-    if (planTarget && groceryTarget) {
-        groceryTarget.innerHTML = planTarget.innerHTML;
-        // set value based on local storage or kendim
-        const saved = localStorage.getItem('cm_target_groceryTarget');
-        if (saved && Array.from(groceryTarget.options).some(o => o.value === saved)) {
-            groceryTarget.value = saved;
-        } else {
-            groceryTarget.value = 'kendim';
-        }
-        if (groceryTarget.dataset.targetPersistenceBound !== 'true') {
-            groceryTarget.addEventListener('change', () => {
-                localStorage.setItem('cm_target_groceryTarget', groceryTarget.value);
-                openSmartGrocery(); // refresh
-            });
-            groceryTarget.dataset.targetPersistenceBound = 'true';
+    if (groceryTarget && window.currentProfile) {
+        const familyMembers = Array.isArray(window.currentProfile.aile_uyeleri) ? window.currentProfile.aile_uyeleri : [];
+        if (window.populateTargetSelect) {
+            window.populateTargetSelect('groceryTarget', familyMembers);
         }
     }
     const content = document.getElementById('smartGroceryContent');
@@ -288,7 +276,8 @@ function renderSmartGrocery(data) {
 async function sendFeedback(yemekAdi) {
     if (!yemekAdi) return;
     const user = getUser();
-    const kimin_icin = document.getElementById('planTarget')?.value
+    const kimin_icin = document.getElementById('groceryTarget')?.value
+        || document.getElementById('planTarget')?.value
         || document.getElementById('menuTarget')?.value
         || document.getElementById('fridgeTarget')?.value
         || 'kendim';
