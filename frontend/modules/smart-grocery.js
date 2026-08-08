@@ -42,7 +42,7 @@ async function calculateBudget() {
 
         if (data && data.success) {
             const formatted = formatMarkdownSafe(data.rapor);
-            const targetSelect = document.getElementById('planTarget');
+            const targetSelect = document.getElementById('groceryTarget');
             const targetLabel = targetSelect?.selectedOptions?.[0]?.textContent?.trim() || 'Seçili hedef kişi';
             resultDiv.innerHTML = `
             <div class="bg-surface-container-low rounded-lg p-6 border border-secondary/20 shadow-inner">
@@ -80,7 +80,10 @@ function ensureSmartGroceryModal() {
                     <h3 class="font-display text-2xl font-bold">Smart Grocery: Alışveriş Listesi</h3>
                     <p class="mt-1 text-sm text-on-surface-variant">Haftalık plandan çıkarılan ürünler ve Türkiye geneli tahmini sepet aralığı.</p>
                 </div>
-                <button type="button" data-grocery-action="close" class="btn-icon"><span class="material-symbols-outlined">close</span></button>
+                <div class="flex items-center gap-4">
+                    <select id="groceryTarget" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-2 text-sm font-bold"></select>
+                    <button type="button" data-grocery-action="close" class="btn-icon"><span class="material-symbols-outlined">close</span></button>
+                </div>
             </div>
             <div id="smartGroceryContent" class="chat-scroll overflow-y-auto p-5"></div>
         </div>`;
@@ -120,8 +123,27 @@ function bindSmartGroceryEvents() {
 
 async function openSmartGrocery() {
     const modal = ensureSmartGroceryModal();
+    const planTarget = document.getElementById('planTarget');
+    const groceryTarget = document.getElementById('groceryTarget');
+    if (planTarget && groceryTarget) {
+        groceryTarget.innerHTML = planTarget.innerHTML;
+        // set value based on local storage or kendim
+        const saved = localStorage.getItem('cm_target_groceryTarget');
+        if (saved && Array.from(groceryTarget.options).some(o => o.value === saved)) {
+            groceryTarget.value = saved;
+        } else {
+            groceryTarget.value = 'kendim';
+        }
+        if (groceryTarget.dataset.targetPersistenceBound !== 'true') {
+            groceryTarget.addEventListener('change', () => {
+                localStorage.setItem('cm_target_groceryTarget', groceryTarget.value);
+                openSmartGrocery(); // refresh
+            });
+            groceryTarget.dataset.targetPersistenceBound = 'true';
+        }
+    }
     const content = document.getElementById('smartGroceryContent');
-    const target = document.getElementById('planTarget')?.value || 'kendim';
+    const target = groceryTarget?.value || 'kendim';
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     if (!window.currentPlanText) {
@@ -312,5 +334,7 @@ async function sendFeedback(yemekAdi) {
     window.groceryStatusLabel = window.SmartGrocery.groceryStatusLabel;
     window.groceryPriceRange = window.SmartGrocery.groceryPriceRange;
     window.renderSmartGrocery = window.SmartGrocery.renderSmartGrocery;
+    window.openSmartGrocery = openSmartGrocery;
+    window.bindSmartGroceryEvents = bindSmartGroceryEvents;
     bindSmartGroceryEvents();
 })();

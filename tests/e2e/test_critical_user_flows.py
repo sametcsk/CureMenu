@@ -304,6 +304,13 @@ def test_weekly_plan_actions_and_gamification(authenticated_page) -> None:
 def test_smart_grocery_open_budget_feedback_and_close(authenticated_page) -> None:
     page, _context, runtime_errors, _user = authenticated_page
     page.evaluate("switchTab('plan')")
+    page.route("**/api/weekly-plan*", lambda route: _json(route, {"success": True, "plan": _weekly_plan()}))
+
+    # Plan oluştururken Mert'i seç, sonra plan ekranında Kendim'e dön
+    page.evaluate("window.updatePlanDropdown({aile_uyeleri: [{id: 'member-mert', ad: 'Mert'}]})")
+    page.locator("#planTarget").select_option("member-mert")
+    page.locator("#planTarget").select_option("kendim")
+    
     page.evaluate("plan => window.WeeklyPlanManager.renderPlan(plan)", _weekly_plan())
 
     smart_grocery_response = {
@@ -342,16 +349,36 @@ def test_smart_grocery_open_budget_feedback_and_close(authenticated_page) -> Non
         "disclaimer": "Fiyat ve stok bilgisi test verisidir.",
         "recommendation_summary": "Riskli urun toplam fiyata dahil edilmedi.",
     }
-    page.route("**/api/smart-grocery", lambda route: _json(route, smart_grocery_response))
+    smart_grocery_requests = []
+    def intercept_grocery(route):
+        smart_grocery_requests.append(route.request.post_data_json)
+        _json(route, smart_grocery_response)
+
+    page.route("**/api/smart-grocery", intercept_grocery)
     page.route("**/api/shopping-list", lambda route: _json(route, {"success": True, "rapor": "Tahmini toplam: 120 TL"}))
     page.route("**/api/feedback", lambda route: _json(route, {"success": True, "message": "Geri bildirim kaydedildi."}))
 
+
     page.locator('[data-grocery-action="open"]').click()
+    page.wait_for_timeout(3000)
+    print("\n--- MODAL HTML ---")
+    print(page.locator("#smartGroceryModal").inner_html())
+    print("--- END MODAL HTML ---")
     page.locator("#smartGroceryContent").get_by_text(
         "Sepet önerileri, profiliniz ve güvenlik kontrolleri dikkate alınarak değerlendirildi."
     ).wait_for()
     assert page.locator("#smartGroceryContent").get_by_text("e2e-grocery-decision").count() == 0
     assert page.locator("#smartGroceryContent").get_by_text("Ispanak").count() == 1
+    
+    assert smart_grocery_requests[-1]["kimin_icin"] == "kendim"
+    assert page.locator("#groceryTarget").input_value() == "kendim"
+    
+    page.locator("#groceryTarget").select_option("member-mert")
+    page.locator("#smartGroceryContent").get_by_text(
+        "Sepet önerileri, profiliniz ve güvenlik kontrolleri dikkate alınarak değerlendirildi."
+    ).wait_for()
+    assert smart_grocery_requests[-1]["kimin_icin"] == "member-mert"
+
     page.locator('#smartGroceryModal [data-grocery-action="close"]').last.click()
     assert "hidden" in page.locator("#smartGroceryModal").get_attribute("class")
 

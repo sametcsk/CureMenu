@@ -296,6 +296,7 @@ function populateTargetSelect(selectId, familyMembers) {
             if (selectId === 'chatTarget') window.ChatWidget?.loadCachedConversation?.();
             if (selectId === 'tahlilTarget') window.loadLabHistory?.();
             if (selectId === 'fridgeTarget') window.loadFridgeHistory?.();
+            if (selectId === 'groceryTarget') window.openSmartGrocery?.();
         });
         select.dataset.targetPersistenceBound = 'true';
     }
@@ -303,8 +304,12 @@ function populateTargetSelect(selectId, familyMembers) {
 
 function updatePlanDropdown(profil) {
     const familyMembers = Array.isArray(profil?.aile_uyeleri) ? profil.aile_uyeleri : [];
-    ['planTarget', 'chatTarget', 'menuTarget', 'fridgeTarget', 'tahlilTarget']
-        .forEach(selectId => populateTargetSelect(selectId, familyMembers));
+    ['planTarget', 'chatTarget', 'menuTarget', 'fridgeTarget', 'tahlilTarget', 'groceryTarget']
+        .forEach(selectId => {
+            if (document.getElementById(selectId)) {
+                populateTargetSelect(selectId, familyMembers);
+            }
+        });
 }
 
 async function addMember() {
@@ -458,7 +463,8 @@ function renderMedicationOverview(profil) {
         renderEmptyFamily,
         renderFamily,
         renderMedicationOverview,
-        getTargetCacheContext
+        getTargetCacheContext,
+        populateTargetSelect
     };
     window.ProfileFamilyManager = window.ProfileManager;
 
@@ -468,6 +474,7 @@ function renderMedicationOverview(profil) {
     window.openProfileEditor = openProfileEditor;
     window.completeOnboarding = completeOnboarding;
     window.updatePlanDropdown = updatePlanDropdown;
+    window.populateTargetSelect = populateTargetSelect;
     window.addMember = addMember;
     window.deleteMember = deleteMember;
     window.renderHealthProfile = renderHealthProfile;
