@@ -182,6 +182,7 @@ async function completeOnboarding() {
         if (res.ok && data.success) {
             localStorage.setItem('cm_has_profile', 'true');
             localStorage.setItem('cm_onboarding_done', 'true');
+            localStorage.setItem('cm_kullanici_adi', ad);
             document.getElementById('onboardingModal').classList.add('hidden');
             await loadProfile();
             openCureBotWidget();
