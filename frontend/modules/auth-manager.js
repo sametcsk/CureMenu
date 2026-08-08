@@ -54,6 +54,11 @@ window.AuthManager = {
             throw new Error(registerData.detail || 'Kayıt yapılamadı.');
         }
         
+        localStorage.setItem('cm_telefon', telefon);
+        localStorage.setItem('cm_kullanici_adi', registerData.kullanici_adi || kullanici_adi || '');
+        localStorage.setItem('cm_has_profile', 'false');
+        localStorage.setItem('cm_onboarding_done', 'false');
+        
         return registerData;
     },
 

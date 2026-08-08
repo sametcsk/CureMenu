@@ -348,6 +348,7 @@ async function addMember() {
             if (hasProfile !== 'true') {
                 localStorage.setItem('cm_has_profile', 'true');
                 localStorage.setItem('cm_onboarding_done', 'true');
+                localStorage.setItem('cm_kullanici_adi', ad_val);
             }
             document.getElementById('addModal').classList.add('hidden');
             // Formu temizle
