@@ -15,6 +15,7 @@ from src.database import profil_getir_db
 from src.memory import build_memory_namespace
 from src.messages import PROFIL_BULUNAMADI, PROFIL_GEREKLI
 from src.models import AileUyesi, KullaniciProfili
+from src.privacy.redaction import redact_text
 from src.profil_utils import aile_profil_ozeti_olustur, profil_ozeti_olustur
 
 
@@ -45,6 +46,7 @@ def _profile_fingerprint(members: list[AileUyesi]) -> str:
             "medications": sorted(_dedupe(member.ilaclar or []), key=str.casefold),
             "goal": str(member.hedef or ""),
             "medical_history": str(member.tibbi_gecmis or ""),
+            "notes": str(member.notlar or ""),
         }
         for member in members
     ]
@@ -68,6 +70,7 @@ class ResolvedProfileSnapshot:
     ages: tuple[int, ...]
     genders: tuple[str, ...]
     medical_history: tuple[str, ...]
+    notes: tuple[str, ...]
     family_member_id: str | None
     profile_summary: str
 
@@ -84,6 +87,7 @@ class ResolvedProfileSnapshot:
             "yas": min(self.ages) if self.ages else 30,
             "cinsiyet": self.genders[0] if len(self.genders) == 1 else "",
             "hedef": ", ".join(self.goals),
+            "notlar": list(self.notes),
         }
 
     def history_metadata(self) -> dict[str, str]:
@@ -106,6 +110,7 @@ class ResolvedProfileSnapshot:
             "ages": list(self.ages),
             "genders": list(self.genders),
             "medical_history": list(self.medical_history),
+            "notes": list(self.notes),
             "family_member_id": self.family_member_id,
         }
 
@@ -152,6 +157,11 @@ def resolve_profile_snapshot_from_profile(
     medications = _dedupe([value for member in members for value in (member.ilaclar or [])])
     goals = _dedupe([member.hedef for member in members if member.hedef])
     medical_history = _dedupe([member.tibbi_gecmis for member in members if member.tibbi_gecmis])
+    notes = _dedupe([
+        redact_text(member.notlar, max_length=1000)
+        for member in members
+        if member.notlar
+    ])
     summary = aile_profil_ozeti_olustur(profile) if target_scope == "family" else profil_ozeti_olustur(members[0])
     return ResolvedProfileSnapshot(
         account_id=account_id,
@@ -168,6 +178,7 @@ def resolve_profile_snapshot_from_profile(
         ages=tuple(member.yas for member in members),
         genders=tuple(member.cinsiyet.value for member in members),
         medical_history=medical_history,
+        notes=notes,
         family_member_id=family_member_id,
         profile_summary=summary,
     )

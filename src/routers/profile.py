@@ -37,6 +37,7 @@ async def save_profile(req: ProfilKaydetRequest, telefon: str = Depends(get_curr
         tibbi_gecmis=req.tibbi_gecmis,
         ilaclar=req.ilaclar,
         hedef=req.hedef,
+        notlar=req.notlar,
     )
     profil.ana_kullanici = ana_kullanici
     profil_kaydet_db(telefon, req.kullanici_adi, profil, conn=db)
@@ -62,6 +63,7 @@ async def add_family_member(req: AileUyesiEkleRequest, telefon: str = Depends(ge
         tibbi_gecmis=req.tibbi_gecmis,
         ilaclar=req.ilaclar,
         hedef=req.hedef,
+        notlar=req.notlar,
     )
     profil.aile_uyeleri.append(uye)
     profil_kaydet_db(telefon, "", profil, conn=db)

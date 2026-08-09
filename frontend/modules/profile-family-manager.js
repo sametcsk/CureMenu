@@ -146,6 +146,7 @@ function openProfileEditor() {
     setValue('ob_hastaliklar', (profil.hastaliklar || []).join(', '));
     setValue('ob_alerjiler', (profil.alerjiler || []).join(', '));
     setValue('ob_ilaclar', (profil.ilaclar || []).join(', '));
+    setValue('ob_notlar', profil.notlar || '');
     const title = modal.querySelector('h3');
     if (title) title.textContent = 'Sağlık bilgilerini güncelle';
     const subtitle = modal.querySelector('h3 + p');
@@ -173,6 +174,7 @@ async function completeOnboarding() {
         alerjiler: parseListInput(document.getElementById('ob_alerjiler').value),
         ilaclar: parseListInput(document.getElementById('ob_ilaclar').value),
         hedef: document.getElementById('ob_hedef').value,
+        notlar: document.getElementById('ob_notlar').value.trim() || null,
     };
 
     try {
@@ -246,6 +248,7 @@ function getTargetCacheContext(selectIdOrTarget = 'kendim') {
         ilaclar: member.ilaclar || [],
         hedef: member.hedef || '',
         tibbi_gecmis: member.tibbi_gecmis || '',
+        notlar: member.notlar || '',
     }));
     return {
         accountKey: user.telefon || 'anonymous',
@@ -340,6 +343,7 @@ async function addMember() {
         hedef: document.getElementById('m_hedef').value,
         genetik_hastaliklar: parseListInput(document.getElementById('m_genetik').value),
         tibbi_gecmis: document.getElementById('m_tibbi').value.trim() || null,
+        notlar: document.getElementById('m_notlar').value.trim() || null,
     };
 
     try {
@@ -356,7 +360,7 @@ async function addMember() {
             }
             document.getElementById('addModal').classList.add('hidden');
             // Formu temizle
-            ['m_ad', 'm_yas', 'm_hastaliklar', 'm_alerjiler', 'm_ilaclar', 'm_genetik', 'm_tibbi'].forEach(id => document.getElementById(id).value = '');
+            ['m_ad', 'm_yas', 'm_hastaliklar', 'm_alerjiler', 'm_ilaclar', 'm_genetik', 'm_tibbi', 'm_notlar'].forEach(id => document.getElementById(id).value = '');
             loadProfile();
         } else { alert(apiHataMesaji(data, 'Hata oluştu')); }
     } catch (e) { alert('Bağlantı kurulamadı. Lütfen birazdan tekrar deneyin.'); }
@@ -411,6 +415,7 @@ function renderFamily(profil) {
                     <div><p class="metric-label font-bold">Hastalıklar</p><div class="mt-2 flex flex-wrap gap-2">${diseases.length ? diseases.map(v => `<span class="status-pill status-warn">${escapeHtml(v)}</span>`).join('') : '<span class="text-sm text-on-surface-variant">Kayıt yok</span>'}</div></div>
                     <div><p class="metric-label font-bold">Alerjiler</p><div class="mt-2 flex flex-wrap gap-2">${allergies.length ? allergies.map(v => `<span class="status-pill status-risk">${escapeHtml(v)}</span>`).join('') : '<span class="text-sm text-on-surface-variant">Kayıt yok</span>'}</div></div>
                     <div><p class="metric-label font-bold">İlaçlar</p><div class="mt-2 flex flex-wrap gap-2">${meds.length ? meds.map(v => `<span class="status-pill status-info">${escapeHtml(v)}</span>`).join('') : '<span class="text-sm text-on-surface-variant">Kayıt yok</span>'}</div></div>
+                    ${member.notlar ? `<div><p class="metric-label font-bold">Ek not</p><p class="mt-2 rounded-lg bg-surface-container-lowest p-3 text-sm leading-6 text-on-surface-variant">${escapeHtml(member.notlar)}</p></div>` : ''}
                 </div>
             </article>`;
     }).join('');

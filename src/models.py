@@ -89,6 +89,7 @@ class ProfilKaydetRequest(BaseModel):
     tibbi_gecmis: Optional[str] = None
     ilaclar: list[str] = Field(default_factory=list)
     hedef: str = BeslenmeHedefi.GENEL.value
+    notlar: Optional[str] = Field(default=None, max_length=1000)
 
 class AileUyesiEkleRequest(BaseModel):
     ad: str = Field(..., min_length=2, max_length=40, pattern=r"^[A-Za-zÇçĞğİıÖöŞşÜü\s]+$")
@@ -102,6 +103,7 @@ class AileUyesiEkleRequest(BaseModel):
     tibbi_gecmis: Optional[str] = None
     ilaclar: list[str] = Field(default_factory=list)
     hedef: str = BeslenmeHedefi.GENEL.value
+    notlar: Optional[str] = Field(default=None, max_length=1000)
 
 class ChatRequest(BaseModel):
     mesaj: str

@@ -288,6 +288,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 <div><label class="mb-1 block font-bold">Kullandığı ilaçlar</label><input id="m_ilaclar" class="w-full rounded-lg border-outline-variant p-3" placeholder="metformin, lisinopril" type="text"/></div>
 <div><label class="mb-1 block font-bold">Genetik geçmiş</label><textarea id="m_genetik" class="w-full rounded-lg border-outline-variant p-3" rows="2"></textarea></div>
 <div><label class="mb-1 block font-bold">Tıbbi geçmiş</label><textarea id="m_tibbi" class="w-full rounded-lg border-outline-variant p-3" rows="2"></textarea></div>
+<div><label class="mb-1 block font-bold">Ek not <span class="font-normal text-on-surface-variant">(isteğe bağlı)</span></label><textarea id="m_notlar" class="w-full rounded-lg border-outline-variant p-3" maxlength="1000" rows="3" placeholder="Sevmediği yiyecekler, günlük düzeni veya önerilerde dikkate alınacak başka bir konu"></textarea></div>
 </div>
 <div class="flex justify-end gap-3 border-t border-outline-variant p-5"><button onclick="document.getElementById('addModal').classList.add('hidden')" class="btn-secondary px-5 py-2 font-bold">Vazgeç</button><button onclick="window.ProfileManager.addMember()" class="btn-primary px-5 py-2 font-bold">Kaydet</button></div>
 </div>
@@ -304,6 +305,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 <div><label class="mb-2 block font-bold">Hastalıklar</label><div id="ob_hastalik_chips" class="mb-2 flex flex-wrap gap-2"></div><input id="ob_hastaliklar" class="w-full rounded-lg border-outline-variant p-3" placeholder="diyabet, hipertansiyon..." type="text"/></div>
 <div><label class="mb-1 block font-bold">Alerjiler</label><input id="ob_alerjiler" class="w-full rounded-lg border-outline-variant p-3" type="text"/></div>
 <div><label class="mb-2 block font-bold">Kullandığı ilaçlar</label><div id="ob_ilac_chips" class="mb-2 flex flex-wrap gap-2"></div><input id="ob_ilaclar" class="w-full rounded-lg border-outline-variant p-3" type="text"/></div>
+<div><label class="mb-1 block font-bold">Ek not <span class="font-normal text-on-surface-variant">(isteğe bağlı)</span></label><textarea id="ob_notlar" class="w-full rounded-lg border-outline-variant p-3" maxlength="1000" rows="3" placeholder="Tercihler, günlük düzen veya önerilerde dikkate alınacak başka bir konu"></textarea></div>
 <div class="rounded-lg border border-warning/20 bg-warning-container p-3 text-sm text-on-surface-variant" id="ob_feragat"></div>
 <div><p class="mb-2 font-bold">CureBot'a sorabileceğiniz örnekler:</p><div id="ob_ornek_sorular" class="flex flex-wrap gap-2"></div></div>
 </div>
@@ -367,7 +369,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 <script src="/static/modules/smart-grocery.js?v=13"></script>
 <script src="/static/modules/weekly-actions.js"></script>
 <script src="/static/modules/profile-goals.js?v=12"></script>
-<script src="/static/modules/profile-family-manager.js?v=14"></script>
+<script src="/static/modules/profile-family-manager.js?v=15"></script>
 <script src="/static/modules/menu-scanner.js?v=17"></script>
 <script src="/static/modules/lab-upload.js?v=15"></script>
 <script src="/static/modules/governance-dashboard.js"></script>

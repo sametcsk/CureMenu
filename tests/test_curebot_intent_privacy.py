@@ -92,6 +92,7 @@ def test_natural_answer_prompt_redacts_identity_phone_and_raw_history(monkeypatc
         allergies=("kabuklu deniz ürünleri",),
         diseases=("çölyak",),
         medications=(),
+        notes=("Mantar sevmiyorum, telefon 0532 111 22 33",),
     )
     plan = CureBotIntentPlan(intent="meal_recommendation", target="member", meal_context="dinner")
     context = CureBotConversationContext(
@@ -112,6 +113,8 @@ def test_natural_answer_prompt_redacts_identity_phone_and_raw_history(monkeypatc
     prompt = captured["prompt"]
     assert "Mert" not in prompt
     assert "0532 111 22 33" not in prompt
+    assert "Mantar sevmiyorum" in prompt
+    assert "[REDACTED_PHONE]" in prompt
     assert "Gizli raw mesaj" not in prompt
     assert '"last_intent": "meal_recommendation"' in prompt
     assert '"privacy_mode":"minimal"' in prompt

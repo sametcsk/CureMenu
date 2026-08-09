@@ -199,6 +199,11 @@
                                     <span class="mb-1 block text-sm font-bold">Tıbbi operasyon geçmişi</span>
                                     <textarea id="medicalHistory" class="input-field min-h-[96px]" placeholder="Geçirdiğin operasyonlar, önemli sağlık notları veya özellikle dikkat etmek istediğin konular"></textarea>
                                 </label>
+                                <label class="block">
+                                    <span class="mb-1 block text-sm font-bold">Ek not <span class="font-normal text-muted">(isteğe bağlı)</span></span>
+                                    <textarea id="additionalNotes" class="input-field min-h-[96px]" maxlength="1000" placeholder="Örn. mantar sevmiyorum, öğlenleri ofisteyim, yemekler 20 dakikada hazırlanabilsin"></textarea>
+                                    <span class="mt-1 block text-xs text-muted">Tercihlerini, günlük düzenini veya önerilerde dikkate alınmasını istediğin başka bir konuyu yazabilirsin.</span>
+                                </label>
                             </div>
                         </section>
 
@@ -296,6 +301,7 @@
                 ['Hastalıklar', parseList(document.getElementById('conditions').value).join(', ') || 'Bildirilmedi'],
                 ['Alerjiler', parseList(document.getElementById('allergies').value).join(', ') || 'Bildirilmedi'],
                 ['İlaçlar', parseList(document.getElementById('medications').value).join(', ') || 'Bildirilmedi'],
+                ['Ek not', document.getElementById('additionalNotes').value.trim() || 'Bildirilmedi'],
             ];
             const summary = document.getElementById('profileSummary');
             const fragment = document.createDocumentFragment();
@@ -355,6 +361,7 @@
                     ilaclar: parseList(document.getElementById('medications').value),
                     genetik_hastaliklar: parseList(document.getElementById('familyHistory').value),
                     tibbi_gecmis: document.getElementById('medicalHistory').value.trim() || null,
+                    notlar: document.getElementById('additionalNotes').value.trim() || null,
                 };
 
                 const profileRes = await fetch('/api/profile/save', {
