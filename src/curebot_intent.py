@@ -163,6 +163,98 @@ def classify_intent_plan(message: str, conversation: Any = None, target: str = "
     return fallback_intent_plan(message, target, conversation)
 
 
+def _privacy_safe_classifier_message(message: str, profile_names: list[str] | None = None) -> str:
+    text = str(message or "")[:900]
+    for name in profile_names or []:
+        clean_name = str(name or "").strip()
+        if clean_name:
+            text = re.sub(re.escape(clean_name), "seçili kişi", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?<!\d)(?:\+?90\s*)?0?5\d{2}[\s.-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}(?!\d)", "[telefon gizlendi]", text)
+    text = re.sub(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", "[e-posta gizlendi]", text, flags=re.IGNORECASE)
+    return text
+
+
+def _parse_intent_plan_json(raw_response: Any) -> dict[str, Any]:
+    text = parse_llm_response(raw_response).strip()
+    fenced = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE).strip()
+    try:
+        parsed = json.loads(fenced)
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]*\}", fenced)
+        if not match:
+            raise
+        parsed = json.loads(match.group(0))
+    if not isinstance(parsed, dict):
+        raise ValueError("Intent planner response must be a JSON object")
+    return parsed
+
+
+def plan_curebot_semantically(
+    message: str,
+    conversation: CureBotConversationContext | dict | list | None = None,
+    target: str = "self",
+    profile_names: list[str] | None = None,
+    health_flags: dict | None = None,
+) -> CureBotIntentPlan:
+    """Classify one turn with minimal provider context and a local fallback."""
+    previous_context = _coerce_conversation_context(conversation)
+    local_plan = classify_intent_plan(message, previous_context, target, [], health_flags)
+    safe_message = _privacy_safe_classifier_message(message, profile_names)
+    minimal_health_flags = {
+        "allergy_present": bool((health_flags or {}).get("allergy_present")),
+        "medication_present": bool((health_flags or {}).get("medication_present")),
+        "disease_present": bool((health_flags or {}).get("disease_present")),
+    }
+    planner_payload = {
+        "current_user_message": safe_message,
+        "active_target_scope": _resolved_target_scope(target),
+        "health_constraint_flags": minimal_health_flags,
+        "previous_turn_labels": previous_context.model_dump(exclude={"privacy_mode"}),
+        "privacy_mode": "minimal",
+    }
+    allowed_intents = list(CureBotIntentPlan.model_fields["intent"].annotation.__args__)
+    allowed_meal_contexts = list(CureBotIntentPlan.model_fields["meal_context"].annotation.__args__)
+    prompt = f"""You are the privacy-safe semantic triage layer for CureBot, a Turkish nutrition decision-support assistant.
+Classify the user's current turn. Do not answer the user.
+
+MINIMAL INPUT:
+{json.dumps(planner_payload, ensure_ascii=False)}
+
+Return exactly one JSON object with these fields:
+intent, meal_context, is_profile_declaration, is_followup, needs_safety_gate, answer_style, confidence.
+
+Allowed intents: {json.dumps(allowed_intents, ensure_ascii=False)}
+Allowed meal_context values: {json.dumps(allowed_meal_contexts, ensure_ascii=False)}
+Allowed answer_style values: ["short", "practical", "explanatory", "product_explainer"]
+
+Routing rules:
+- meal_followup covers short contextual continuations such as asking what to add, replace, cook, or explain.
+- emotional_support covers feeling overwhelmed specifically about food choices; it is not a medical diagnosis.
+- medication_food_question covers medicine timing or medicine-food interaction questions.
+- off_topic covers requests outside nutrition, health-profile use, menus, labs, groceries, and CureMenu product help.
+- Mark needs_safety_gate true for explicit consumption safety, allergy conflict, medication-food, or lab-risk questions.
+- Never infer or reproduce a person's name, phone, email, diagnosis, medication, or allergy that is absent from MINIMAL INPUT.
+"""
+    try:
+        parsed = _parse_intent_plan_json(invoke_with_model_fallback(prompt, temperature=0.0))
+        semantic_plan = CureBotIntentPlan.model_validate({
+            **parsed,
+            "target": _resolved_target_scope(target),
+            "target_hint": "",
+            "risk_subject": local_plan.risk_subject,
+            "privacy_mode": "minimal",
+            "reason": "privacy-safe semantic triage",
+        })
+        semantic_plan.needs_safety_gate = bool(
+            semantic_plan.needs_safety_gate
+            or local_plan.needs_safety_gate
+            or semantic_plan.intent in {"medication_food_question", "allergy_conflict", "lab_followup"}
+        )
+        return semantic_plan
+    except Exception:
+        return local_plan
+
+
 def plan_requires_safety_gate(plan: CureBotIntentPlan) -> bool:
     return bool(plan.needs_safety_gate or plan.intent in {"medication_food_question", "allergy_conflict", "lab_followup"})
 
@@ -208,13 +300,9 @@ def _concise_markdown(answer: str, plan: CureBotIntentPlan, snapshot) -> str:
 
 
 def _privacy_safe_user_message(user_message: str, snapshot) -> str:
-    text = str(user_message or "")[:900]
     target_name = str(getattr(snapshot, "target_name", "") or "").strip()
-    if target_name and _normalized(target_name) not in {"tum aile", "family"}:
-        text = re.sub(re.escape(target_name), "seçili kişi", text, flags=re.IGNORECASE)
-    text = re.sub(r"(?<!\d)(?:\+?90\s*)?0?5\d{2}[\s.-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}(?!\d)", "[telefon gizlendi]", text)
-    text = re.sub(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", "[e-posta gizlendi]", text, flags=re.IGNORECASE)
-    return text
+    names = [] if _normalized(target_name) in {"tum aile", "family"} else [target_name]
+    return _privacy_safe_classifier_message(user_message, names)
 
 
 def generate_curebot_natural_answer(

@@ -1502,6 +1502,57 @@ def test_chat_family_followup_and_nutrition_overwhelm_use_structured_context(cli
     assert followup_context.last_target_scope == "family"
 
 
+def test_chat_router_uses_semantic_triage_plan_before_graph(client, monkeypatch):
+    from src.curebot_intent import CureBotIntentPlan
+
+    login_with_profile(client, "5554445705", "Semantic Router")
+    calls = []
+
+    def semantic_plan(message, conversation, target, profile_names, health_flags):
+        calls.append({
+            "message": message,
+            "conversation": conversation,
+            "target": target,
+            "profile_names": profile_names,
+            "health_flags": health_flags,
+        })
+        return CureBotIntentPlan(
+            intent="meal_followup",
+            target="self",
+            meal_context="dinner",
+            is_followup=True,
+            answer_style="practical",
+            confidence=0.93,
+            reason="test semantic triage",
+        )
+
+    def natural_answer(plan, *_args, **_kwargs):
+        assert plan.intent == "meal_followup"
+        return "Bunu akşam öğününe uyarlayabiliriz.\n\n- **Tamamlama:** Yanına ölçülü ve içeriği net bir eşlikçi ekleyebilirsin."
+
+    async def should_not_run(_state):
+        raise AssertionError("Semantic everyday plan should bypass the full graph")
+
+    monkeypatch.setattr("src.routers.chat.plan_curebot_semantically", semantic_plan)
+    monkeypatch.setattr("src.routers.chat.generate_curebot_natural_answer", natural_answer)
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+
+    response = client.post(
+        "/api/chat",
+        json={"mesaj": "Şunun yanına sofrada ne iyi gider?", "kimin_icin": "kendim"},
+    )
+
+    assert response.status_code == 200
+    assert "akşam öğününe" in response.text
+    assert len(calls) == 1
+    assert calls[0]["target"] == "self"
+    assert calls[0]["health_flags"] == {
+        "allergy_present": False,
+        "medication_present": False,
+        "disease_present": False,
+    }
+
+
 def test_chat_intent_levothyroxine_badem_sutu_timing_not_dairy_block(client, monkeypatch):
     login_with_profile(
         client,

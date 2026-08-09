@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 from src.curebot_intent import (
@@ -6,6 +7,7 @@ from src.curebot_intent import (
     _concise_markdown,
     classify_intent_plan,
     generate_curebot_natural_answer,
+    plan_curebot_semantically,
 )
 
 
@@ -96,3 +98,83 @@ def test_natural_answer_prompt_redacts_identity_phone_and_raw_history(monkeypatc
     assert "Gizli raw mesaj" not in prompt
     assert '"last_intent": "meal_recommendation"' in prompt
     assert '"privacy_mode":"minimal"' in prompt
+
+
+def test_semantic_triage_uses_minimal_context_and_validated_json(monkeypatch):
+    captured = {}
+
+    def fake_invoke(prompt, **_kwargs):
+        captured["prompt"] = prompt
+        return """```json
+        {
+          "intent": "meal_followup",
+          "meal_context": "dinner",
+          "is_profile_declaration": false,
+          "is_followup": true,
+          "needs_safety_gate": false,
+          "answer_style": "practical",
+          "confidence": 0.94
+        }
+        ```"""
+
+    monkeypatch.setattr("src.curebot_intent.invoke_with_model_fallback", fake_invoke)
+    context = CureBotConversationContext(
+        last_intent="meal_recommendation",
+        last_meal_context="dinner",
+        last_answer_type="practical",
+        last_target_scope="member",
+        has_previous_turn=True,
+    )
+    plan = plan_curebot_semantically(
+        "Mert için peki ekmek ne olsun? Telefon 0532 111 22 33",
+        context,
+        "member",
+        ["Mert", "Ayşe"],
+        {"allergy_present": True, "medication_present": False, "disease_present": True},
+    )
+
+    prompt = captured["prompt"]
+    assert plan.intent == "meal_followup"
+    assert plan.target == "member"
+    assert plan.privacy_mode == "minimal"
+    assert "Mert" not in prompt
+    assert "Ayşe" not in prompt
+    assert "0532 111 22 33" not in prompt
+    assert "Gizli raw mesaj" not in prompt
+    assert '"allergy_present": true' in prompt
+    assert '"last_meal_context": "dinner"' in prompt
+
+
+def test_semantic_triage_cannot_disable_local_safety_gate(monkeypatch):
+    monkeypatch.setattr(
+        "src.curebot_intent.invoke_with_model_fallback",
+        lambda *_args, **_kwargs: json.dumps({
+            "intent": "unknown_nutrition_related",
+            "meal_context": "unknown",
+            "is_profile_declaration": False,
+            "is_followup": False,
+            "needs_safety_gate": False,
+            "answer_style": "practical",
+            "confidence": 0.7,
+        }),
+    )
+
+    plan = plan_curebot_semantically("Fındıklı baklava yiyebilir miyim?", target="self")
+
+    assert plan.needs_safety_gate is True
+    assert plan.risk_subject == "explicit_food_request"
+
+
+def test_semantic_triage_provider_failure_uses_local_fallback(monkeypatch):
+    monkeypatch.setattr(
+        "src.curebot_intent.invoke_with_model_fallback",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(TimeoutError("provider timeout")),
+    )
+
+    plan = plan_curebot_semantically(
+        "Biraz bunaldım, hiçbir şey yiyemez gibiyim.",
+        target="self",
+    )
+
+    assert plan.intent == "emotional_support"
+    assert plan.reason == "local privacy fallback"

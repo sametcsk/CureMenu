@@ -33,9 +33,9 @@ from src.chat_response import final_response_text, safety_outcome
 from src.curebot_intent import (
     CureBotConversationContext,
     CureBotIntentPlan,
-    classify_intent_plan,
     fallback_intent_plan,
     generate_curebot_natural_answer,
+    plan_curebot_semantically,
     plan_requires_safety_gate,
 )
 from src.presentation import (
@@ -449,11 +449,11 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
     try:
         intent_plan = await asyncio.wait_for(
             run_in_threadpool(
-                classify_intent_plan,
+                plan_curebot_semantically,
                 req.mesaj,
                 conversation_context.model_dump(),
                 snapshot.target_scope,
-                [],
+                [snapshot.target_name],
                 {
                     "allergy_present": bool(snapshot.allergies),
                     "medication_present": bool(snapshot.medications),

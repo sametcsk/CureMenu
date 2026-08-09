@@ -11,7 +11,19 @@ def pytest_configure():
 @pytest.fixture(autouse=True)
 def disable_external_curebot_generation(monkeypatch):
     """Keep API tests deterministic without requiring a model provider."""
+    from src.curebot_intent import classify_intent_plan
+
     monkeypatch.setattr("src.routers.chat.generate_curebot_natural_answer", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(
+        "src.routers.chat.plan_curebot_semantically",
+        lambda message, conversation=None, target="self", profile_names=None, health_flags=None: classify_intent_plan(
+            message,
+            conversation,
+            target,
+            [],
+            health_flags,
+        ),
+    )
 
 
 @pytest.fixture()
