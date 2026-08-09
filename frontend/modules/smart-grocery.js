@@ -54,8 +54,8 @@ function ensureSmartGroceryModal() {
         <div class="card relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden">
             <div class="flex items-center justify-between border-b border-outline-variant p-5">
                 <div>
-                    <h3 class="font-display text-2xl font-bold">Smart Grocery: Alışveriş Listesi</h3>
-                    <p class="mt-1 text-sm text-on-surface-variant">Haftalık plandan çıkarılan ürünler ve Türkiye geneli tahmini sepet aralığı.</p>
+                    <h3 class="font-display text-2xl font-bold">Plan Alışverişi ve Bütçesi</h3>
+                    <p class="mt-1 text-sm text-on-surface-variant">Bu haftalık plan için gerekli ürünler ve Türkiye geneli tahmini bütçe aralığı.</p>
                 </div>
                 <div class="flex items-center gap-4">
                     <select id="groceryTarget" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-2 text-sm font-bold"></select>

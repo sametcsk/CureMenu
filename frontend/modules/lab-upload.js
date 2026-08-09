@@ -106,6 +106,16 @@ function toNumericValue(value) {
     return Number.isFinite(parsed) ? parsed : null;
 }
 
+function formatLabChartDate(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value || '-');
+    return date.toLocaleDateString('tr-TR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+    });
+}
+
 function buildLabChartModel(labs) {
     const observationDate = (log) => {
         const metadata = parseHistoryMetadata(log?.metadata);
@@ -114,7 +124,7 @@ function buildLabChartModel(labs) {
     const validLabs = (Array.isArray(labs) ? labs : [])
         .filter(l => l?.metadata)
         .sort((a, b) => new Date(observationDate(a)) - new Date(observationDate(b)));
-    const labels = validLabs.map(l => formatDecisionDate(observationDate(l)).split(' ')[0]);
+    const labels = validLabs.map(l => formatLabChartDate(observationDate(l)));
     const biomarkerMap = {};
     let numericObservationCount = 0;
 

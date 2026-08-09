@@ -376,8 +376,8 @@ def test_smart_grocery_open_budget_feedback_and_close(authenticated_page) -> Non
     page.locator('#smartGroceryModal [data-grocery-action="close"]').last.click()
     assert "hidden" in page.locator("#smartGroceryModal").get_attribute("class")
 
-    page.locator('[data-grocery-action="calculate-budget"]').click()
-    page.locator("#budgetResult").get_by_text("Tahmini toplam").wait_for()
+    assert page.locator('[data-grocery-action="calculate-budget"]').count() == 0
+    assert page.get_by_text("Plan Alışverişi ve Bütçesi", exact=True).count() == 1
 
     dialog_messages: list[str] = []
     page.once("dialog", lambda dialog: (dialog_messages.append(dialog.message), dialog.accept()))
@@ -1186,6 +1186,15 @@ def test_smart_grocery_data_isolation(authenticated_page) -> None:
         )
         
     page.route("**/api/smart-grocery", intercept_grocery)
+
+    page.evaluate(
+        """
+        window.currentProfile = {
+            ...(window.currentProfile || {}),
+            aile_uyeleri: [{id: 'member-ece', ad: 'Ece'}],
+        };
+        """
+    )
     
     # Needs a weekly plan
     page.evaluate("window.currentPlanText = 'Test planı'")
