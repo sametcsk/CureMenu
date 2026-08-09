@@ -471,7 +471,8 @@ def test_final_cevap_kullaniciya_teknik_inceleme_dili_sizdirmaz():
     )
 
     assert "Yumurtasız, sütsüz ve yer fıstıksız" in answer
-    assert "doktorunuza" in answer
+    assert "doktorunuza" not in answer
+    assert "Böbrek hastalığında" not in answer
     for forbidden in (
         "Doğrulama uyarısı",
         "kaynak kaydı izlenebilir",
@@ -1340,6 +1341,8 @@ def test_chat_family_dinner_recommendation_uses_fast_answer(client, monkeypatch)
     ],
 )
 def test_chat_everyday_messages_bypass_langgraph(client, monkeypatch, message):
+    from src.curebot_intent import _natural_fallback
+
     login_with_profile(client, "5554445700", "Everyday Graph Bypass", ad="Samet", alerjiler=["fındık"])
     if message.startswith("anneme"):
         family = client.post(
@@ -1351,6 +1354,10 @@ def test_chat_everyday_messages_bypass_langgraph(client, monkeypatch, message):
     async def should_not_run(_state):
         raise AssertionError("Everyday CureBot path must not invoke the model graph")
 
+    monkeypatch.setattr(
+        "src.routers.chat.generate_curebot_natural_answer",
+        lambda plan, *_args, **_kwargs: _natural_fallback(plan),
+    )
     monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
     response = client.post("/api/chat", json={"mesaj": message, "kimin_icin": "kendim"})
 
@@ -1375,6 +1382,124 @@ def test_chat_explicit_hazelnut_baklava_still_blocks_without_graph(client, monke
     assert response.status_code == 200
     assert '"input_safety": true' in response.text
     assert "Failed to fetch" not in response.text
+
+
+def test_chat_shellfish_conflict_blocks_before_natural_generation(client, monkeypatch):
+    login_with_profile(
+        client,
+        "5554445703",
+        "Shellfish Router Gate",
+        alerjiler=["kabuklu deniz ürünleri"],
+        ilaclar=["warfarin"],
+    )
+
+    def should_not_generate(*_args, **_kwargs):
+        raise AssertionError("Explicit shellfish conflict must block before natural generation")
+
+    async def should_not_run(_state):
+        raise AssertionError("Explicit shellfish conflict must not invoke the model graph")
+
+    monkeypatch.setattr("src.routers.chat.generate_curebot_natural_answer", should_not_generate)
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+    response = client.post(
+        "/api/chat",
+        json={
+            "mesaj": "Karides soteli bir yemek düşünüyordum, sonra midyeli bir çorba da yapabilirim.",
+            "kimin_icin": "kendim",
+        },
+    )
+
+    assert response.status_code == 200
+    assert '"input_safety": true' in response.text
+    assert "alerjen" in response.text.casefold() or "alerji" in response.text.casefold()
+    assert "warfarin" not in response.text.casefold()
+
+
+def test_chat_allergy_declaration_is_not_treated_as_food_conflict(client, monkeypatch):
+    login_with_profile(client, "5554445704", "Allergy Declaration", alerjiler=["fındık"])
+    generated = []
+
+    def natural_answer(*_args, **_kwargs):
+        generated.append(True)
+        return "Kahvaltıyı sade tutabiliriz.\n\n- **Pratik seçenek:** Alerjen içermeyen, etiketi net ürünleri seçebilirsin."
+
+    async def should_not_run(_state):
+        raise AssertionError("Safe profile declaration should use the natural path")
+
+    monkeypatch.setattr("src.routers.chat.generate_curebot_natural_answer", natural_answer)
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+    response = client.post(
+        "/api/chat",
+        json={
+            "mesaj": "Fındık alerjim var, bana pratik bir kahvaltı önerir misin?",
+            "kimin_icin": "kendim",
+        },
+    )
+
+    assert response.status_code == 200
+    assert generated == [True]
+    assert '"input_safety": true' not in response.text
+    assert "Pratik seçenek" in response.text
+
+
+def test_chat_family_followup_and_nutrition_overwhelm_use_structured_context(client, monkeypatch):
+    login_with_profile(
+        client,
+        "5554445702",
+        "Structured Followup",
+        ad="Ana Profil",
+        hastaliklar=["kronik böbrek hastalığı"],
+        ilaclar=["warfarin"],
+    )
+    family = client.post(
+        "/api/family/add",
+        json={"ad": "Çocuk Profil", "yas": 9, "cinsiyet": "erkek", "yakinlik": "çocuk"},
+    )
+    assert family.status_code == 200
+
+    generated_calls = []
+
+    def natural_answer(plan, _snapshot, _message, _safety_context="", conversation_context=None):
+        generated_calls.append((plan, conversation_context))
+        if plan.intent == "meal_followup":
+            return "Önceki akşam öğününü tamamlayalım.\n\n- **Ekmek:** İçeriği net, ölçülü bir seçenek kullanabilirsiniz."
+        if plan.intent == "emotional_support":
+            return "Bu kadar çok ayrıntıyı düşünmek yorucu olabilir.\n\n- **Tek adım:** Şimdilik yalnızca bir sonraki öğünü birlikte seçelim."
+        return "Aile için sade bir akşam öğünü seçelim.\n\n- **Ana tabak:** Fırında protein ve sebzeyi birlikte hazırlayabilirsiniz."
+
+    async def should_not_run(_state):
+        raise AssertionError("Structured everyday context should bypass the model graph")
+
+    monkeypatch.setattr("src.routers.chat.generate_curebot_natural_answer", natural_answer)
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+
+    dinner = client.post(
+        "/api/chat",
+        json={"mesaj": "Bu akşam tüm aile için ortak tek yemek öner", "kimin_icin": "aile"},
+    )
+    followup = client.post(
+        "/api/chat",
+        json={"mesaj": "Peki ekmek olarak ne koyalım sofraya?", "kimin_icin": "aile"},
+    )
+    overwhelmed = client.post(
+        "/api/chat",
+        json={"mesaj": "Biraz bunaldım, hiçbir şey yiyemez gibiyim; ne yapmalıyım?", "kimin_icin": "aile"},
+    )
+
+    assert dinner.status_code == followup.status_code == overwhelmed.status_code == 200
+    assert "Aile için sade" in dinner.text
+    assert "Önceki akşam öğününü" in followup.text
+    assert "Böbrek hastalığında" not in followup.text
+    assert "yorucu olabilir" in overwhelmed.text
+    assert [call[0].intent for call in generated_calls] == [
+        "meal_recommendation",
+        "meal_followup",
+        "emotional_support",
+    ]
+    followup_context = generated_calls[1][1]
+    assert followup_context.last_intent == "meal_recommendation"
+    assert followup_context.last_meal_context == "dinner"
+    assert followup_context.last_target_scope == "family"
 
 
 def test_chat_intent_levothyroxine_badem_sutu_timing_not_dairy_block(client, monkeypatch):
@@ -1540,6 +1665,45 @@ def test_review_without_specific_warning_keeps_useful_model_answer():
 
     assert answer == "Kabaklı karabuğday pilavını 20 dakikada hazırlayabilirsiniz."
     assert "Sağlık profiliniz nedeniyle" not in answer
+
+
+def test_profile_only_kidney_review_does_not_prepend_unrelated_warning():
+    from src.chat_response import final_response_text
+
+    answer = final_response_text({
+        "istek": "Peki ekmek olarak ne koyalım sofraya?",
+        "uzman_onerisi": "Tam tahıllı veya düşük sodyumlu bir ekmeği ölçülü porsiyonda seçebilirsiniz.",
+        "uyari_mesaji": "Böbrek hastalığında güncel tahliller değerlendirilmelidir.",
+        "guvenli_mi": True,
+        "risk_score": 0.5,
+        "resolved_profile_snapshot": {"diseases": ["kronik böbrek hastalığı"]},
+        "governance_events": [
+            {"event_type": "PolicyChecked", "status": "review", "metadata": {"requires_review": True}},
+        ],
+    })
+
+    assert answer.startswith("Tam tahıllı")
+    assert "Böbrek hastalığında" not in answer
+
+
+def test_specific_medication_review_is_appended_as_short_note():
+    from src.chat_response import final_response_text
+
+    answer = final_response_text({
+        "istek": "Ispanaklı salata uygun mu?",
+        "uzman_onerisi": "Salatayı dengeli bir proteinle tamamlayabilirsiniz.",
+        "uyari_mesaji": "Warfarin kullanırken K vitamini tüketimi tutarlı olmalıdır.",
+        "guvenli_mi": True,
+        "risk_score": 0.5,
+        "resolved_profile_snapshot": {"medications": ["Warfarin"]},
+        "governance_events": [
+            {"event_type": "MedicationSafetyChecked", "status": "review", "metadata": {"severity": "caution"}},
+        ],
+    })
+
+    assert answer.startswith("Salatayı")
+    assert "\n\nKısa not:" in answer
+    assert "düzenli ve tutarlı" in answer
 
 
 def test_chat_intent_diabetes_snack_returns_concrete_options(client, monkeypatch):

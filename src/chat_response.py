@@ -36,6 +36,28 @@ def safety_outcome(result: dict) -> tuple[bool, bool]:
     return blocked, review_required
 
 
+def _has_specific_review_signal(result: dict) -> bool:
+    for event in result.get("governance_events") or []:
+        event_type = event.get("event_type")
+        status = event.get("status")
+        metadata = event.get("metadata") or {}
+        if event_type == "RuleTriggered" and status in {"review", "blocked"}:
+            return True
+        if event_type in {"MedicationSafetyChecked", "MedicationReviewRequired"} and status in {"review", "blocked"}:
+            return True
+        if event_type == "RuleChecked" and (
+            int(metadata.get("warning_count") or 0) > 0
+            or int(metadata.get("risk_count") or 0) > 0
+        ):
+            return True
+    warning = normalized_message(str(result.get("uyari_mesaji") or ""))
+    if "ilac-besin etkilesimi" in warning and any(
+        signal in warning for signal in ("dogrulanamadi", "risk", "sakincali", "etkilesim")
+    ):
+        return True
+    return False
+
+
 def final_response_text(result: dict, streamed_text: str = "") -> str:
     warning = str(result.get("uyari_mesaji") or "").strip()
     profile = result.get("resolved_profile_snapshot")
@@ -52,12 +74,14 @@ def final_response_text(result: dict, streamed_text: str = "") -> str:
     if blocked:
         return user_facing_safety_guidance(warning, blocked=True, profile=profile)
     if review_required:
-        if base_answer and not warning:
+        if base_answer and (not warning or not _has_specific_review_signal(result)):
             return base_answer
         if base_answer and normalized_message(warning) == normalized_message(_GENERIC_REVIEW_GUIDANCE):
             return base_answer
-        parts = [user_facing_safety_guidance(warning, profile=profile)]
+        guidance = user_facing_safety_guidance(warning, profile=profile)
         if base_answer and base_answer != warning:
-            parts.append(base_answer)
-        return "\n\n".join(parts)
+            if normalized_message(guidance) in normalized_message(base_answer):
+                return base_answer
+            return f"{base_answer}\n\nKısa not: {guidance}"
+        return guidance
     return base_answer or warning

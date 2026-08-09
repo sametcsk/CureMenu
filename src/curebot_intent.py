@@ -2,18 +2,21 @@
 import json
 from datetime import datetime
 import re
-from typing import Literal
+import unicodedata
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 from src.llm import invoke_with_model_fallback, parse_llm_response
+from src.medical_knowledge.normalizer import canonical_medication_name, extract_medication_mentions
 
 
 
 class CureBotIntentPlan(BaseModel):
     intent: Literal[
         "smalltalk", "meal_recommendation", "dessert_craving", "coffee_habit",
-        "explanation_followup", "medication_food_question", "allergy_conflict",
+        "meal_followup", "explanation_followup", "emotional_support",
+        "medication_food_question", "allergy_conflict",
         "product_question", "lab_followup", "menu_followup", "out_of_scope",
         "unknown_nutrition_related", "off_topic"
     ] = "unknown_nutrition_related"
@@ -30,45 +33,134 @@ class CureBotIntentPlan(BaseModel):
     privacy_mode: Literal["minimal"] = "minimal"
 
 
-def fallback_intent_plan(message: str, target: str = "kendim") -> CureBotIntentPlan:
-    text = str(message or "").casefold()
-    resolved_target = "family" if target == "aile" else ("self" if target == "kendim" else "member")
-    risk = ""
-    if any(x in text for x in ("fındıklı baklava", "fındıklı tatlı", "yiyebilir miyim")):
-        risk = message
-    context = "unknown"
+class CureBotConversationContext(BaseModel):
+    last_intent: str = ""
+    last_meal_context: Literal["breakfast", "lunch", "dinner", "snack", "dessert", "coffee_pairing", "unknown"] = "unknown"
+    last_answer_type: str = ""
+    last_target_scope: Literal["self", "member", "family", "unknown"] = "unknown"
+    has_previous_turn: bool = False
+    privacy_mode: Literal["minimal"] = "minimal"
+
+
+def _normalized(value: str) -> str:
+    folded = unicodedata.normalize("NFKD", str(value or "").casefold().replace("ı", "i"))
+    return "".join(char for char in folded if not unicodedata.combining(char))
+
+
+def _coerce_conversation_context(value: Any) -> CureBotConversationContext:
+    if isinstance(value, CureBotConversationContext):
+        return value
+    if isinstance(value, dict):
+        allowed = {
+            key: value.get(key)
+            for key in ("last_intent", "last_meal_context", "last_answer_type", "last_target_scope", "has_previous_turn")
+            if key in value
+        }
+        try:
+            return CureBotConversationContext(**allowed)
+        except Exception:
+            return CureBotConversationContext()
+    if isinstance(value, list):
+        # Raw conversation messages are deliberately ignored. Only explicit
+        # local labels are accepted as cross-turn context.
+        for item in reversed(value):
+            if isinstance(item, dict) and any(str(key).startswith("last_") for key in item):
+                return _coerce_conversation_context(item)
+    return CureBotConversationContext()
+
+
+def _resolved_target_scope(target: str) -> Literal["self", "member", "family"]:
+    normalized = _normalized(target)
+    if normalized in {"aile", "family"}:
+        return "family"
+    if normalized in {"kendim", "self"}:
+        return "self"
+    return "member"
+
+
+def fallback_intent_plan(
+    message: str,
+    target: str = "kendim",
+    conversation_context: CureBotConversationContext | dict | list | None = None,
+) -> CureBotIntentPlan:
+    text = _normalized(message)
+    previous_context = _coerce_conversation_context(conversation_context)
+    resolved_target = _resolved_target_scope(target)
+    meal_context = "unknown"
     intent = "unknown_nutrition_related"
     if any(x in text for x in ("kahvalt", "sabah")):
-        context, intent = "breakfast", "meal_recommendation"
-    elif any(x in text for x in ("akşam", "aksam", "öğün", "ogun")):
-        context, intent = "dinner", "meal_recommendation"
-    elif any(x in text for x in ("tatlı", "tatli")):
-        context, intent = "dessert", "dessert_craving"
+        meal_context, intent = "breakfast", "meal_recommendation"
+    elif any(x in text for x in ("aksam", "ogun", "yemek", "sofra")):
+        meal_context, intent = "dinner", "meal_recommendation"
+    elif "tatli" in text:
+        meal_context, intent = "dessert", "dessert_craving"
     elif "kahve" in text:
-        context, intent = "coffee_pairing", "coffee_habit"
-    elif any(x in text for x in ("hangi kriter", "neye göre", "neye gore", "önceki öner")):
+        meal_context, intent = "coffee_pairing", "coffee_habit"
+    if any(x in text for x in ("hangi kriter", "neye gore", "onceki oner", "neden bunu onerdin")):
         intent = "explanation_followup"
-    if text.strip() in {"öner", "oner", "alternatif", "başka", "baska", "daha farklı", "daha farkli", "detay", "tarif"}:
-        context, intent = "dessert", "dessert_craving"
-    return CureBotIntentPlan(target=resolved_target, intent=intent, meal_context=context, risk_subject=risk, needs_safety_gate=bool(risk), reason="local privacy fallback")
+
+    emotional_signals = (
+        "bunaldim", "hicbir sey yiyem", "her sey yasak", "ne yiyecegimi sasirdim",
+        "yemek secmekten yoruldum", "beslenme konusunda kaygili",
+    )
+    if any(signal in text for signal in emotional_signals):
+        intent = "emotional_support"
+
+    followup_signals = (
+        "peki", "yanina ne", "sofraya ne", "ekmek olarak", "malzemeleri ne",
+        "tarifini", "baska bir", "daha farkli", "alternatif", "hangisi",
+    )
+    short_followups = {"oner", "alternatif", "baska", "daha farkli", "detay", "tarif"}
+    if text.strip() in short_followups or any(signal in text for signal in followup_signals):
+        intent = "meal_followup"
+        if previous_context.last_meal_context != "unknown":
+            meal_context = previous_context.last_meal_context
+
+    medication_mentions = extract_medication_mentions(message)
+    if not medication_mentions:
+        medication_mentions = [
+            token
+            for token in re.findall(r"[A-Za-zÇĞİÖŞÜçğıöşü-]{2,40}", str(message or ""))
+            if canonical_medication_name(token) is not None
+        ]
+    medication_question = bool(medication_mentions) and any(
+        signal in text
+        for signal in ("birlikte", "sonra", "once", "icersem", "icsem", "yesem", "sakincali", "etkiles", "uygun mu")
+    )
+    if medication_question:
+        intent = "medication_food_question"
+
+    explicit_consumption_question = any(
+        signal in text for signal in ("yiyebilir miyim", "icebilir miyim", "uygun mu", "sakincali mi")
+    )
+    risk_subject = "explicit_food_request" if explicit_consumption_question else ""
+    return CureBotIntentPlan(
+        target=resolved_target,
+        intent=intent,
+        meal_context=meal_context,
+        risk_subject=risk_subject,
+        needs_safety_gate=bool(explicit_consumption_question or medication_question),
+        is_followup=intent in {"meal_followup", "explanation_followup"},
+        reason="local privacy fallback",
+    )
 
 
-def classify_intent_plan(message: str, conversation: list[dict] | None = None, target: str = "self", profile_names: list[str] | None = None, health_flags: dict | None = None) -> CureBotIntentPlan:
-    text = str(message or "").casefold()
+def classify_intent_plan(message: str, conversation: Any = None, target: str = "self", profile_names: list[str] | None = None, health_flags: dict | None = None) -> CureBotIntentPlan:
+    text = _normalized(message)
     nutrition_signals = (
-        "yemek", "yemel", "beslen", "diyet", "kahvalt", "öğün", "ogun", "tatlı", "tatli",
-        "kahve", "alerji", "hastalık", "hastalik", "ilaç", "ilac", "tahlil", "menü", "menu",
-        "kalori", "protein", "market", "alışveriş", "alisveris", "yoğurt", "yogurt",
+        "yemek", "yemel", "beslen", "diyet", "kahvalt", "ogun", "tatli",
+        "kahve", "alerji", "hastalik", "ilac", "tahlil", "menu",
+        "kalori", "protein", "market", "alisveris", "yogurt",
     )
     off_topic_signals = (
-        "hava nasıl", "hava nasil", "fıkra", "fikra", "react js", "javascript", "kod yaz",
-        "başkent", "baskent", "futbol", "maç sonucu", "mac sonucu", "şiir yaz", "siir yaz",
+        "hava nasil", "fikra", "react js", "javascript", "kod yaz",
+        "baskent", "futbol", "mac sonucu", "siir yaz",
     )
     if any(signal in text for signal in off_topic_signals) and not any(signal in text for signal in nutrition_signals):
         return CureBotIntentPlan(intent="off_topic", answer_style="short", confidence=0.98, reason="local off-topic classifier")
     # The classifier is intentionally local. Raw history, names and health data
     # must not be sent to a provider merely to choose a routing label.
-    return fallback_intent_plan(message, target)
+    return fallback_intent_plan(message, target, conversation)
 
 
 def plan_requires_safety_gate(plan: CureBotIntentPlan) -> bool:
@@ -76,13 +168,18 @@ def plan_requires_safety_gate(plan: CureBotIntentPlan) -> bool:
 
 
 def _natural_fallback(plan: CureBotIntentPlan) -> str:
-    return {
-        "breakfast": "Bugün pratik ve dengeli bir kahvaltı seçelim: yumurta veya yulafı, yanında sebze ve küçük bir meyve porsiyonuyla tamamlayabilirsin.",
-        "dinner": "Akşam için ızgara bir protein, bol sebze ve ölçülü bir tahıl/ekmek eşliği iyi bir başlangıç olur. Evdeki malzemeleri söylersen bunu netleştirebilirim.",
-        "dessert_craving": "Tatlı isteğini küçük bir porsiyon fırınlanmış elma, meyve-chia karışımı veya kuruyemişsiz uygun bir yoğurt alternatifiyle karşılayabilirsin.",
-        "coffee_habit": "Kahveyi tamamen bırakman gerekmeyebilir; miktarı ve saatini gözlemle, yanında küçük ve dengeli bir atıştırmalık tercih et.",
-        "explanation_followup": "Öneriyi profilindeki kısıtlar, öğünün dengesi ve isteğinin pratikliği birlikte düşünülerek hazırladım. İstersen hangi kısmı değiştirmek istediğini söyle.",
-    }.get(plan.meal_context, "İsteğini profil bağlamında değerlendiriyorum. Birkaç güvenli ve pratik seçenek önerebilirim; istersen neyi özellikle sevdiğini de söyle.")
+    by_intent = {
+        "dessert_craving": "Tatlı isteğini daha dengeli karşılayabiliriz:\n\n- **Meyveli seçenek:** Küçük bir porsiyon fırınlanmış elma veya armut deneyebilirsin.\n- **Kaşık tatlısı:** Kuruyemişsiz chia pudingi ya da sana uygun bir yoğurt alternatifi seçebilirsin.",
+        "coffee_habit": "Kahveyi tamamen bırakmak gerekmeyebilir:\n\n- **Miktarı gözle:** Seni rahatsız etmeyen günlük miktarı koru.\n- **Saati ayarla:** Uyku veya mide sorunu yapıyorsa daha erken saatlere çek.",
+        "meal_followup": "Önceki öğün fikrini tamamlayabiliriz:\n\n- **Dengeli eşlikçi:** Sebze, ölçülü bir tahıl veya uygun bir ekmek seçeneği ekleyebilirsin.\n- **Netleştirelim:** Hangi parçayı değiştirmek istediğini söylersen öneriyi daraltabilirim.",
+        "emotional_support": "Bu kadar çok ayrıntıyı aynı anda düşünmek yorucu gelebilir.\n\n- **Tek öğüne odaklan:** Şimdilik yalnızca bir sonraki öğünü seçelim.\n- **Basit tut:** Bildiğin, içeriği net ve seni rahatsız etmeyen birkaç temel malzemeyle başlayalım.",
+        "explanation_followup": "Öneriyi profil uyumu, alerji güvenliği, porsiyon dengesi ve hazırlama kolaylığını birlikte düşünerek oluşturdum.",
+    }
+    by_meal = {
+        "breakfast": "Kahvaltıyı sade ve dengeli tutabiliriz:\n\n- **Protein desteği:** Sana uygun bir yumurta veya yoğurt seçeneği ekle.\n- **Lif desteği:** Sebze ve ölçülü bir tahılla tamamla.",
+        "dinner": "Akşam için dengeli bir tabakla başlayabiliriz:\n\n- **Ana yemek:** Izgara veya fırında bir protein seç.\n- **Yanına:** Sebze ve ölçülü bir tahıl ya da ekmek ekle.",
+    }
+    return by_intent.get(plan.intent) or by_meal.get(plan.meal_context) or "İsteğini biraz netleştirirsen profil bağlamında pratik bir seçenek önerebilirim."
 
 
 def _concise_markdown(answer: str, plan: CureBotIntentPlan, snapshot) -> str:
@@ -110,7 +207,24 @@ def _concise_markdown(answer: str, plan: CureBotIntentPlan, snapshot) -> str:
     return text.strip() or _natural_fallback(plan)
 
 
-def generate_curebot_natural_answer(intent_plan: CureBotIntentPlan, snapshot, user_message: str, safety_context: str = "") -> str:
+def _privacy_safe_user_message(user_message: str, snapshot) -> str:
+    text = str(user_message or "")[:900]
+    target_name = str(getattr(snapshot, "target_name", "") or "").strip()
+    if target_name and _normalized(target_name) not in {"tum aile", "family"}:
+        text = re.sub(re.escape(target_name), "seçili kişi", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?<!\d)(?:\+?90\s*)?0?5\d{2}[\s.-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}(?!\d)", "[telefon gizlendi]", text)
+    text = re.sub(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", "[e-posta gizlendi]", text, flags=re.IGNORECASE)
+    return text
+
+
+def generate_curebot_natural_answer(
+    intent_plan: CureBotIntentPlan,
+    snapshot,
+    user_message: str,
+    safety_context: str = "",
+    conversation_context: CureBotConversationContext | dict | None = None,
+) -> str:
+    previous_context = _coerce_conversation_context(conversation_context)
     flags = {
         "target_scope": snapshot.target_scope,
         "allergy_present": bool(snapshot.allergies),
@@ -120,10 +234,13 @@ def generate_curebot_natural_answer(intent_plan: CureBotIntentPlan, snapshot, us
         "disease_categories": list(snapshot.diseases)[:8],
         "medication_categories": list(snapshot.medications)[:8],
     }
+    safe_message = _privacy_safe_user_message(user_message, snapshot)
+    context_labels = previous_context.model_dump(exclude={"privacy_mode"})
     prompt = f"""You are CureBot, a warm Turkish nutrition decision-support assistant.
 Return only the final Turkish answer to the user.
-USER MESSAGE: {str(user_message)[:900]}
+USER MESSAGE: {safe_message}
 INTENT PLAN: {intent_plan.model_dump_json(exclude={"reason"})}
+LOCAL CONVERSATION LABELS: {json.dumps(context_labels, ensure_ascii=False)}
 MINIMAL PROFILE FACTS: {json.dumps(flags, ensure_ascii=False)}
 SAFETY CONTEXT: {safety_context[:500]}
 RESPONSE VARIATION SEED: {datetime.now().minute}
@@ -137,6 +254,8 @@ Avoid exaggerated words such as "harika", "en sağlıklısı" or "çok önemli".
 If allergy flags are present, do not make nuts or nut milks the default first option; prefer nut-free fruit, baked apple/pear, chia or suitable yogurt alternatives. If a nut-derived option is mentioned, advise checking labels and cross-contamination.
 Never begin with generic health disclaimers. Do not use the phrase 'kayıtlı alerjenleri dışarıda bırakan'.
 Use a short safety note only at the end when clearly necessary. Do not invent unknown ingredients or medical facts.
+For meal_followup, answer the current follow-up using only the local labels and current message. If those labels are insufficient, ask one short clarifying question instead of inventing the previous meal.
+For emotional_support, acknowledge that food decisions can feel tiring, reduce the task to one manageable next meal, and avoid diagnosis, alarmist language, or a long restriction list.
 """
     try:
         response = invoke_with_model_fallback(prompt, temperature=0.65)

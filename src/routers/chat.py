@@ -30,7 +30,14 @@ from src.config import settings
 from src.profile_context import ResolvedProfileSnapshot, history_matches_snapshot, resolve_profile_snapshot
 from src.chat_intents import intent_fast_answer, merge_medications, normalized_message
 from src.chat_response import final_response_text, safety_outcome
-from src.curebot_intent import classify_intent_plan, fallback_intent_plan, generate_curebot_natural_answer, plan_requires_safety_gate
+from src.curebot_intent import (
+    CureBotConversationContext,
+    CureBotIntentPlan,
+    classify_intent_plan,
+    fallback_intent_plan,
+    generate_curebot_natural_answer,
+    plan_requires_safety_gate,
+)
 from src.presentation import (
     friendly_source_title,
     format_rule_risks_for_user,
@@ -47,6 +54,53 @@ def _infer_chat_target(requested_target: str) -> tuple[str, str]:
         logger.warning("Chat target is missing from request, defaulting to 'kendim'.")
         return "kendim", "Varsayılan (hedef belirtilmemiş)"
     return requested_target, "Seçili hedef kişi"
+
+
+def _chat_history_metadata(snapshot: ResolvedProfileSnapshot, plan: CureBotIntentPlan | None = None, answer_type: str = "") -> str:
+    metadata = dict(snapshot.history_metadata())
+    if plan is not None:
+        metadata.update({
+            "last_intent": plan.intent,
+            "last_meal_context": plan.meal_context,
+            "last_answer_type": answer_type or plan.answer_style,
+            "last_target_scope": snapshot.target_scope,
+            "privacy_mode": "minimal",
+        })
+    return json.dumps(metadata, ensure_ascii=False)
+
+
+def _local_conversation_context(logs: list[dict], snapshot: ResolvedProfileSnapshot) -> CureBotConversationContext:
+    previous = next((item for item in logs if item.get("sayfa") == "CureBot"), None)
+    if previous is None:
+        return CureBotConversationContext(last_target_scope=snapshot.target_scope)
+    try:
+        metadata = json.loads(previous.get("metadata") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        metadata = {}
+    if metadata.get("last_intent"):
+        try:
+            return CureBotConversationContext(
+                last_intent=str(metadata.get("last_intent") or ""),
+                last_meal_context=str(metadata.get("last_meal_context") or "unknown"),
+                last_answer_type=str(metadata.get("last_answer_type") or ""),
+                last_target_scope=str(metadata.get("last_target_scope") or snapshot.target_scope),
+                has_previous_turn=True,
+            )
+        except ValueError:
+            logger.warning("Invalid local CureBot context labels; rebuilding from the previous local intent.")
+    # Legacy records are classified locally once. Their raw text is never
+    # included in the provider prompt.
+    previous_plan = fallback_intent_plan(
+        str(previous.get("istek") or ""),
+        snapshot.target_scope,
+    )
+    return CureBotConversationContext(
+        last_intent=previous_plan.intent,
+        last_meal_context=previous_plan.meal_context,
+        last_answer_type=previous_plan.answer_style,
+        last_target_scope=snapshot.target_scope,
+        has_previous_turn=True,
+    )
 
 # NEMO GUARDRAILS
 rails = None
@@ -314,7 +368,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
     snapshot = resolve_profile_snapshot(telefon, resolved_target, db=db)
     profil_ozeti = snapshot.profile_summary
     kullanici_id = snapshot.memory_namespace
-    history_metadata = json.dumps(snapshot.history_metadata(), ensure_ascii=False)
+    history_metadata = _chat_history_metadata(snapshot)
     ilaclar, message_medications = _merge_medications(
         list(snapshot.medications),
         req.mesaj,
@@ -333,6 +387,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
         for item in loglari_getir_db(telefon, limit=50, conn=db)
         if history_matches_snapshot(item, snapshot)
     ][:10]
+    conversation_context = _local_conversation_context(son_loglar, snapshot)
     sohbet_gecmisi = []
     for log in reversed(son_loglar):
         sayfa = log.get("sayfa", "Sistem")
@@ -396,7 +451,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             run_in_threadpool(
                 classify_intent_plan,
                 req.mesaj,
-                [],
+                conversation_context.model_dump(),
                 snapshot.target_scope,
                 [],
                 {
@@ -408,7 +463,9 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             timeout=8,
         )
     except Exception:
-        intent_plan = fallback_intent_plan(req.mesaj, req.kimin_icin)
+        intent_plan = fallback_intent_plan(req.mesaj, req.kimin_icin, conversation_context)
+
+    history_metadata = _chat_history_metadata(snapshot, intent_plan)
         
     if intent_plan.intent == "off_topic":
         off_topic_answer = "Ben beslenme ve sağlık odaklı bir asistanım. Lütfen CureMenu'nün temel amacı olan bu konularda sorular sorun."
@@ -423,7 +480,11 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             yield _sse("done")
         return StreamingResponse(off_topic_stream(), media_type="text/event-stream")
 
-    if intent_plan.intent in {"meal_recommendation", "dessert_craving", "coffee_habit", "explanation_followup", "product_question"} and not plan_requires_safety_gate(intent_plan):
+    input_safety_answer = _explicit_input_safety_answer(snapshot, req.mesaj)
+    if not input_safety_answer and intent_plan.intent in {
+        "meal_recommendation", "meal_followup", "dessert_craving", "coffee_habit",
+        "explanation_followup", "emotional_support", "product_question",
+    } and not plan_requires_safety_gate(intent_plan):
         if normalized_message(req.mesaj).strip() in {"öner", "oner", "alternatif", "başka", "baska", "detay", "tarif"} and not sohbet_gecmisi:
             natural_answer = "Neye alternatif istediğini tam çıkaramadım. İstersen tatlı, kahvaltı ya da akşam yemeği olarak uyarlayabilirim."
         else:
@@ -431,7 +492,14 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
         try:
             if natural_answer is None:
                 natural_answer = await asyncio.wait_for(
-                    run_in_threadpool(generate_curebot_natural_answer, intent_plan, snapshot, req.mesaj, "Önceki konuşma bağlamı yerel olarak mevcut; ham içerik gönderilmedi." if sohbet_gecmisi else ""),
+                    run_in_threadpool(
+                        generate_curebot_natural_answer,
+                        intent_plan,
+                        snapshot,
+                        req.mesaj,
+                        "Önceki konuşma bağlamı yerel etiketlerle mevcut." if conversation_context.has_previous_turn else "",
+                        conversation_context,
+                    ),
                     timeout=12,
                 )
         except Exception:
@@ -448,7 +516,6 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
                 yield _sse("done")
 
             return StreamingResponse(natural_stream(), media_type="text/event-stream")
-    input_safety_answer = _explicit_input_safety_answer(snapshot, req.mesaj)
     if input_safety_answer:
         blocked_state = _guardrail_block_state(initial_state, input_safety_answer)
         decision_record = build_decision_record(
