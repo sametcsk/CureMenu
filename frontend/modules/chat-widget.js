@@ -7,6 +7,7 @@ window.ChatWidget = {
     typingNode: null,
     requestInFlight: false,
     progressTimers: [],
+    activeTarget: "kendim",
     CHAT_RESPONSE_TIMEOUT_MS: 85000,
     STORAGE_OPEN: "cm_assistant_open",
     MAX_CACHED_MESSAGES: 12,
@@ -35,7 +36,7 @@ window.ChatWidget = {
 
     getConversationCacheKey() {
         if (!this.isAuthenticatedMode()) return null;
-        const target = document.getElementById('chatTarget')?.value || "kendim";
+        const target = this.activeTarget || "kendim";
         const context = window.ProfileManager?.getTargetCacheContext?.(target);
         if (!context) return null;
         return `cm_chat_v2_${context.accountKey}_${context.targetScope}_${context.targetId}_${context.profileFingerprint}`;
@@ -141,10 +142,6 @@ window.ChatWidget = {
                         <span class="material-symbols-outlined">close</span>
                     </button>
                 </header>
-                <div class="cm-assistant-context">
-                    <select id="chatTarget" data-cm-assistant-target class="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-1 text-sm font-bold w-40"></select>
-                    <span class="cm-assistant-context-chip" data-cm-context-chip>${(window.AuthManager && window.AuthManager.getUser().kullanici_adi) ? (window.escapeHtml ? escapeHtml(window.AuthManager.getUser().kullanici_adi) : window.AuthManager.getUser().kullanici_adi) + ' için' : 'Benim için'}</span>
-                </div>
                 <div class="cm-assistant-body" data-cm-assistant-body></div>
                 <div>
                     <div class="cm-assistant-quick" data-cm-assistant-quick>
@@ -231,20 +228,46 @@ window.ChatWidget = {
             }
         });
 
-        const targetSelect = this.root.querySelector("[data-cm-assistant-target]");
-        if (targetSelect) {
-            targetSelect.addEventListener("change", () => {
-                let newLabel = targetSelect.options[targetSelect.selectedIndex]?.text || "Kendim için";
-                if (targetSelect.value === "kendim") {
-                    const userName = window.AuthManager?.getUser()?.kullanici_adi;
-                    newLabel = userName ? `${userName} için` : 'Benim için';
-                }
-                const contextChip = this.root.querySelector('[data-cm-context-chip]');
-                if (contextChip) contextChip.textContent = newLabel;
-                const headerChip = this.root.querySelector('[data-cm-header-context]');
-                if (headerChip) headerChip.textContent = newLabel;
-            });
+    },
+
+    resolveTargetFromMessage(message) {
+        const normalizedMessage = String(message || '').toLocaleLowerCase('tr-TR');
+        const familyMembers = Array.isArray(window.currentProfile?.aile_uyeleri)
+            ? window.currentProfile.aile_uyeleri
+            : [];
+        if (/tüm aile|hepimiz|bize|biz ne yiyelim/.test(normalizedMessage)) {
+            return { target: 'aile', label: 'Tüm aile için' };
         }
+
+        const namedMember = familyMembers.find(item => {
+            const name = String(item?.ad || '').trim().toLocaleLowerCase('tr-TR');
+            return name.length > 1 && normalizedMessage.includes(name);
+        });
+        if (namedMember?.id) {
+            return { target: String(namedMember.id), label: `${namedMember.ad} için` };
+        }
+
+        const relationRules = [
+            { terms: ['annem', 'anneme'], relations: ['anne', 'mother'] },
+            { terms: ['babam', 'babama'], relations: ['baba', 'father'] },
+            { terms: ['oğlum', 'oğluma', 'oglum', 'ogluma'], relations: ['oğul', 'ogul', 'son', 'çocuk', 'cocuk'] },
+            { terms: ['kızım', 'kızıma', 'kizim', 'kizima'], relations: ['kız', 'kiz', 'daughter', 'çocuk', 'cocuk'] },
+            { terms: ['eşim', 'eşime', 'esim', 'esime'], relations: ['eş', 'es', 'spouse'] },
+            { terms: ['kardeşim', 'kardeşime', 'kardesim', 'kardesime'], relations: ['kardeş', 'kardes', 'sibling'] },
+        ];
+        const relationRule = relationRules.find(rule => rule.terms.some(term => normalizedMessage.includes(term)));
+        if (relationRule) {
+            const relatedMember = familyMembers.find(item => relationRule.relations.some(
+                relation => String(item?.yakinlik || '').toLocaleLowerCase('tr-TR').includes(relation)
+            ));
+            const resolvedMember = relatedMember || (familyMembers.length === 1 ? familyMembers[0] : null);
+            if (resolvedMember?.id) {
+                return { target: String(resolvedMember.id), label: `${resolvedMember.ad} için` };
+            }
+        }
+
+        const userName = window.AuthManager?.getUser()?.kullanici_adi;
+        return { target: 'kendim', label: userName ? `${userName} için` : 'Benim için' };
     },
 
     open(message) {
@@ -406,6 +429,12 @@ window.ChatWidget = {
 
     async sendMessage(message) {
         if (!this.root) this.init();
+        const resolved = this.isAuthenticatedMode() ? this.resolveTargetFromMessage(message) : null;
+        if (resolved) {
+            this.activeTarget = resolved.target;
+            const headerChip = this.root.querySelector('[data-cm-header-context]');
+            if (headerChip) headerChip.textContent = resolved.label;
+        }
         
         const sendBtn = this.root.querySelector("[data-cm-assistant-send]");
         if (this.requestInFlight || sendBtn.disabled) return;
@@ -440,40 +469,7 @@ window.ChatWidget = {
 
         try {
             const apiEndpoint = (window.API || '') + '/api/chat';
-            const target = document.getElementById('chatTarget')?.value || "kendim";
-            const targetSelect = document.getElementById('chatTarget');
-            const normalizedMessage = message.toLocaleLowerCase('tr-TR');
-            const familyMembers = Array.isArray(window.currentProfile?.aile_uyeleri) ? window.currentProfile.aile_uyeleri : [];
-            const relationRules = [
-                { terms: ['annem', 'anneme'], relations: ['anne', 'mother'] },
-                { terms: ['babam', 'babama'], relations: ['baba', 'father'] },
-                { terms: ['karde\\u015fim', 'karde\\u015fime'], relations: ['karde\\u015f', 'kardes', 'sibling'] },
-            ];
-            const relationRule = relationRules.find(rule => rule.terms.some(term => normalizedMessage.includes(term)));
-            const member = relationRule
-                ? familyMembers.find(item => relationRule.relations.some(relation => String(item?.yakinlik || '').toLocaleLowerCase('tr-TR').includes(relation)))
-                : familyMembers.find(item => {
-                    const name = String(item?.ad || '').trim().toLocaleLowerCase('tr-TR');
-                    return name.length > 1 && normalizedMessage.includes(name);
-                });
-            const resolvedTarget = /t\u00fcm aile|hepimiz|bize|biz ne yiyelim/.test(normalizedMessage)
-                ? 'aile' : (member?.id ? String(member.id) : target);
-            
-            let inferredLabel = targetSelect?.options[targetSelect.selectedIndex]?.text || "Kendim için";
-            if (target === "kendim") {
-                const userName = window.AuthManager?.getUser()?.kullanici_adi;
-                inferredLabel = userName ? `${userName} için` : 'Benim için';
-            }
-            
-            const normalized = message.toLocaleLowerCase('tr-TR');
-            if (/t\u00fcm aile|hepimiz|bize|biz ne yiyelim/.test(normalized)) {
-                inferredLabel = 'Tüm aile için';
-            }
-            
-            const contextChip = this.root.querySelector('[data-cm-context-chip]');
-            if (contextChip) contextChip.textContent = inferredLabel;
-            const headerChip = this.root.querySelector('[data-cm-header-context]');
-            if (headerChip) headerChip.textContent = inferredLabel;
+            const resolvedTarget = resolved?.target || 'kendim';
             
             if (!window.safeFetchStream) throw new Error("API client yüklü değil.");
             

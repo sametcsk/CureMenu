@@ -100,14 +100,17 @@ function _parseMenuSections(text) {
     const warningText = warningMatch ? warningMatch[1].trim() : '';
     const cleaned = text.replace(/###?\s*Profil[^\n]*Güvenlik[^\n]*\n[\s\S]*?(?=\n🟢|\n🟡|\n🔴|$)/i, '').trim();
 
-    const sectionPattern = /(🟢|🟡|🔴)\s*([^\n]+)\n([\s\S]*?)(?=(?:🟢|🟡|🔴)|$)/g;
+    const sectionPattern = /(?:^|\n)\s*(🟢|🟡|🔴)?\s*(?:#{1,3}\s*)?(?:\*\*)?([^\n*]*(?:Uygun|Güvenli|Dikkatli|Porsiyon|Kaçınılması|Uyuşmayan)[^\n*]*)(?:\*\*)?\s*\n([\s\S]*?)(?=\n\s*(?:🟢|🟡|🔴)?\s*(?:#{1,3}\s*)?(?:\*\*)?[^\n*]*(?:Uygun|Güvenli|Dikkatli|Porsiyon|Kaçınılması|Uyuşmayan)|$)/gi;
     const sections = [];
     let match;
     while ((match = sectionPattern.exec(cleaned)) !== null) {
-        const icon = match[1];
-        const title = match[2].trim().replace(/^Sizin İçin (Uygun|Daha Uygun) Seçenekler.*$/i, 'Uygun Seçenekler')
-            .replace(/Dikkatli.*$/i, 'Dikkatli Tüketilebilecekler')
-            .replace(/Kaçınılması.*$/i, 'Kaçınılması Önerilecekler');
+        const rawTitle = match[2].trim();
+        const icon = match[1] || (/Kaçınılması|Uyuşmayan/i.test(rawTitle) ? '🔴' : (/Dikkatli|Porsiyon/i.test(rawTitle) ? '🟡' : '🟢'));
+        const title = rawTitle
+            .replace(/^Sizin İçin (Uygun|Daha Uygun) Seçenekler.*$/i, 'Daha Uygun Seçenekler')
+            .replace(/^.*(?:Güvenli|Daha Uygun).*$/i, 'Daha Uygun Seçenekler')
+            .replace(/^.*(?:Dikkatli|Porsiyon).*$/i, 'Dikkatli Tercih Edilebilecekler')
+            .replace(/^.*(?:Kaçınılması|Uyuşmayan).*$/i, 'Bu Profil İçin Kaçınılması Daha Doğru Olanlar');
         const items = match[3].trim().split('\n')
             .map(l => l.replace(/^\[|\]$/g, '').replace(/^[-*•]\s*/, '').trim())
             .filter(l => l.length > 3);

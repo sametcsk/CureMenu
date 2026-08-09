@@ -41,13 +41,13 @@ def menu_danismani(ham_metin: str, profil_ozeti: str) -> str:
 
     OUTPUT FORMAT (Markdown only, no extra text before or after):
 
-    ### 🟢 Sizin İçin Güvenli
+    ### 🟢 Daha Uygun Seçenekler
     - [Yemek Adı]: [Neden güvenli olduğu - tek cümle]
 
-    ### 🟡 Porsiyon Kontrolüyle Tüketin
+    ### 🟡 Dikkatli Tercih Edilebilecekler
     - [Yemek Adı]: [Neden dikkatli olunması gerektiği - tek cümle]
 
-    ### 🔴 Profilinizle Uyuşmayan Seçenekler
+    ### 🔴 Bu Profil İçin Kaçınılması Daha Doğru Olanlar
     - [Yemek Adı]: [Neden zararlı veya riskli olduğu - tek cümle]
     """
     
