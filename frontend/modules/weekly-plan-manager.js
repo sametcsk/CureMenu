@@ -28,6 +28,7 @@ window.WeeklyPlanManager = {
 
             const metadata = this.parseHistoryMetadata(log.metadata);
             if (metadata.profile_fingerprint
+                && context.profileFingerprint
                 && metadata.profile_fingerprint !== context.profileFingerprint) {
                 plan.compatibility = {
                     status: 'caution',

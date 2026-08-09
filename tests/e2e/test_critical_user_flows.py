@@ -119,7 +119,15 @@ def test_family_target_selectors_and_chat_payload(browser_page, e2e_base_url: st
     def api_handler(route) -> None:
         url = route.request.url
         if "/api/profile/me" in url:
-            _json(route, {"success": True, "profil": profile})
+            _json(route, {
+                "success": True,
+                "profil": profile,
+                "profile_fingerprints": {
+                    "self": "backend-self-fingerprint",
+                    "family": "backend-family-fingerprint",
+                    "members": {"member-ece": "backend-ece-fingerprint"},
+                },
+            })
         elif "/api/public/metinler" in url:
             _json(route, {"tibbi_feragat_kisa": "Test uyarısı", "ornek_sorular": [], "yaygin_ilaclar": []})
         elif "/api/chat" in url:
@@ -159,7 +167,7 @@ def test_family_target_selectors_and_chat_payload(browser_page, e2e_base_url: st
     page.locator("[data-cm-assistant-body]").get_by_text("Ece için yanıt.", exact=True).wait_for()
 
     assert chat_requests[-1]["kimin_icin"] == "member-ece"
-    assert page.evaluate("Object.keys(localStorage).some(key => key.startsWith('cm_chat_v2_05000000000_member_member-ece_'))")
+    assert page.evaluate("localStorage.getItem('cm_chat_v2_05000000000_member_member-ece_backend-ece-fingerprint') !== null")
     assert page.locator("[data-cm-header-context]").inner_text() == "Ece için"
     assert not runtime_errors
 
@@ -192,9 +200,24 @@ def test_register_wrong_password_login_and_logout(browser_page, e2e_base_url: st
     page.evaluate("switchTab('tahlil')")
     assert page.evaluate("localStorage.getItem('cm_active_tab')") == "tahlil"
 
+    owned_cache_keys = [
+        f"cm_chat_v2_{phone}_self_main-fingerprint",
+        f"cm_saved_plan_json_{phone}_self_main-fingerprint",
+        f"cm_grocery_{phone}_self_main-fingerprint",
+        f"cm_check_{phone}_self_main-fingerprint_meal-0-0",
+        f"cm_target_{phone}_planTarget",
+    ]
+    other_account_key = "cm_chat_v2_05999999999_self_other-fingerprint"
+    page.evaluate(
+        "([ownedKeys, otherKey]) => { ownedKeys.forEach(key => localStorage.setItem(key, 'private')); localStorage.setItem(otherKey, 'keep'); }",
+        [owned_cache_keys, other_account_key],
+    )
+
     page.locator('button[onclick="logout()"]').first.click()
     page.wait_for_url(e2e_base_url + "/", timeout=10_000)
     assert page.evaluate("localStorage.getItem('cm_active_tab')") is None
+    assert page.evaluate("keys => keys.every(key => localStorage.getItem(key) === null)", owned_cache_keys)
+    assert page.evaluate("key => localStorage.getItem(key)", other_account_key) == "keep"
 
     page.goto(f"{e2e_base_url}/giris", wait_until="domcontentloaded")
     page.fill("#phoneNumber", phone)
@@ -804,8 +827,8 @@ def test_mobile_navigation_history_and_menu_layout_regressions(authenticated_pag
         "tahlil",
         "tarayici",
         "buzdolabi",
-        "gecmis",
     }
+    assert mobile_nav.locator('[data-tab="gecmis"]').count() == 0
 
     mobile_nav.locator('[data-tab="plan"]').click()
     assert page.locator("#tab-plan").evaluate("element => element.classList.contains('active')")
@@ -814,7 +837,7 @@ def test_mobile_navigation_history_and_menu_layout_regressions(authenticated_pag
     assert page.locator("#cm-assistant-root").get_attribute("data-open") == "true"
     page.locator("[data-cm-assistant-close]").click()
 
-    mobile_nav.locator('[data-tab="gecmis"]').click()
+    page.evaluate("switchTab('gecmis')")
     page.locator("#historyGrid").get_by_text("Henüz geçmiş işleminiz bulunmuyor.").wait_for()
     assert history_requests
     assert "limit=10" in history_requests[-1]

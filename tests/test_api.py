@@ -136,6 +136,54 @@ def test_login_ve_profil_akisi(client):
     assert res.json()["profil"]["ana_kullanici"]["ilaclar"] == ["lisinopril"]
 
 
+def test_profile_update_preserves_main_id_and_returns_backend_fingerprints(client):
+    login_with_profile(
+        client,
+        "5551112234",
+        "Profil Kimlik Testi",
+        ad="Ana Profil",
+        hastaliklar=["hipertansiyon"],
+    )
+
+    first = client.get("/api/profile/me")
+    assert first.status_code == 200
+    first_body = first.json()
+    main_id = first_body["profil"]["ana_kullanici"]["id"]
+    first_fingerprint = first_body["profile_fingerprints"]["self"]
+    assert len(first_fingerprint) == 64
+
+    update = client.post(
+        "/api/profile/save",
+        json={
+            "kullanici_adi": "Profil Kimlik Testi",
+            "ad": "Ana Profil",
+            "yas": 31,
+            "cinsiyet": "erkek",
+            "hastaliklar": ["hipertansiyon", "insülin direnci"],
+            "alerjiler": [],
+            "ilaclar": [],
+        },
+    )
+    assert update.status_code == 200
+
+    second = client.get("/api/profile/me")
+    assert second.status_code == 200
+    second_body = second.json()
+    assert second_body["profil"]["ana_kullanici"]["id"] == main_id
+    assert second_body["profile_fingerprints"]["self"] != first_fingerprint
+    assert second_body["profile_fingerprints"]["family"] == second_body["profile_fingerprints"]["self"]
+
+    family = client.post(
+        "/api/family/add",
+        json={"ad": "Aile Üyesi", "yas": 28, "cinsiyet": "kadın"},
+    )
+    assert family.status_code == 200
+    member_id = family.json()["uye_id"]
+    with_family = client.get("/api/profile/me").json()["profile_fingerprints"]
+    assert len(with_family["members"][member_id]) == 64
+    assert with_family["family"] not in {with_family["self"], with_family["members"][member_id]}
+
+
 def test_profile_gecersiz_yas_ve_cinsiyeti_422_ile_reddeder(client):
     client.post("/api/register", json={"telefon": "5551112299", "kullanici_adi": "Profil Test", "sifre": "123456"})
     client.post("/api/login", json={"telefon": "5551112299", "sifre": "123456"})
@@ -551,6 +599,8 @@ def test_rule_engine_alerjen_yoklugunu_ihlal_saymaz():
 @patch("src.routers.chat.langgraph_app")
 @patch("src.routers.chat.hafizadakini_getir", return_value=[])
 def test_onceki_cevabin_kaynagi_sadece_kayitli_citationdan_doner(mock_hafiza, mock_graph, client):
+    from src.database import klinik_karar_kaydet
+
     login_with_profile(client, "5554445514", "Source Disclosure Test")
     calls = {"count": 0}
 
@@ -575,20 +625,46 @@ def test_onceki_cevabin_kaynagi_sadece_kayitli_citationdan_doner(mock_hafiza, mo
         }
 
     mock_graph.astream = fake_stream
-    first = client.post(
-        "/api/chat",
-        json={"mesaj": "Akşam yemeği için öneri ver", "kimin_icin": "kendim"},
-    )
+    klinik_karar_kaydet({
+        "decision_id": "recorded-source-decision",
+        "telefon": "5554445514",
+        "kimin_icin": "kendim",
+        "request": "Önceki beslenme sorusu",
+        "final_answer": "Kayıtlı kaynakla hazırlanmış yanıt.",
+        "final_action": "SOHBET",
+        "risk_score": 0.1,
+        "confidence_score": 0.8,
+        "citations": [
+            {
+                "source_id": "kanit.pdf",
+                "title": "Kayıtlı Kanıt",
+                "similarity_score": 0.2,
+                "evidence_span": "Doğrulanmış kısa kanıt.",
+            }
+        ],
+    })
     second = client.post(
         "/api/chat",
         json={"mesaj": "Bu cevabın kaynağı nedir?", "kimin_icin": "kendim"},
     )
 
-    assert first.status_code == 200
     assert second.status_code == 200
     assert calls["count"] == 0
+    assert "Kayıtlı Kanıt" in second.text
+    assert '"source_disclosure": true' in second.text
     assert "Failed to fetch" not in second.text
     assert "Yanıt oluşturulamadı" not in second.text
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["Kaynak göster", "Kanıt nerede?", "Referans göster", "Bu yanıtın dayanağı nedir?"],
+)
+def test_source_disclosure_phrases_are_recognized_without_capturing_food_source_questions(message):
+    from src.routers.chat import _is_previous_answer_source_question
+
+    assert _is_previous_answer_source_question(message) is True
+    assert _is_previous_answer_source_question("Omega-3 kaynakları nelerdir?") is False
 
 
 @patch("src.routers.tools.haftalik_plan_olustur", side_effect=RuntimeError("models/gemini-1.5-flash is not found"))

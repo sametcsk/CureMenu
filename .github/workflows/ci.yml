@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GOOGLE_API_KEY: test-only-not-a-real-key
+      LANGCHAIN_TRACING_V2: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: python -m pip install --constraint constraints.txt --requirement requirements.txt
+
+      - name: Compile Python
+        run: python -m compileall -q src api.py
+
+      - name: Check frontend JavaScript
+        run: find frontend -type f -name '*.js' ! -path 'frontend/vendor/*' -print0 | xargs -0 -n1 node --check
+
+      - name: Run tests
+        run: python -m pytest -q tests --ignore=tests/e2e --basetemp=.tmp/pytest-ci -p no:cacheprovider

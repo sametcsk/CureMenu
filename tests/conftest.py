@@ -1,4 +1,11 @@
+import os
+
 import pytest
+
+
+# Configuration is imported during test collection in several modules. Keep
+# tests independent from a developer's real provider credentials.
+os.environ.setdefault("GOOGLE_API_KEY", "test-only-not-a-real-key")
 
 
 def pytest_configure():

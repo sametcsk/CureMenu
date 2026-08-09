@@ -287,7 +287,15 @@ def _is_previous_answer_source_question(message: str) -> bool:
         phrase in text
         for phrase in ("bu cevap", "bu cevab", "bu yanit", "onceki cevap", "onceki cevab", "onceki yanit")
     )
-    return refers_to_previous and any(word in text for word in ("kaynak", "kayna", "dayanak", "referans"))
+    has_source_cue = any(word in text for word in ("kaynak", "kayna", "kanit", "dayanak", "dayanag", "referans"))
+    direct_source_request = any(
+        phrase in text
+        for phrase in (
+            "kaynak goster", "kaynak belirt", "kaynak nedir", "kaynaklar neler",
+            "kanit nerede", "kaniti nedir", "dayanagi nedir", "referans goster",
+        )
+    )
+    return has_source_cue and (refers_to_previous or direct_source_request)
 
 
 def _previous_answer_source_state(
@@ -463,6 +471,33 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             yield _sse("done")
         return StreamingResponse(injection_stream(), media_type="text/event-stream")
 
+    source_disclosure = _previous_answer_source_state(initial_state, telefon=telefon, db=db, snapshot=snapshot)
+    if source_disclosure:
+        source_state, source_answer = source_disclosure
+        decision_record = build_decision_record(
+            source_state,
+            telefon=telefon,
+            kimin_icin=snapshot.target_key,
+            final_answer=source_answer,
+        )
+        bg_tasks.add_task(klinik_karar_kaydet, decision_record)
+        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, source_answer[:500], history_metadata)
+
+        async def source_stream():
+            yield _sse("message", {"chunk": source_answer})
+            yield _sse(
+                "governance",
+                {
+                    "decision_id": decision_record["decision_id"],
+                    "risk_score": decision_record["risk_score"],
+                    "confidence_score": decision_record["confidence_score"],
+                    "source_disclosure": True,
+                },
+            )
+            yield _sse("done")
+
+        return StreamingResponse(source_stream(), media_type="text/event-stream")
+
     # Everyday conversation must be resolved before generic input/rule safety.
     # Risky food questions return None here and continue to the explicit safety gate below.
     intent_answer = None
@@ -618,33 +653,6 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             yield _sse("done")
         return StreamingResponse(simple_stream(), media_type="text/event-stream")
 
-    source_disclosure = _previous_answer_source_state(initial_state, telefon=telefon, db=db, snapshot=snapshot)
-    if source_disclosure:
-        source_state, source_answer = source_disclosure
-        decision_record = build_decision_record(
-            source_state,
-            telefon=telefon,
-            kimin_icin=snapshot.target_key,
-            final_answer=source_answer,
-        )
-        bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, source_answer[:500], history_metadata)
-
-        async def source_stream():
-            yield _sse("message", {"chunk": source_answer})
-            yield _sse(
-                "governance",
-                {
-                    "decision_id": decision_record["decision_id"],
-                    "risk_score": decision_record["risk_score"],
-                    "confidence_score": decision_record["confidence_score"],
-                    "source_disclosure": True,
-                },
-            )
-            yield _sse("done")
-
-        return StreamingResponse(source_stream(), media_type="text/event-stream")
-    
     if rails:
         try:
             guard_cevap = await rails.generate_async(messages=[{"role": "user", "content": req.mesaj}])

@@ -5,6 +5,7 @@ from src.models import KullaniciProfili, ProfilKaydetRequest, AileUyesiEkleReque
 from src.database import get_db, profil_getir_db, profil_kaydet_db
 from src.auth import get_current_user
 from src.messages import PROFIL_BULUNAMADI, ONCE_PROFIL_OLUSTUR
+from src.profile_context import profile_fingerprint_map
 
 router = APIRouter()
 
@@ -16,7 +17,11 @@ async def get_profile(telefon: str = Depends(get_current_user), db: sqlite3.Conn
         raise HTTPException(status_code=404, detail=PROFIL_BULUNAMADI)
     
     data = profil.model_dump()
-    return {"success": True, "profil": data}
+    return {
+        "success": True,
+        "profil": data,
+        "profile_fingerprints": profile_fingerprint_map(profil),
+    }
 
 @router.post("/api/profile/save")
 async def save_profile(req: ProfilKaydetRequest, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
@@ -25,7 +30,7 @@ async def save_profile(req: ProfilKaydetRequest, telefon: str = Depends(get_curr
     if profil is None:
         profil = KullaniciProfili()
     
-    ana_kullanici = AileUyesi(
+    main_profile_data = dict(
         ad=req.ad,
         yas=req.yas,
         cinsiyet=req.cinsiyet,
@@ -39,6 +44,9 @@ async def save_profile(req: ProfilKaydetRequest, telefon: str = Depends(get_curr
         hedef=req.hedef,
         notlar=req.notlar,
     )
+    if profil.ana_kullanici is not None:
+        main_profile_data["id"] = profil.ana_kullanici.id
+    ana_kullanici = AileUyesi(**main_profile_data)
     profil.ana_kullanici = ana_kullanici
     profil_kaydet_db(telefon, req.kullanici_adi, profil, conn=db)
     

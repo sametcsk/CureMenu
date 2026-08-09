@@ -54,6 +54,22 @@ def _profile_fingerprint(members: list[AileUyesi]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def profile_fingerprint_map(profile: KullaniciProfili) -> dict[str, Any]:
+    """Return backend-owned fingerprints for every selectable profile target."""
+    result: dict[str, Any] = {"members": {}}
+    if profile.ana_kullanici is not None:
+        result["self"] = _profile_fingerprint([profile.ana_kullanici])
+    if profile.aile_uyeleri:
+        result["members"] = {
+            member.id: _profile_fingerprint([member])
+            for member in profile.aile_uyeleri
+        }
+    all_members = profile.tum_uyeler()
+    if all_members:
+        result["family"] = _profile_fingerprint(all_members)
+    return result
+
+
 @dataclass(frozen=True)
 class ResolvedProfileSnapshot:
     account_id: str

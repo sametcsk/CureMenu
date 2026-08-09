@@ -115,3 +115,14 @@ def test_plan_alternatif_sahte_placeholder_ogun_kullanmaz():
     tools_py = (ROOT / "src" / "routers" / "tools.py").read_text(encoding="utf-8")
 
     assert "CureBot Özel Alternatifi" not in tools_py
+
+
+def test_frontend_uses_only_backend_profile_fingerprints():
+    profile_manager = (ROOT / "frontend" / "modules" / "profile-family-manager.js").read_text(encoding="utf-8")
+    weekly_plan = (ROOT / "frontend" / "modules" / "weekly-plan-manager.js").read_text(encoding="utf-8")
+
+    assert "data.profile_fingerprints" in profile_manager
+    assert "currentProfileFingerprints" in profile_manager
+    assert "function stableHash" not in profile_manager
+    assert "Math.imul" not in profile_manager
+    assert "&& context.profileFingerprint" in weekly_plan

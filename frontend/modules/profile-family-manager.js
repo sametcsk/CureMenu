@@ -55,6 +55,7 @@ async function loadProfile() {
         const { res, data } = await safeFetchJson(API + '/api/profile/me');
         if (!res.ok || !data) { renderEmptyFamily(); return null; }
         window.currentProfile = data.profil;
+        window.currentProfileFingerprints = data.profile_fingerprints || {};
         renderFamily(data.profil);
         updatePlanDropdown(data.profil);
         renderHealthProfile(data.profil);
@@ -204,58 +205,26 @@ async function completeOnboarding() {
 
 const TARGET_STORAGE_PREFIX = 'cm_target_';
 
-function selectedTargetMembers(targetValue) {
-    const profil = window.currentProfile || {};
-    const familyMembers = Array.isArray(profil.aile_uyeleri) ? profil.aile_uyeleri : [];
-    const main = profil.ana_kullanici;
-    const target = String(targetValue || 'kendim').trim();
-    if (target === 'aile') {
-        return [main, ...familyMembers].filter(Boolean);
-    }
-    if (target === 'kendim' || (main && target === main.id)) {
-        return main ? [main] : [];
-    }
-    const folded = target.toLocaleLowerCase('tr-TR');
-    const member = familyMembers.find(item => String(item?.id || '') === target || String(item?.ad || '').toLocaleLowerCase('tr-TR') === folded);
-    return member ? [member] : [];
-}
-
-function stableHash(value) {
-    let hash = 2166136261;
-    const text = String(value || '');
-    for (let i = 0; i < text.length; i += 1) {
-        hash ^= text.charCodeAt(i);
-        hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0).toString(16);
-}
-
 function getTargetCacheContext(selectIdOrTarget = 'kendim') {
     const user = window.AuthManager?.getUser?.() || {};
     const select = document.getElementById(selectIdOrTarget);
     const target = select ? select.value : String(selectIdOrTarget || 'kendim');
-    const members = selectedTargetMembers(target);
     const main = window.currentProfile?.ana_kullanici;
     const targetScope = target === 'aile' ? 'family' : (target === 'kendim' || (main && target === main.id) ? 'self' : 'member');
     // Backend history metadata uses stable profile ids, not UI labels.
     const targetId = targetScope === 'self'
         ? String(main?.id || 'kendim')
         : (targetScope === 'family' ? 'family' : target);
-    const profilePayload = members.map(member => ({
-        id: member.id || '',
-        hastaliklar: member.hastaliklar || [],
-        alerjiler: member.alerjiler || [],
-        ilaclar: member.ilaclar || [],
-        hedef: member.hedef || '',
-        tibbi_gecmis: member.tibbi_gecmis || '',
-        notlar: member.notlar || '',
-    }));
+    const fingerprints = window.currentProfileFingerprints || {};
+    const profileFingerprint = targetScope === 'self'
+        ? fingerprints.self
+        : (targetScope === 'family' ? fingerprints.family : fingerprints.members?.[targetId]);
     return {
         accountKey: user.telefon || 'anonymous',
         targetKey: target || 'kendim',
         targetId,
         targetScope,
-        profileFingerprint: stableHash(JSON.stringify(profilePayload)),
+        profileFingerprint: String(profileFingerprint || ''),
     };
 }
 

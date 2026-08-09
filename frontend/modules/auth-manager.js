@@ -1,5 +1,21 @@
 // frontend/modules/auth-manager.js
 
+function clearAccountHealthCaches(accountKey) {
+    const normalizedAccountKey = String(accountKey || '').trim();
+    if (!normalizedAccountKey) return;
+
+    const ownedPrefixes = [
+        `cm_chat_v2_${normalizedAccountKey}_`,
+        `cm_saved_plan_json_${normalizedAccountKey}_`,
+        `cm_grocery_${normalizedAccountKey}_`,
+        `cm_check_${normalizedAccountKey}_`,
+        `cm_target_${normalizedAccountKey}_`,
+    ];
+    Object.keys(localStorage)
+        .filter(key => ownedPrefixes.some(prefix => key.startsWith(prefix)))
+        .forEach(key => localStorage.removeItem(key));
+}
+
 window.AuthManager = {
     getUser() {
         return {
@@ -63,10 +79,12 @@ window.AuthManager = {
     },
 
     async logout() {
+        const accountKey = this.getUser().telefon;
         try {
             await fetch((window.API || '') + '/api/logout', { method: 'POST', credentials: 'include' });
         } catch(e) {}
-        
+
+        clearAccountHealthCaches(accountKey);
         ['cm_telefon', 'cm_kullanici_adi', 'cm_has_profile', 'cm_onboarding_done', 'cm_disclaimer_ok', 'cm_active_tab'].forEach(k => localStorage.removeItem(k));
         window.location.href = '/';
     }
