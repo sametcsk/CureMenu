@@ -409,6 +409,20 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
         )
     except Exception:
         intent_plan = fallback_intent_plan(req.mesaj, req.kimin_icin)
+        
+    if intent_plan.intent == "off_topic":
+        off_topic_answer = "Ben beslenme ve sağlık odaklı bir asistanım. Lütfen CureMenu'nün temel amacı olan bu konularda sorular sorun."
+        off_topic_state = _simple_chat_state(initial_state, off_topic_answer)
+        decision_record = build_decision_record(off_topic_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=off_topic_answer)
+        bg_tasks.add_task(klinik_karar_kaydet, decision_record)
+        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, off_topic_answer[:500], history_metadata)
+        
+        async def off_topic_stream():
+            yield _sse("message", {"chunk": off_topic_answer})
+            yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "fast_path": True})
+            yield _sse("done")
+        return StreamingResponse(off_topic_stream(), media_type="text/event-stream")
+
     if intent_plan.intent in {"meal_recommendation", "dessert_craving", "coffee_habit", "explanation_followup", "product_question"} and not plan_requires_safety_gate(intent_plan):
         if normalized_message(req.mesaj).strip() in {"öner", "oner", "alternatif", "başka", "baska", "detay", "tarif"} and not sohbet_gecmisi:
             natural_answer = "Neye alternatif istediğini tam çıkaramadım. İstersen tatlı, kahvaltı ya da akşam yemeği olarak uyarlayabilirim."
@@ -434,7 +448,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
                 yield _sse("done")
 
             return StreamingResponse(natural_stream(), media_type="text/event-stream")
-    input_safety_answer = _explicit_input_safety_answer(snapshot, req.mesaj) if plan_requires_safety_gate(intent_plan) else None
+    input_safety_answer = _explicit_input_safety_answer(snapshot, req.mesaj)
     if input_safety_answer:
         blocked_state = _guardrail_block_state(initial_state, input_safety_answer)
         decision_record = build_decision_record(

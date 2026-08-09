@@ -15,7 +15,7 @@ class CureBotIntentPlan(BaseModel):
         "smalltalk", "meal_recommendation", "dessert_craving", "coffee_habit",
         "explanation_followup", "medication_food_question", "allergy_conflict",
         "product_question", "lab_followup", "menu_followup", "out_of_scope",
-        "unknown_nutrition_related",
+        "unknown_nutrition_related", "off_topic"
     ] = "unknown_nutrition_related"
     target: Literal["self", "family", "member"] = "self"
     target_hint: str = ""
@@ -54,8 +54,20 @@ def fallback_intent_plan(message: str, target: str = "kendim") -> CureBotIntentP
 
 
 def classify_intent_plan(message: str, conversation: list[dict] | None = None, target: str = "self", profile_names: list[str] | None = None, health_flags: dict | None = None) -> CureBotIntentPlan:
-    # Deliberately local until an explicit provider/data-use approval exists.
-    # The structured contract is ready for a future classifier without exporting user data.
+    text = str(message or "").casefold()
+    nutrition_signals = (
+        "yemek", "yemel", "beslen", "diyet", "kahvalt", "öğün", "ogun", "tatlı", "tatli",
+        "kahve", "alerji", "hastalık", "hastalik", "ilaç", "ilac", "tahlil", "menü", "menu",
+        "kalori", "protein", "market", "alışveriş", "alisveris", "yoğurt", "yogurt",
+    )
+    off_topic_signals = (
+        "hava nasıl", "hava nasil", "fıkra", "fikra", "react js", "javascript", "kod yaz",
+        "başkent", "baskent", "futbol", "maç sonucu", "mac sonucu", "şiir yaz", "siir yaz",
+    )
+    if any(signal in text for signal in off_topic_signals) and not any(signal in text for signal in nutrition_signals):
+        return CureBotIntentPlan(intent="off_topic", answer_style="short", confidence=0.98, reason="local off-topic classifier")
+    # The classifier is intentionally local. Raw history, names and health data
+    # must not be sent to a provider merely to choose a routing label.
     return fallback_intent_plan(message, target)
 
 
