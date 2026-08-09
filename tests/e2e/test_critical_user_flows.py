@@ -904,8 +904,9 @@ def test_lab_chart_model_normalizes_aliases_and_builds_dataset(authenticated_pag
         """
         () => window.LabUpload.buildLabChartModel([
           {
-            tarih: "2026-07-20T10:00:00",
+            tarih: "2026-08-09T10:00:00",
             metadata: JSON.stringify({
+              lab_report_date: "2026-07-10",
               biomarkers: [
                 { name: "Hemoglobin A1c", value: 6.1, unit: "%" },
                 { name: "Vitamin B12", value: 320, unit: "pg/mL" }
@@ -913,8 +914,9 @@ def test_lab_chart_model_normalizes_aliases_and_builds_dataset(authenticated_pag
             })
           },
           {
-            tarih: "2026-07-21T10:00:00",
+            tarih: "2026-08-09T10:00:00",
             metadata: JSON.stringify({
+              lab_report_date: "2026-08-05",
               biomarkers: [
                 { name: "HbA1c", value: 6.4, unit: "%" },
                 { name: "B12", value: 340, unit: "pg/mL" }
@@ -928,6 +930,7 @@ def test_lab_chart_model_normalizes_aliases_and_builds_dataset(authenticated_pag
     assert "HbA1c" in labels
     assert "B12" in labels
     assert model["emptyMessage"] == ""
+    assert model["labels"] == ["10.07.2026", "05.08.2026"]
     assert not runtime_errors
 
 

@@ -107,10 +107,14 @@ function toNumericValue(value) {
 }
 
 function buildLabChartModel(labs) {
+    const observationDate = (log) => {
+        const metadata = parseHistoryMetadata(log?.metadata);
+        return metadata?.lab_report_date || log?.tarih;
+    };
     const validLabs = (Array.isArray(labs) ? labs : [])
         .filter(l => l?.metadata)
-        .sort((a, b) => new Date(a.tarih) - new Date(b.tarih));
-    const labels = validLabs.map(l => formatDecisionDate(l.tarih).split(' ')[0]);
+        .sort((a, b) => new Date(observationDate(a)) - new Date(observationDate(b)));
+    const labels = validLabs.map(l => formatDecisionDate(observationDate(l)).split(' ')[0]);
     const biomarkerMap = {};
     let numericObservationCount = 0;
 

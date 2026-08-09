@@ -2139,7 +2139,7 @@ def test_health_record_upload_history_targetini_korur(mock_llm, mock_memory, cli
     mock_llm.return_value = type(
         "Response",
         (),
-        {"content": 'Tahlil özeti hazır.\n```json\n{"biomarkers":[{"name":"Glukoz","value":95,"unit":"mg/dL"}]}\n```'},
+        {"content": 'Tahlil özeti hazır.\n```json\n{"lab_report_date":"2026-07-10","biomarkers":[{"name":"Glukoz","value":95,"unit":"mg/dL"}]}\n```'},
     )()
     login_with_profile(client, "5554445592", "Lab Target Test", ad="Ana Profil")
     add = client.post(
@@ -2169,6 +2169,20 @@ def test_health_record_upload_history_targetini_korur(mock_llm, mock_memory, cli
     assert metadata["biomarkers"][0]["name"] == "Glukoz"
     assert metadata["biomarkers"][0]["value"] == 95
     assert metadata["biomarkers"][0]["unit"] == "mg/dL"
+    assert metadata["lab_report_date"] == "2026-07-10"
+    assert response.json()["lab_report_date"] == "2026-07-10"
+
+
+def test_health_record_date_parser_reads_explicit_turkish_report_date():
+    from src.routers.tools import _extract_lab_report_date
+
+    assert _extract_lab_report_date("Rapor Tarihi: 05.08.2026") == "2026-08-05"
+
+
+def test_health_record_date_parser_does_not_guess_unlabelled_dates():
+    from src.routers.tools import _extract_lab_report_date
+
+    assert _extract_lab_report_date("Doğum tarihi 01.02.1980") is None
 
 
 @patch("src.routers.tools.geri_bildirim_ekle")
