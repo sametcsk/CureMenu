@@ -1465,7 +1465,7 @@ def test_chat_family_followup_and_nutrition_overwhelm_use_structured_context(cli
             return "Önceki akşam öğününü tamamlayalım.\n\n- **Ekmek:** İçeriği net, ölçülü bir seçenek kullanabilirsiniz."
         if plan.intent == "emotional_support":
             return "Bu kadar çok ayrıntıyı düşünmek yorucu olabilir.\n\n- **Tek adım:** Şimdilik yalnızca bir sonraki öğünü birlikte seçelim."
-        return "Aile için sade bir akşam öğünü seçelim.\n\n- **Ana tabak:** Fırında protein ve sebzeyi birlikte hazırlayabilirsiniz."
+        return "Aile için sade bir akşam öğünü seçelim.\n\n- **Fırında sebzeli tavuk:** Protein ve sebzeyi birlikte hazırlayabilirsiniz."
 
     async def should_not_run(_state):
         raise AssertionError("Structured everyday context should bypass the model graph")
@@ -1500,6 +1500,7 @@ def test_chat_family_followup_and_nutrition_overwhelm_use_structured_context(cli
     assert followup_context.last_intent == "meal_recommendation"
     assert followup_context.last_meal_context == "dinner"
     assert followup_context.last_target_scope == "family"
+    assert followup_context.recent_suggestion_topics == ("Fırında sebzeli tavuk",)
 
 
 def test_chat_router_uses_semantic_triage_plan_before_graph(client, monkeypatch):

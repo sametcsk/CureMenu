@@ -34,6 +34,7 @@ from src.curebot_intent import (
     CureBotConversationContext,
     CureBotIntentPlan,
     fallback_intent_plan,
+    extract_suggestion_topics,
     generate_curebot_natural_answer,
     plan_curebot_semantically,
     plan_requires_safety_gate,
@@ -56,7 +57,12 @@ def _infer_chat_target(requested_target: str) -> tuple[str, str]:
     return requested_target, "Seçili hedef kişi"
 
 
-def _chat_history_metadata(snapshot: ResolvedProfileSnapshot, plan: CureBotIntentPlan | None = None, answer_type: str = "") -> str:
+def _chat_history_metadata(
+    snapshot: ResolvedProfileSnapshot,
+    plan: CureBotIntentPlan | None = None,
+    answer_type: str = "",
+    answer_text: str = "",
+) -> str:
     metadata = dict(snapshot.history_metadata())
     if plan is not None:
         metadata.update({
@@ -66,13 +72,38 @@ def _chat_history_metadata(snapshot: ResolvedProfileSnapshot, plan: CureBotInten
             "last_target_scope": snapshot.target_scope,
             "privacy_mode": "minimal",
         })
+    topics = extract_suggestion_topics(answer_text)
+    if topics:
+        metadata["recent_suggestion_topics"] = list(topics)
     return json.dumps(metadata, ensure_ascii=False)
 
 
 def _local_conversation_context(logs: list[dict], snapshot: ResolvedProfileSnapshot) -> CureBotConversationContext:
-    previous = next((item for item in logs if item.get("sayfa") == "CureBot"), None)
+    curebot_logs = [item for item in logs if item.get("sayfa") == "CureBot"]
+    previous = curebot_logs[0] if curebot_logs else None
     if previous is None:
         return CureBotConversationContext(last_target_scope=snapshot.target_scope)
+    recent_topics: list[str] = []
+    seen_topics: set[str] = set()
+    for item in curebot_logs[:5]:
+        try:
+            item_metadata = json.loads(item.get("metadata") or "{}")
+        except (TypeError, json.JSONDecodeError):
+            item_metadata = {}
+        stored_topics = item_metadata.get("recent_suggestion_topics") or ()
+        topics = stored_topics if isinstance(stored_topics, list) else ()
+        if not topics:
+            topics = extract_suggestion_topics(str(item.get("cevap") or ""))
+        for topic in topics:
+            clean_topic = str(topic or "").strip()
+            topic_key = clean_topic.casefold()
+            if clean_topic and topic_key not in seen_topics:
+                seen_topics.add(topic_key)
+                recent_topics.append(clean_topic)
+            if len(recent_topics) >= 8:
+                break
+        if len(recent_topics) >= 8:
+            break
     try:
         metadata = json.loads(previous.get("metadata") or "{}")
     except (TypeError, json.JSONDecodeError):
@@ -85,6 +116,7 @@ def _local_conversation_context(logs: list[dict], snapshot: ResolvedProfileSnaps
                 last_answer_type=str(metadata.get("last_answer_type") or ""),
                 last_target_scope=str(metadata.get("last_target_scope") or snapshot.target_scope),
                 has_previous_turn=True,
+                recent_suggestion_topics=tuple(recent_topics),
             )
         except ValueError:
             logger.warning("Invalid local CureBot context labels; rebuilding from the previous local intent.")
@@ -100,6 +132,7 @@ def _local_conversation_context(logs: list[dict], snapshot: ResolvedProfileSnaps
         last_answer_type=previous_plan.answer_style,
         last_target_scope=snapshot.target_scope,
         has_previous_turn=True,
+        recent_suggestion_topics=tuple(recent_topics),
     )
 
 # NEMO GUARDRAILS
@@ -508,7 +541,12 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             natural_state = _simple_chat_state(initial_state, natural_answer)
             decision_record = build_decision_record(natural_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=natural_answer)
             bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-            bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, natural_answer[:500], history_metadata)
+            natural_history_metadata = _chat_history_metadata(
+                snapshot,
+                intent_plan,
+                answer_text=natural_answer,
+            )
+            bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, natural_answer[:500], natural_history_metadata)
 
             async def natural_stream():
                 yield _sse("message", {"chunk": natural_answer})
@@ -639,7 +677,12 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
                 
             decision_record = build_decision_record(final_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=final_answer)
             bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-            bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, final_answer[:500], history_metadata)
+            final_history_metadata = _chat_history_metadata(
+                snapshot,
+                intent_plan,
+                answer_text=final_answer,
+            )
+            bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, final_answer[:500], final_history_metadata)
             yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"]})
             yield _sse("done")
         except Exception as e:

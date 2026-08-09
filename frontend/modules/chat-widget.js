@@ -334,6 +334,8 @@ window.ChatWidget = {
             } else {
                 item.textContent = text;
             }
+        } else if (type === "bot" && window.formatMarkdownSafe) {
+            item.innerHTML = formatMarkdownSafe(text);
         } else {
             if (window.escapeHtml) {
                 item.innerHTML = escapeHtml(text).replace(/\n/g, "<br>");

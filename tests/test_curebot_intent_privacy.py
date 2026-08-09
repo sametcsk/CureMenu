@@ -6,6 +6,7 @@ from src.curebot_intent import (
     CureBotIntentPlan,
     _concise_markdown,
     classify_intent_plan,
+    extract_suggestion_topics,
     generate_curebot_natural_answer,
     plan_curebot_semantically,
 )
@@ -51,6 +52,20 @@ def test_natural_answer_postprocessor_formats_plain_meal_options_as_bold_bullets
     assert "- **Zeytinyağlı taze fasulye:**" in cleaned
 
 
+def test_suggestion_topics_extract_only_compact_meal_labels():
+    answer = (
+        "Bu akşam farklı seçeneklere bakalım.\n\n"
+        "- **Fırında sebzeli tavuk:** Hafif bir ana öğün olabilir.\n"
+        "- **Mercimekli kabak yemeği:** Bitkisel bir alternatif sunar.\n"
+        "> **Kısa not:** Porsiyonu ihtiyacına göre ayarla."
+    )
+
+    assert extract_suggestion_topics(answer) == (
+        "Fırında sebzeli tavuk",
+        "Mercimekli kabak yemeği",
+    )
+
+
 def test_short_followup_uses_only_local_context_labels():
     context = CureBotConversationContext(
         last_intent="meal_recommendation",
@@ -58,6 +73,7 @@ def test_short_followup_uses_only_local_context_labels():
         last_answer_type="practical",
         last_target_scope="family",
         has_previous_turn=True,
+        recent_suggestion_topics=("Fırında tavuk", "Izgara balık"),
     )
 
     plan = classify_intent_plan("Peki ekmek olarak ne koyalım sofraya?", context.model_dump(), "family")
@@ -101,6 +117,7 @@ def test_natural_answer_prompt_redacts_identity_phone_and_raw_history(monkeypatc
         last_answer_type="practical",
         last_target_scope="member",
         has_previous_turn=True,
+        recent_suggestion_topics=("Fırında tavuk", "Izgara balık"),
     )
 
     generate_curebot_natural_answer(
@@ -117,6 +134,7 @@ def test_natural_answer_prompt_redacts_identity_phone_and_raw_history(monkeypatc
     assert "[REDACTED_PHONE]" in prompt
     assert "Gizli raw mesaj" not in prompt
     assert '"last_intent": "meal_recommendation"' in prompt
+    assert '"recent_suggestion_topics": ["Fırında tavuk", "Izgara balık"]' in prompt
     assert '"privacy_mode":"minimal"' in prompt
 
 
@@ -144,6 +162,7 @@ def test_semantic_triage_uses_minimal_context_and_validated_json(monkeypatch):
         last_answer_type="practical",
         last_target_scope="member",
         has_previous_turn=True,
+        recent_suggestion_topics=("Gizli önceki yemek",),
     )
     plan = plan_curebot_semantically(
         "Mert için peki ekmek ne olsun? Telefon 0532 111 22 33",
@@ -163,6 +182,7 @@ def test_semantic_triage_uses_minimal_context_and_validated_json(monkeypatch):
     assert "Gizli raw mesaj" not in prompt
     assert '"allergy_present": true' in prompt
     assert '"last_meal_context": "dinner"' in prompt
+    assert "Gizli önceki yemek" not in prompt
 
 
 def test_semantic_triage_cannot_disable_local_safety_gate(monkeypatch):
