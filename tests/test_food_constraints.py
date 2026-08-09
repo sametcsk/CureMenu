@@ -95,6 +95,21 @@ def test_cow_milk_allergy_allows_almond_milk(allergy):
     assert result["found_risks"] == []
 
 
+@pytest.mark.parametrize("ingredient", ["süt", "lor peyniri", "çökelek"])
+def test_lactose_sensitivity_blocks_regular_dairy(ingredient):
+    result = _check(allergies=["laktoz hassasiyeti"], meal=ingredient)
+
+    assert result["found_risks"]
+    assert "sensitivity-lactose-dairy:v1" in result["matched_rules"]
+    assert "alerjisi" not in " ".join(result["found_risks"]).casefold()
+
+
+def test_lactose_sensitivity_allows_lactose_free_yogurt():
+    result = _check(allergies=["laktoz"], meal="Laktozsuz yoğurt ve meyve")
+
+    assert result["found_risks"] == []
+
+
 def test_egg_allergy_blocks_egg():
     result = _check(allergies=["yumurta"], ingredients=["yumurta", "domates"])
 

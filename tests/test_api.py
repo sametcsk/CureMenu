@@ -258,9 +258,46 @@ def test_chat_pipeline_hatasinda_fallback_cevap_doner(mock_hafiza, mock_graph, c
     )
     assert res.status_code == 200
     assert "event: message" in res.text
-    assert "Şu an akıllı öneri motoruna bağlanırken" in res.text
+    assert "Fırında tavuk" in res.text or "Izgara balık" in res.text or "mercimek çorbası" in res.text
     assert '"fallback": true' in res.text
+    assert "Şu an akıllı öneri motoruna bağlanırken" not in res.text
     assert "Sunucu hatası" not in res.text
+
+
+def test_chat_everyday_timeout_returns_concrete_safe_meals_and_keeps_typo_followup(client, monkeypatch):
+    login_with_profile(
+        client,
+        "5554445578",
+        "Fast Consistent Fallback",
+        hastaliklar=["insülin direnci", "yüksek kolesterol"],
+        alerjiler=["fındık", "laktoz"],
+        ilaclar=["metformin"],
+    )
+
+    monkeypatch.setattr(
+        "src.routers.chat.generate_curebot_natural_answer",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(TimeoutError("provider timeout")),
+    )
+
+    async def should_not_run(_state):
+        raise AssertionError("Everyday and follow-up turns must not invoke the graph")
+
+    monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
+    first = client.post(
+        "/api/chat",
+        json={"mesaj": "Bu akşam hafif ve pratik ne yiyebilirim?", "kimin_icin": "kendim"},
+    )
+    followup = client.post(
+        "/api/chat",
+        json={"mesaj": "öner işete bana bir şeyler", "kimin_icin": "kendim"},
+    )
+
+    for response in (first, followup):
+        assert response.status_code == 200
+        assert "**" in response.text
+        assert any(meal in response.text for meal in ("Fırında tavuk", "Izgara balık", "mercimek çorbası", "taze fasulye"))
+        assert "akıllı öneri motoruna bağlanırken" not in response.text
+        assert "İsteğini anladım" not in response.text
 
 
 def test_profil_yokken_404_turkce(client):
@@ -1673,7 +1710,16 @@ def test_chat_intent_product_info_does_not_show_health_warning(client, monkeypat
     assert "doktorunuza" not in response.text.casefold()
 
 
-def test_chat_intent_product_trust_question_does_not_turn_into_lab_analysis(client, monkeypatch):
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Senin arkanda ne var, bunu nasıl yapıyorsun ve sana güvenebilir miyim?",
+        "Ben sana neden güveneyim?",
+    ],
+)
+def test_chat_intent_product_trust_question_does_not_turn_into_lab_analysis(client, monkeypatch, message):
+    from src.curebot_intent import CureBotIntentPlan
+
     login_with_profile(
         client,
         "5554445607",
@@ -1686,18 +1732,34 @@ def test_chat_intent_product_trust_question_does_not_turn_into_lab_analysis(clie
     async def should_not_run(_state):
         raise AssertionError("Product trust intent should not fall through to model graph")
 
+    monkeypatch.setattr(
+        "src.routers.chat.plan_curebot_semantically",
+        lambda *_args, **_kwargs: CureBotIntentPlan(
+            intent="product_question",
+            answer_style="product_explainer",
+            confidence=0.96,
+            reason="semantic test plan",
+        ),
+    )
+    monkeypatch.setattr(
+        "src.routers.chat.generate_curebot_natural_answer",
+        lambda *_args, **_kwargs: (
+            "CureMenu önerileri profil kısıtları ve içerik kontrolleriyle oluşturur. "
+            "Hata ihtimalini azaltır fakat tamamen ortadan kaldırmaz; doktor ya da diyetisyenin yerini almaz."
+        ),
+    )
     monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
     response = client.post(
         "/api/chat",
         json={
-            "mesaj": "Senin arkanda ne var, bunu nasıl yapıyorsun ve sana güvenebilir miyim?",
+            "mesaj": message,
             "kimin_icin": "kendim",
         },
     )
 
     assert response.status_code == 200
     body = response.text.casefold()
-    assert "malzemelerini kayıtlı alerji" in body
+    assert "profil kısıtları ve içerik kontrolleri" in body
     assert "doktor ya da diyetisyenin yerini almaz" in body
     assert "tahlil sonucunuzda" not in body
     for unexpected_marker in ("hba1c", "ferritin", "vitamin b12", "tsh"):

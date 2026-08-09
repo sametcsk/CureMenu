@@ -36,6 +36,7 @@ from src.curebot_intent import (
     fallback_intent_plan,
     extract_suggestion_topics,
     generate_curebot_natural_answer,
+    natural_fallback_answer,
     plan_curebot_semantically,
     plan_requires_safety_gate,
 )
@@ -499,7 +500,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
         intent_plan = fallback_intent_plan(req.mesaj, req.kimin_icin, conversation_context)
 
     history_metadata = _chat_history_metadata(snapshot, intent_plan)
-        
+
     if intent_plan.intent == "off_topic":
         off_topic_answer = "Ben beslenme ve sağlık odaklı bir asistanım. Lütfen CureMenu'nün temel amacı olan bu konularda sorular sorun."
         off_topic_state = _simple_chat_state(initial_state, off_topic_answer)
@@ -533,12 +534,21 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
                         "Önceki konuşma bağlamı yerel etiketlerle mevcut." if conversation_context.has_previous_turn else "",
                         conversation_context,
                     ),
-                    timeout=12,
+                    timeout=6,
                 )
         except Exception:
-            natural_answer = "İsteğini anladım. Profiline uygun birkaç pratik seçenek düşünebiliriz; istersen neyi özellikle sevdiğini söyle."
+            natural_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context)
         if natural_answer:
             natural_state = _simple_chat_state(initial_state, natural_answer)
+            if natural_state.get("guvenli_mi") is False:
+                natural_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context)
+                natural_state = _simple_chat_state(initial_state, natural_answer)
+                if natural_state.get("guvenli_mi") is False:
+                    natural_answer = (
+                        "Bu seçenekleri profilinle güvenle eşleştiremedim. "
+                        "Evde bulunan iki veya üç malzemeyi yazarsan alerjenleri dışarıda bırakıp daha net bir öğün önerebilirim."
+                    )
+                    natural_state = _simple_chat_state(initial_state, natural_answer)
             decision_record = build_decision_record(natural_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=natural_answer)
             bg_tasks.add_task(klinik_karar_kaydet, decision_record)
             natural_history_metadata = _chat_history_metadata(
@@ -672,7 +682,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             
             final_answer = _final_cevap_metni(final_state, "")
             if not final_answer:
-                final_answer = _chat_fallback_message(profil_ozeti, req.mesaj)
+                final_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context)
             yield _sse("message", {"chunk": final_answer})
                 
             decision_record = build_decision_record(final_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=final_answer)
@@ -687,7 +697,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             yield _sse("done")
         except Exception as e:
             log_failure(logger, "chat_stream", e, component="chat")
-            fallback_answer = _chat_fallback_message(profil_ozeti, req.mesaj)
+            fallback_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context)
             fallback_state = _chat_fallback_state(initial_state, fallback_answer, e)
             decision_record = build_decision_record(fallback_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=fallback_answer)
             bg_tasks.add_task(klinik_karar_kaydet, decision_record)

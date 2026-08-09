@@ -23,6 +23,30 @@
         "hindistan cevizi"
       ]
     },
+    "lactose_dairy": {
+      "aliases": [
+        "süt",
+        "inek sütü",
+        "yoğurt",
+        "peynir",
+        "lor peyniri",
+        "çökelek",
+        "ayran",
+        "kefir",
+        "tereyağı",
+        "kaymak",
+        "whey"
+      ],
+      "allowed_prefixes": [
+        "laktozsuz",
+        "bitkisel",
+        "badem",
+        "soya",
+        "yulaf",
+        "pirinç",
+        "hindistan cevizi"
+      ]
+    },
     "egg": {
       "aliases": ["yumurta", "egg"],
       "allowed_prefixes": []
@@ -57,6 +81,15 @@
       "catalog_conditions": [{"field": "allergens", "operator": "contains", "value": "cow_milk"}],
       "outcome": "block",
       "message": "Alerji riski (Kesin İhlal): {profile}"
+    },
+    {
+      "rule_id": "sensitivity-lactose-dairy:v1",
+      "profile_field": "alerjiler",
+      "profile_aliases": ["laktoz", "laktoz intoleransı", "laktoz hassasiyeti", "lactose"],
+      "ingredient_group": "lactose_dairy",
+      "catalog_conditions": [],
+      "outcome": "block",
+      "message": "Laktoz hassasiyetiyle çakışan bir süt ürünü bulundu: {profile}"
     },
     {
       "rule_id": "allergy-egg:v1",

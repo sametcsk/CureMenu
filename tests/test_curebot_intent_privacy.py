@@ -8,6 +8,7 @@ from src.curebot_intent import (
     classify_intent_plan,
     extract_suggestion_topics,
     generate_curebot_natural_answer,
+    natural_fallback_answer,
     plan_curebot_semantically,
 )
 
@@ -138,12 +139,41 @@ def test_natural_answer_prompt_redacts_identity_phone_and_raw_history(monkeypatc
     assert '"privacy_mode":"minimal"' in prompt
 
 
+def test_natural_answer_formats_stacked_bold_meals_and_removes_generic_medication_note(monkeypatch):
+    monkeypatch.setattr(
+        "src.curebot_intent.invoke_with_model_fallback",
+        lambda *_args, **_kwargs: SimpleNamespace(content=(
+            "Akşam için üç seçenek:\n\n"
+            "**Zeytinyağlı taze fasulye:**\nHafif bir sebze yemeğidir.\n"
+            "**Izgara balık:**\nYanına sade salata eklenebilir.\n"
+            "Kısa not: Metformin kullanırken lifli besinlere ağırlık vermek faydalıdır."
+        )),
+    )
+    snapshot = SimpleNamespace(
+        target_scope="self",
+        target_name="Test",
+        allergies=("fındık",),
+        diseases=("insülin direnci",),
+        medications=("metformin",),
+        notes=(),
+    )
+    answer = generate_curebot_natural_answer(
+        CureBotIntentPlan(intent="meal_recommendation", meal_context="dinner"),
+        snapshot,
+        "Bu akşam ne yiyebilirim?",
+    )
+
+    assert "- **Zeytinyağlı taze fasulye:** Hafif bir sebze yemeğidir." in answer
+    assert "- **Izgara balık:** Yanına sade salata eklenebilir." in answer
+    assert "Metformin kullanırken" not in answer
+
+
 def test_semantic_triage_uses_minimal_context_and_validated_json(monkeypatch):
     captured = {}
 
     def fake_invoke(prompt, **_kwargs):
         captured["prompt"] = prompt
-        return """```json
+        return SimpleNamespace(content="""```json
         {
           "intent": "meal_followup",
           "meal_context": "dinner",
@@ -153,7 +183,7 @@ def test_semantic_triage_uses_minimal_context_and_validated_json(monkeypatch):
           "answer_style": "practical",
           "confidence": 0.94
         }
-        ```"""
+        ```""")
 
     monkeypatch.setattr("src.curebot_intent.invoke_with_model_fallback", fake_invoke)
     context = CureBotConversationContext(
@@ -165,7 +195,7 @@ def test_semantic_triage_uses_minimal_context_and_validated_json(monkeypatch):
         recent_suggestion_topics=("Gizli önceki yemek",),
     )
     plan = plan_curebot_semantically(
-        "Mert için peki ekmek ne olsun? Telefon 0532 111 22 33",
+        "Mert için bunu nasıl ilerletelim? Telefon 0532 111 22 33",
         context,
         "member",
         ["Mert", "Ayşe"],
@@ -183,6 +213,142 @@ def test_semantic_triage_uses_minimal_context_and_validated_json(monkeypatch):
     assert '"allergy_present": true' in prompt
     assert '"last_meal_context": "dinner"' in prompt
     assert "Gizli önceki yemek" not in prompt
+
+
+def test_obvious_meal_bypasses_triage_but_contextual_followup_uses_it(monkeypatch):
+    calls = []
+
+    def semantic_followup(prompt, **_kwargs):
+        calls.append(prompt)
+        return SimpleNamespace(content=json.dumps({
+            "intent": "meal_followup",
+            "meal_context": "dinner",
+            "is_profile_declaration": False,
+            "is_followup": True,
+            "needs_safety_gate": False,
+            "answer_style": "practical",
+            "confidence": 0.93,
+        }))
+
+    monkeypatch.setattr(
+        "src.curebot_intent.invoke_with_model_fallback",
+        semantic_followup,
+    )
+    dinner = plan_curebot_semantically("Bu akşam hafif ve pratik ne yiyebilirim?", target="self")
+    followup = plan_curebot_semantically(
+        "öner işete bana bir şeyler",
+        CureBotConversationContext(
+            last_intent="meal_recommendation",
+            last_meal_context="dinner",
+            last_answer_type="practical",
+            last_target_scope="self",
+            has_previous_turn=True,
+        ),
+        target="self",
+    )
+
+    assert dinner.intent == "meal_recommendation"
+    assert dinner.meal_context == "dinner"
+    assert followup.intent == "meal_followup"
+    assert followup.meal_context == "dinner"
+    assert len(calls) == 1
+
+
+def test_disliked_ingredient_followup_preserves_previous_meal_context(monkeypatch):
+    monkeypatch.setattr(
+        "src.curebot_intent.invoke_with_model_fallback",
+        lambda *_args, **_kwargs: SimpleNamespace(content=json.dumps({
+            "intent": "meal_followup",
+            "meal_context": "unknown",
+            "is_profile_declaration": False,
+            "is_followup": True,
+            "needs_safety_gate": False,
+            "answer_style": "practical",
+            "confidence": 0.95,
+        })),
+    )
+    plan = plan_curebot_semantically(
+        "Çökelek sevmiyorum, daha güzel bir şey öner",
+        CureBotConversationContext(
+            last_intent="meal_recommendation",
+            last_meal_context="breakfast",
+            last_answer_type="practical",
+            last_target_scope="family",
+            has_previous_turn=True,
+        ),
+        target="family",
+    )
+
+    assert plan.intent == "meal_followup"
+    assert plan.meal_context == "breakfast"
+
+
+def test_unknown_new_topic_does_not_inherit_previous_meal_in_fallback():
+    context = CureBotConversationContext(
+        last_intent="meal_recommendation",
+        last_meal_context="dinner",
+        last_answer_type="practical",
+        last_target_scope="self",
+        has_previous_turn=True,
+    )
+
+    answer = natural_fallback_answer(
+        CureBotIntentPlan(intent="unknown_nutrition_related", meal_context="unknown"),
+        conversation_context=context,
+    )
+
+    assert "Fırında tavuk" not in answer
+    assert "Izgara balık" not in answer
+    assert "Ne tür bir öğün" in answer
+
+
+def test_meal_followup_can_inherit_previous_meal_in_fallback():
+    context = CureBotConversationContext(
+        last_intent="meal_recommendation",
+        last_meal_context="dinner",
+        last_answer_type="practical",
+        last_target_scope="self",
+        has_previous_turn=True,
+    )
+
+    answer = natural_fallback_answer(
+        CureBotIntentPlan(intent="meal_followup", is_followup=True),
+        conversation_context=context,
+    )
+
+    assert any(meal in answer for meal in ("Fırında tavuk", "Izgara balık", "mercimek çorbası"))
+
+
+def test_natural_answer_removes_unsupported_medical_and_macro_claims(monkeypatch):
+    monkeypatch.setattr(
+        "src.curebot_intent.invoke_with_model_fallback",
+        lambda *_args, **_kwargs: SimpleNamespace(content=(
+            "Akşam için iki seçenek:\n\n"
+            "- **Somon:** Metforminin etkisini destekler ve kolesterol seviyelerini dengeler. "
+            "(Tahmini enerji ve makro besin değerleri: 400 kcal, 30g protein)\n"
+            "- **Enginar:** Karaciğer fonksiyonlarını destekleyen sebze ağırlıklı bir tabaktır."
+        )),
+    )
+    snapshot = SimpleNamespace(
+        target_scope="self",
+        target_name="Test",
+        allergies=(),
+        diseases=("insülin direnci",),
+        medications=("metformin",),
+        notes=(),
+    )
+
+    answer = generate_curebot_natural_answer(
+        CureBotIntentPlan(intent="meal_recommendation", meal_context="dinner"),
+        snapshot,
+        "Akşam ne yiyebilirim?",
+    )
+
+    normalized = answer.casefold()
+    assert "metforminin etkisini" not in normalized
+    assert "kolesterol seviyelerini deng" not in normalized
+    assert "karaciğer fonksiyonlarını" not in normalized
+    assert "400 kcal" not in normalized
 
 
 def test_semantic_triage_cannot_disable_local_safety_gate(monkeypatch):
