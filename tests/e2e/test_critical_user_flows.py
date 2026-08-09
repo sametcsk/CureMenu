@@ -383,7 +383,7 @@ def test_history_target_matching_survives_main_profile_id_changes_without_member
     assert not runtime_errors
 
 
-def test_smart_grocery_open_budget_feedback_and_close(authenticated_page) -> None:
+def test_weekly_plan_uses_estimated_budget_report_as_primary_action(authenticated_page) -> None:
     page, _context, runtime_errors, _user = authenticated_page
     page.evaluate("switchTab('plan')")
     page.route("**/api/weekly-plan*", lambda route: _json(route, {"success": True, "plan": _weekly_plan()}))
@@ -441,28 +441,13 @@ def test_smart_grocery_open_budget_feedback_and_close(authenticated_page) -> Non
     page.route("**/api/feedback", lambda route: _json(route, {"success": True, "message": "Geri bildirim kaydedildi."}))
 
 
-    page.locator('[data-grocery-action="open"]').click()
-    page.wait_for_timeout(3000)
-    page.locator("#smartGroceryContent").get_by_text(
-        "Sepet önerileri, profiliniz ve güvenlik kontrolleri dikkate alınarak değerlendirildi."
-    ).wait_for()
-    assert page.locator("#smartGroceryContent").get_by_text("e2e-grocery-decision").count() == 0
-    assert page.locator("#smartGroceryContent").get_by_text("Ispanak").count() == 1
-    
-    assert smart_grocery_requests[-1]["kimin_icin"] == "kendim"
-    assert page.locator("#groceryTarget").input_value() == "kendim"
-    
-    page.locator("#groceryTarget").select_option("member-mert")
-    page.locator("#smartGroceryContent").get_by_text(
-        "Sepet önerileri, profiliniz ve güvenlik kontrolleri dikkate alınarak değerlendirildi."
-    ).wait_for()
-    assert smart_grocery_requests[-1]["kimin_icin"] == "member-mert"
+    page.locator('[data-grocery-action="calculate-budget"]').click()
+    page.locator("#budgetResult").get_by_text("Tahmini toplam: 120 TL").wait_for()
 
-    page.locator('#smartGroceryModal [data-grocery-action="close"]').last.click()
-    assert "hidden" in page.locator("#smartGroceryModal").get_attribute("class")
-
-    assert page.locator('[data-grocery-action="calculate-budget"]').count() == 0
-    assert page.get_by_text("Plan Alışverişi ve Bütçesi", exact=True).count() == 1
+    assert smart_grocery_requests == []
+    assert page.locator('[data-grocery-action="open"]').count() == 0
+    assert page.locator("#budgetResult").get_by_text("Plan Alışverişi ve Bütçesi", exact=True).count() == 1
+    assert "2026 Türkiye geneli tahmini" in page.locator("#budgetResult").inner_text()
 
     dialog_messages: list[str] = []
     page.once("dialog", lambda dialog: (dialog_messages.append(dialog.message), dialog.accept()))

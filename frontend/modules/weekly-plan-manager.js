@@ -225,7 +225,7 @@ window.WeeklyPlanManager = {
 
         html += `</tbody></table></div></div>
         <div class="mt-6 flex flex-wrap justify-center gap-3">
-            <button type="button" data-grocery-action="open" class="bg-secondary text-on-secondary px-6 py-3 rounded-full font-label-md text-label-md inline-flex items-center gap-2 hover:bg-secondary/90 shadow-sm transition-all active:scale-95">
+            <button type="button" data-grocery-action="calculate-budget" class="bg-secondary text-on-secondary px-6 py-3 rounded-full font-label-md text-label-md inline-flex items-center gap-2 hover:bg-secondary/90 shadow-sm transition-all active:scale-95">
                 <span class="material-symbols-outlined">shopping_cart</span>
                 Alışveriş ve Bütçeyi Hesapla
             </button>
@@ -237,7 +237,7 @@ window.WeeklyPlanManager = {
             </button>
         </div>`;
         resultContainer.innerHTML = html;
-        const groceryBudgetButton = resultContainer.querySelector('[data-grocery-action="open"]');
+        const groceryBudgetButton = resultContainer.querySelector('[data-grocery-action="calculate-budget"]');
         if (groceryBudgetButton) groceryBudgetButton.lastChild.textContent = 'Alışveriş ve Bütçeyi Hesapla';
         this.hideLoading();
         window.currentPlanText = JSON.stringify(plan);

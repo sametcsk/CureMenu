@@ -25,7 +25,7 @@ async function calculateBudget() {
             <div class="bg-surface-container-low rounded-lg p-6 border border-secondary/20 shadow-inner">
                 <div class="mb-5 rounded-lg bg-primary-container/30 p-4 text-on-surface">
                     <h3 class="font-display text-2xl font-bold">Plan Alışverişi ve Bütçesi</h3>
-                    <p class="mt-1 text-sm">${escapeHtml(targetLabel)} için bu haftalık planın gerekli ürünleri ve tahmini bütçesi.</p>
+                    <p class="mt-1 text-sm">${escapeHtml(targetLabel)} için bu haftalık planın gerekli ürünleri ve ${currentYear} Türkiye geneli tahmini fiyatlara göre yaklaşık bütçesi.</p>
                 </div>
                 <div class="mb-5 rounded-lg border border-warning/20 bg-warning-container p-4 text-sm text-on-surface-variant">Fiyatlar canlı market fiyatı değildir; Türkiye geneli tahmini aralık olarak değerlendirilmelidir.</div>
                 <div class="prose prose-sm max-w-none font-body-md text-on-surface
