@@ -1258,6 +1258,55 @@ def test_lab_chart_failure_does_not_hide_history_list(authenticated_page) -> Non
     assert not runtime_errors
 
 
+def test_lab_chart_shows_warning_on_invalid_biomarker_json(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    profile_context = page.evaluate("window.ProfileManager.getTargetCacheContext('tahlilTarget')")
+    page.route(
+        "**/api/history?*",
+        lambda route: _json(
+            route,
+            {
+                "success": True,
+                "loglar": [
+                    {
+                        "id": 1,
+                        "eylem": "Tahlil",
+                        "kullanici_adi": "Test Kullanici",
+                        "kullanici_girdisi": "Lab B",
+                        "asistan_ciktisi": "Ferritin normal aralıkta.",
+                        "tarih": "2026-07-20T10:00:00",
+                        "metadata": "BOZUK_JSON_VARYASYONU { invalid: [ }",
+                    }
+                ],
+                "total": 1,
+                "page": 1,
+                "limit": 10,
+                "has_more": False,
+            },
+        ),
+    )
+    page.evaluate(
+        """
+        () => {
+          // Provide a fake Chart so we don't trigger the missing dependency error
+          window.Chart = function () {
+            this.destroy = function () {};
+          };
+          switchTab('tahlil');
+        }
+        """
+    )
+    page.evaluate("window.LabUpload.loadLabHistory()")
+    
+    # Verify that the invalid JSON did not crash the app, history list still rendered
+    page.locator("#labHistoryList").get_by_text("Lab B").wait_for()
+    assert page.locator("#labHistoryList").get_by_text("Ferritin normal aralıkta.").count() == 1
+    
+    # Verify that the fallback UI message is shown for missing numeric data
+    page.locator("#noChartData").get_by_text("Grafik çizilebilecek sayısal veri (biyomarker) bulunamadı.").wait_for()
+    assert not runtime_errors
+
+
 def test_smart_grocery_data_isolation(authenticated_page) -> None:
     page, _context, runtime_errors, _user = authenticated_page
     
