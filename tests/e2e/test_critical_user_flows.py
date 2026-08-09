@@ -298,6 +298,91 @@ def test_weekly_plan_actions_and_gamification(authenticated_page) -> None:
     assert not runtime_errors
 
 
+def test_weekly_plan_restores_from_server_history_after_local_cache_loss(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    page.wait_for_function("window.currentProfile && window.WeeklyPlanManager")
+    plan = _weekly_plan()
+    plan["compatibility"] = {
+        "status": "fit",
+        "tone": "green",
+        "label": "Kaydedilmiş plan",
+        "message": "Sunucu geçmişinden geri yüklendi.",
+    }
+    metadata = json.dumps(
+        {
+            "target_id": "previous-main-profile-id",
+            "target_scope": "self",
+            "profile_fingerprint": "previous-profile-fingerprint",
+        },
+        ensure_ascii=False,
+    )
+
+    page.route(
+        "**/api/history?*",
+        lambda route: _json(
+            route,
+            {
+                "success": True,
+                "loglar": [
+                    {
+                        "eylem": "Haftalık Plan",
+                        "asistan_ciktisi": json.dumps(plan, ensure_ascii=False),
+                        "metadata": metadata,
+                        "tarih": "2026-08-08T10:00:00",
+                    }
+                ],
+                "has_more": False,
+            },
+        ),
+    )
+    page.evaluate(
+        """
+        () => {
+          Object.keys(localStorage)
+            .filter(key => key.startsWith('cm_saved_plan_json_'))
+            .forEach(key => localStorage.removeItem(key));
+        }
+        """
+    )
+
+    page.evaluate("switchTab('plan')")
+    page.evaluate("window.WeeklyPlanManager.loadExistingPlan()")
+    page.locator("#planResult").get_by_text("Pazartesi").wait_for()
+    page.locator("#planResult").get_by_text("Önceki profil bilgileriyle hazırlanmış plan").wait_for()
+    assert page.evaluate(
+        "Object.keys(localStorage).some(key => key.startsWith('cm_saved_plan_json_'))"
+    )
+    assert not runtime_errors
+
+
+def test_history_target_matching_survives_main_profile_id_changes_without_member_leak(authenticated_page) -> None:
+    page, _context, runtime_errors, _user = authenticated_page
+    result = page.evaluate(
+        """
+        () => ({
+          self: window.ProfileManager.historyMatchesTargetContext(
+            {target_scope: 'self', target_id: 'old-main-id'},
+            {targetScope: 'self', targetId: 'new-main-id'}
+          ),
+          family: window.ProfileManager.historyMatchesTargetContext(
+            {target_scope: 'family', target_id: 'old-family-id'},
+            {targetScope: 'family', targetId: 'family'}
+          ),
+          sameMember: window.ProfileManager.historyMatchesTargetContext(
+            {target_scope: 'member', target_id: 'member-ece'},
+            {targetScope: 'member', targetId: 'member-ece'}
+          ),
+          otherMember: window.ProfileManager.historyMatchesTargetContext(
+            {target_scope: 'member', target_id: 'member-mert'},
+            {targetScope: 'member', targetId: 'member-ece'}
+          )
+        })
+        """
+    )
+    assert result == {"self": True, "family": True, "sameMember": True, "otherMember": False}
+    assert not runtime_errors
+
+
 def test_smart_grocery_open_budget_feedback_and_close(authenticated_page) -> None:
     page, _context, runtime_errors, _user = authenticated_page
     page.evaluate("switchTab('plan')")

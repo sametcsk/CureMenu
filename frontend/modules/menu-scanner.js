@@ -50,9 +50,7 @@ function historyMatchesCurrentTarget(log, selectId) {
     const context = window.ProfileManager?.getTargetCacheContext?.(selectId);
     if (!context) return true;
     const metadata = parseHistoryMetadata(log?.metadata);
-    if (!metadata.target_id || !metadata.target_scope) return false;
-    return String(metadata.target_id) === String(context.targetId)
-        && String(metadata.target_scope) === String(context.targetScope);
+    return window.ProfileManager?.historyMatchesTargetContext?.(metadata, context) ?? false;
 }
 
 function validatePublicMenuUrl(value) {

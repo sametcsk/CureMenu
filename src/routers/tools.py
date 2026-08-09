@@ -493,17 +493,20 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
         import json
         decision_record = build_decision_record(state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=json.dumps(plan))
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
+        compatibility = _compatibility_status_from_safety(safety)
+        persisted_plan = dict(plan)
+        persisted_plan["compatibility"] = compatibility
         bg_tasks.add_task(
             etkilesim_logla,
             telefon,
             snapshot.target_name,
             "Haftalık Plan",
             f"{snapshot.target_name} için plan",
-            json.dumps(plan),
+            json.dumps(persisted_plan, ensure_ascii=False),
             json.dumps(snapshot.history_metadata(), ensure_ascii=False),
         )
         
-        return {"ok": True, "plan": plan, "compatibility": _compatibility_status_from_safety(safety)}
+        return {"ok": True, "plan": plan, "compatibility": compatibility}
     except Exception as e:
         log_failure(logger, "weekly_plan", e, component="tools")
         return JSONResponse(status_code=503, content={

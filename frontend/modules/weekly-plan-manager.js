@@ -4,6 +4,59 @@
  */
 
 window.WeeklyPlanManager = {
+    parseHistoryMetadata(value) {
+        if (!value) return {};
+        if (typeof value === 'object') return value;
+        try {
+            return JSON.parse(value);
+        } catch (_error) {
+            return {};
+        }
+    },
+
+    historyMatchesCurrentTarget(log, context) {
+        const metadata = this.parseHistoryMetadata(log?.metadata);
+        return window.ProfileManager?.historyMatchesTargetContext?.(metadata, context) ?? false;
+    },
+
+    parsePlanHistoryRecord(log, context) {
+        if (!String(log?.eylem || '').toLocaleLowerCase('tr-TR').includes('plan')) return null;
+        if (!this.historyMatchesCurrentTarget(log, context)) return null;
+        try {
+            const plan = JSON.parse(log.asistan_ciktisi || '');
+            if (!plan || !Array.isArray(plan.days) || plan.days.length === 0) return null;
+
+            const metadata = this.parseHistoryMetadata(log.metadata);
+            if (metadata.profile_fingerprint
+                && metadata.profile_fingerprint !== context.profileFingerprint) {
+                plan.compatibility = {
+                    status: 'caution',
+                    tone: 'yellow',
+                    label: 'Önceki profil bilgileriyle hazırlanmış plan',
+                    message: 'Plan kaydınız korundu. Güncel sağlık profilinize göre kullanmadan önce planı yeniden oluşturmanız önerilir.'
+                };
+            }
+            return plan;
+        } catch (_error) {
+            return null;
+        }
+    },
+
+    async loadPlanFromHistory(context, loadVersion) {
+        for (let page = 1; page <= 20; page += 1) {
+            const { res, data } = await safeFetchJson(`${API}/api/history?page=${page}&limit=50`);
+            if (loadVersion !== this.planLoadVersion) return null;
+            if (!res?.ok || !data?.success) return null;
+
+            const plan = (data.loglar || [])
+                .map(log => this.parsePlanHistoryRecord(log, context))
+                .find(Boolean);
+            if (plan) return plan;
+            if (!data.has_more) return null;
+        }
+        return null;
+    },
+
     getPlanCacheKey(user, target = null) {
         const resolvedTarget = target || document.getElementById('planTarget')?.value || 'kendim';
         const context = window.ProfileManager?.getTargetCacheContext?.(resolvedTarget);
@@ -73,21 +126,38 @@ window.WeeklyPlanManager = {
         }
     },
 
-    loadExistingPlan() {
+    async loadExistingPlan() {
         if (!window.AuthManager) return;
         const user = window.AuthManager.getUser();
         if (!user) return;
 
-        const savedPlanStr = localStorage.getItem(this.getPlanCacheKey(user));
+        const target = document.getElementById('planTarget')?.value || 'kendim';
+        const context = window.ProfileManager?.getTargetCacheContext?.(target);
+        const loadVersion = (this.planLoadVersion || 0) + 1;
+        this.planLoadVersion = loadVersion;
+
+        const cacheKey = this.getPlanCacheKey(user, target);
+        const savedPlanStr = localStorage.getItem(cacheKey);
         if (savedPlanStr) {
             try {
                 const plan = JSON.parse(savedPlanStr);
                 this.renderPlan(plan);
+                return;
             } catch (e) {
-                this.renderEmptyState();
+                localStorage.removeItem(cacheKey);
             }
-        } else {
-            this.renderEmptyState();
+        }
+
+        this.renderEmptyState();
+        if (!context) return;
+
+        try {
+            const plan = await this.loadPlanFromHistory(context, loadVersion);
+            if (!plan || loadVersion !== this.planLoadVersion) return;
+            localStorage.setItem(cacheKey, JSON.stringify(plan));
+            this.renderPlan(plan);
+        } catch (_error) {
+            // The empty state is already visible; history errors must not break plan creation.
         }
     },
 

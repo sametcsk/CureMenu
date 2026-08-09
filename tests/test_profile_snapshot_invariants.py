@@ -245,6 +245,9 @@ def test_weekly_plan_uses_member_snapshot_and_matching_history_metadata(mock_pla
     assert metadata["target_id"] == member_id
     assert metadata["target_scope"] == "member"
     assert metadata["profile_fingerprint"]
+    persisted_plan = json.loads(plan_log["asistan_ciktisi"])
+    assert persisted_plan["days"]
+    assert persisted_plan["compatibility"] == response.json()["compatibility"]
 
 
 @patch("src.routers.chat.langgraph_app")
