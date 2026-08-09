@@ -131,3 +131,52 @@ def test_api_error_markup_is_rendered_as_text(frontend_page) -> None:
     assert payload in (result.text_content() or "")
     assert page.evaluate("window.__xss") == 0
     assert not runtime_errors
+
+
+def test_menu_analysis_uses_one_consistent_card_layout_for_every_target(frontend_page) -> None:
+    page, runtime_errors = frontend_page
+    analysis = """
+Daha Uygun Seçenekler
+[PİLİÇ IZGARA]
+Protein ağırlıklı ve dengeli bir seçimdir.
+Daha Uygun Seçenekler
+### 🟡 Dikkatli Tercih Edilebilecekler
+Dikkatli Tercih Edilebilecekler
+[ET DÖNER]
+İçeriği ve porsiyonu işletmeden teyit edilmelidir.
+Dikkatli Tercih Edilebilecekler
+[SOYA SOSLU PİLİÇ]
+Sodyum nedeniyle porsiyonu sınırlamak iyi olur.
+### 🔴 Bu Profil İçin Kaçınılması Daha Doğru Olanlar
+[PİLİÇ ŞİNİTZEL]
+Pane ve kızartma yöntemi nedeniyle daha az uygundur.
+Not
+İçeriği belirsiz sosları işletmeden teyit edin.
+"""
+    page.set_content('<div id="menuTargetContext"></div><div id="menuScanResult"></div>')
+    page.add_script_tag(path=FRONTEND / "modules" / "api-client.js")
+    page.add_script_tag(path=FRONTEND / "modules" / "menu-scanner.js")
+
+    for target_name in ("Samet", "Aile üyesi", "Tüm aile"):
+        page.evaluate(
+            """
+            payload => window.MenuScanner.renderMenuAnalysis({
+                analysis_title: 'Menü analizi',
+                target_name: payload.targetName,
+                analiz: payload.analysis,
+            })
+            """,
+            {"targetName": target_name, "analysis": analysis},
+        )
+        result = page.locator("#menuScanResult")
+        assert result.locator("h4").all_text_contents() == [
+            "Daha Uygun Seçenekler",
+            "Dikkatli Tercih Edilebilecekler",
+            "Bu Profil İçin Kaçınılması Daha Doğru Olanlar",
+        ]
+        assert result.locator("li").count() == 4
+        assert result.get_by_text("PİLİÇ IZGARA", exact=True).count() == 1
+        assert "###" not in (result.text_content() or "")
+        assert target_name in (page.locator("#menuTargetContext").text_content() or "")
+
+    assert not runtime_errors

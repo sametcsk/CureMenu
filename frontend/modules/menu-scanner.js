@@ -94,34 +94,126 @@ function createImagePreview(dataUrl) {
     });
 }
 
+const MENU_SECTION_DEFINITIONS = {
+    suitable: { icon: '🟢', title: 'Daha Uygun Seçenekler' },
+    caution: { icon: '🟡', title: 'Dikkatli Tercih Edilebilecekler' },
+    avoid: { icon: '🔴', title: 'Bu Profil İçin Kaçınılması Daha Doğru Olanlar' },
+};
+
+function _cleanMenuLine(value) {
+    return String(value || '')
+        .trim()
+        .replace(/^#{1,6}\s*/, '')
+        .replace(/^(?:🟢|🟡|🔴)\s*/, '')
+        .replace(/^\*\*(.*?)\*\*$/, '$1')
+        .replace(/\*+$/, '')
+        .trim();
+}
+
+function _menuSectionKey(value) {
+    const line = _cleanMenuLine(value).replace(/:$/, '').toLocaleLowerCase('tr-TR');
+    if (/^(?:sizin için )?(?:daha )?uygun seçenekler$/.test(line) || /^(?:sizin için )?güvenli(?: seçenekler)?$/.test(line)) return 'suitable';
+    if (/^dikkatli tercih edilebilecekler$/.test(line) || /^porsiyon kontrolüyle tüketin$/.test(line)) return 'caution';
+    if (/^(?:bu profil için )?kaçınılması daha doğru olanlar$/.test(line) || /^(?:profilinizle )?uyuşmayan(?: seçenekler)?$/.test(line)) return 'avoid';
+    return '';
+}
+
 function _parseMenuSections(text) {
-    // Güvenlik uyarısı bloku
-    const warningMatch = text.match(/###?\s*Profil[^\n]*Güvenlik[^\n]*\n([\s\S]*?)(?=\n###?|\n🟢|\n🟡|\n🔴|$)/i);
-    const warningText = warningMatch ? warningMatch[1].trim() : '';
-    const cleaned = text.replace(/###?\s*Profil[^\n]*Güvenlik[^\n]*\n[\s\S]*?(?=\n🟢|\n🟡|\n🔴|$)/i, '').trim();
+    const sectionItems = new Map();
+    const warningParts = [];
+    const noteParts = [];
+    let currentKey = '';
+    let pendingItem = null;
+    let textMode = '';
 
-    const sectionPattern = /(?:^|\n)\s*(🟢|🟡|🔴)?\s*(?:#{1,3}\s*)?(?:\*\*)?([^\n*]*(?:Uygun|Güvenli|Dikkatli|Porsiyon|Kaçınılması|Uyuşmayan)[^\n*]*)(?:\*\*)?\s*\n([\s\S]*?)(?=\n\s*(?:🟢|🟡|🔴)?\s*(?:#{1,3}\s*)?(?:\*\*)?[^\n*]*(?:Uygun|Güvenli|Dikkatli|Porsiyon|Kaçınılması|Uyuşmayan)|$)/gi;
-    const sections = [];
-    let match;
-    while ((match = sectionPattern.exec(cleaned)) !== null) {
-        const rawTitle = match[2].trim();
-        const icon = match[1] || (/Kaçınılması|Uyuşmayan/i.test(rawTitle) ? '🔴' : (/Dikkatli|Porsiyon/i.test(rawTitle) ? '🟡' : '🟢'));
-        const title = rawTitle
-            .replace(/^Sizin İçin (Uygun|Daha Uygun) Seçenekler.*$/i, 'Daha Uygun Seçenekler')
-            .replace(/^.*(?:Güvenli|Daha Uygun).*$/i, 'Daha Uygun Seçenekler')
-            .replace(/^.*(?:Dikkatli|Porsiyon).*$/i, 'Dikkatli Tercih Edilebilecekler')
-            .replace(/^.*(?:Kaçınılması|Uyuşmayan).*$/i, 'Bu Profil İçin Kaçınılması Daha Doğru Olanlar');
-        const items = match[3].trim().split('\n')
-            .map(l => l.replace(/^\[|\]$/g, '').replace(/^[-*•]\s*/, '').trim())
-            .filter(l => l.length > 3);
-        sections.push({ icon, title, items });
-    }
+    const ensureItems = key => {
+        if (!sectionItems.has(key)) sectionItems.set(key, []);
+        return sectionItems.get(key);
+    };
+    const flushPendingItem = () => {
+        if (!pendingItem || !currentKey) return;
+        pendingItem.name = _cleanMenuLine(pendingItem.name).replace(/^\[|\]$/g, '').trim();
+        pendingItem.description = _cleanMenuLine(pendingItem.description);
+        if (pendingItem.name) ensureItems(currentKey).push(pendingItem);
+        pendingItem = null;
+    };
 
-    // Not satırı
-    const noteMatch = text.match(/Not:\s*(.+)/i);
-    const note = noteMatch ? noteMatch[1].trim() : '';
+    String(text || '').split(/\r?\n/).forEach(rawLine => {
+        const line = _cleanMenuLine(rawLine);
+        if (!line) return;
 
-    return { warningText, sections, note, raw: text };
+        const sectionKey = _menuSectionKey(line);
+        if (sectionKey) {
+            flushPendingItem();
+            currentKey = sectionKey;
+            textMode = '';
+            ensureItems(sectionKey);
+            return;
+        }
+
+        const warningHeading = /^profil.*güvenlik/i.test(line);
+        if (warningHeading) {
+            flushPendingItem();
+            currentKey = '';
+            textMode = 'warning';
+            return;
+        }
+
+        const noteHeading = line.match(/^not\s*:?\s*(.*)$/i);
+        if (noteHeading) {
+            flushPendingItem();
+            currentKey = '';
+            textMode = 'note';
+            if (noteHeading[1]) noteParts.push(_cleanMenuLine(noteHeading[1]));
+            return;
+        }
+
+        if (textMode === 'warning') {
+            warningParts.push(_cleanMenuLine(line.replace(/^[-*•]\s*/, '')));
+            return;
+        }
+        if (textMode === 'note') {
+            noteParts.push(_cleanMenuLine(line.replace(/^[-*•]\s*/, '')));
+            return;
+        }
+        if (!currentKey) return;
+
+        const withoutBullet = line.replace(/^[-*•]\s*/, '').trim();
+        const bracketItem = withoutBullet.match(/^\[([^\]]+)\]\s*:?[\s]*(.*)$/);
+        const boldItem = withoutBullet.match(/^\*\*([^*]+)\*\*\s*:?[\s]*(.*)$/);
+        const inlineItem = bracketItem || boldItem;
+        if (inlineItem) {
+            flushPendingItem();
+            pendingItem = { name: inlineItem[1], description: inlineItem[2] || '' };
+            return;
+        }
+
+        const colonIndex = withoutBullet.indexOf(':');
+        if (/^[-*•]\s*/.test(line) && colonIndex > 0) {
+            flushPendingItem();
+            pendingItem = {
+                name: withoutBullet.slice(0, colonIndex),
+                description: withoutBullet.slice(colonIndex + 1),
+            };
+            return;
+        }
+
+        if (pendingItem) {
+            pendingItem.description = `${pendingItem.description} ${withoutBullet}`.trim();
+        }
+    });
+    flushPendingItem();
+
+    const sections = Object.entries(MENU_SECTION_DEFINITIONS)
+        .filter(([key]) => (sectionItems.get(key) || []).length)
+        .map(([key, definition]) => ({ ...definition, items: sectionItems.get(key) }));
+
+    return {
+        warningText: warningParts.join(' ').trim(),
+        sections,
+        note: noteParts.join(' ').trim(),
+        raw: String(text || ''),
+    };
 }
 
 function _renderMenuSections({ warningText, sections, note, raw }) {
@@ -144,18 +236,15 @@ function _renderMenuSections({ warningText, sections, note, raw }) {
     const sectionsHtml = sections.map(({ icon, title, items }) => {
         const c = colorMap[icon] || colorMap['🟡'];
         const itemsHtml = items.map(item => {
-            const colonIdx = item.indexOf(':');
-            const name = colonIdx > 0 ? item.slice(0, colonIdx).trim() : item;
-            const desc = colonIdx > 0 ? item.slice(colonIdx + 1).trim() : '';
             return `<li class="flex flex-col gap-0.5 py-2 border-b border-outline-variant/20 last:border-0">
-                <span class="font-semibold text-sm ${c.text}">${escapeHtml(name)}</span>
-                ${desc ? `<span class="text-xs text-on-surface-variant leading-relaxed">${escapeHtml(desc)}</span>` : ''}
+                <span class="font-semibold text-sm ${c.text}">${escapeHtml(item.name)}</span>
+                ${item.description ? `<span class="text-xs text-on-surface-variant leading-relaxed">${escapeHtml(item.description)}</span>` : ''}
             </li>`;
         }).join('');
         return `<div class="rounded-xl border ${c.border} ${c.bg} p-4">
             <div class="flex items-center gap-2 mb-3">
                 <span class="inline-flex h-5 w-5 rounded-full ${c.dot} shrink-0"></span>
-                <h4 class="text-sm font-bold ${c.label} uppercase tracking-wide">${escapeHtml(title)}</h4>
+                <h4 class="font-display text-base font-bold ${c.label}">${escapeHtml(title)}</h4>
             </div>
             <ul class="space-y-0 divide-y divide-outline-variant/10">${itemsHtml}</ul>
         </div>`;
@@ -605,6 +694,7 @@ function showFridgeHistoryDetail(log) {
         loadFridgeHistory,
         loadMenuHistory,
         validatePublicMenuUrl,
+        renderMenuAnalysis,
     };
 
     window.scanMenu = scanMenu;
