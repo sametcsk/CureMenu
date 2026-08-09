@@ -651,6 +651,7 @@ window.ChatWidget = {
             .cm-assistant-message.bot ul { display: grid; gap: 7px; margin: 9px 0 11px; padding: 0; list-style: none; }
             .cm-assistant-message.bot ul li { position: relative; margin: 0; padding: 9px 10px 9px 27px; border: 1px solid rgba(0, 92, 85, 0.1); border-radius: 10px; background: #f6faf9; }
             .cm-assistant-message.bot ul li::before { content: ""; position: absolute; top: 15px; left: 11px; width: 6px; height: 6px; border-radius: 50%; background: #0b8a7f; box-shadow: 0 0 0 3px rgba(11, 138, 127, 0.1); }
+            .cm-assistant-message.bot ul li strong { display: block; margin-bottom: 3px; color: #064f49; font-family: Outfit, Inter, sans-serif; font-size: 13.5px; font-weight: 750; line-height: 1.3; letter-spacing: -0.01em; }
             .cm-assistant-message.bot ol { margin: 9px 0 11px; padding-left: 24px; }
             .cm-assistant-message.bot ol li { margin: 6px 0; padding-left: 3px; }
             .cm-assistant-message.bot strong { color: #005c55; font-weight: 700; }

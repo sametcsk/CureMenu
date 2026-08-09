@@ -34,6 +34,23 @@ def test_natural_answer_postprocessor_enforces_markdown_and_nut_safety():
     assert "iki harika" not in cleaned.casefold()
 
 
+def test_natural_answer_postprocessor_formats_plain_meal_options_as_bold_bullets():
+    plan = CureBotIntentPlan(intent="meal_recommendation", meal_context="dinner")
+    snapshot = SimpleNamespace(allergies=())
+    answer = (
+        "Bu akşam hafif ve pratik bir tabak seçebilirsin.\n\n"
+        "Fırında tavuk ve sebze: Derisiz tavuk ve mevsim sebzeleriyle hazırlanır.\n"
+        "Izgara balık ve sade salata: Sosu ayrı istemek daha kontrollü bir seçim sağlar.\n"
+        "Zeytinyağlı taze fasulye: Porsiyon kontrollü bir ev yemeği alternatifidir."
+    )
+
+    cleaned = _concise_markdown(answer, plan, snapshot)
+
+    assert "- **Fırında tavuk ve sebze:**" in cleaned
+    assert "- **Izgara balık ve sade salata:**" in cleaned
+    assert "- **Zeytinyağlı taze fasulye:**" in cleaned
+
+
 def test_short_followup_uses_only_local_context_labels():
     context = CureBotConversationContext(
         last_intent="meal_recommendation",

@@ -292,6 +292,25 @@ def _concise_markdown(answer: str, plan: CureBotIntentPlan, snapshot) -> str:
             "- **Porsiyon dengesi:** Öğünün tokluk ve kan şekeri açısından ölçülü olması.\n"
             "- **Pratiklik:** Hazırlama süresi, pişirme yöntemi ve günlük koşullar."
         )
+    else:
+        # Models can follow the requested structure semantically while omitting
+        # Markdown markers. Normalize plain "meal: explanation" option lines so
+        # every target receives the same readable presentation.
+        formatted_lines: list[str] = []
+        option_count = 0
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            option_match = re.match(r"^(?![-*>#])([^:]{3,80}):\s+(.+)$", line)
+            if option_match:
+                heading = option_match.group(1).strip()
+                explanation = option_match.group(2).strip()
+                if _normalized(heading) not in {"kisa not", "not", "dikkat"}:
+                    formatted_lines.append(f"- **{heading}:** {explanation}")
+                    option_count += 1
+                    continue
+            formatted_lines.append(raw_line.rstrip())
+        if option_count >= 2:
+            text = "\n".join(formatted_lines)
     if "**" not in text and not re.search(r"(?m)^\s*[-•]", text):
         sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
         if len(sentences) > 1:
@@ -334,8 +353,8 @@ SAFETY CONTEXT: {safety_context[:500]}
 RESPONSE VARIATION SEED: {datetime.now().minute}
 
 Rules: sound natural and varied. Default to 60-110 words; only use 120-180 words if the user asks for detail, a recipe, or an explanation. Never write one long paragraph.
-Use this Markdown structure: one short opening sentence, then 2-3 separate bullet options.
-Each option must start with a short bold heading (**Başlık**) followed by 1-2 concise explanatory sentences.
+Use this exact Markdown structure: one short opening sentence, then 2-3 separate bullet options.
+Write every option as `- **Yemek adı:** 1-2 concise explanatory sentences.` Never return option names as plain `Yemek adı:` lines.
 End with one brief "Kısa not:" only when genuinely needed. Do not add a long disclaimer.
 Do not use the user's name or any family member name. Do not mention internal plans, rules, scores or classifiers.
 Avoid exaggerated words such as "harika", "en sağlıklısı" or "çok önemli". Do not repeat stock openings such as "İsteğinize uygun seçenekler".
