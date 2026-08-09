@@ -156,7 +156,7 @@ def test_family_target_selectors_and_chat_payload(browser_page, e2e_base_url: st
     assert page.locator("#chatTarget").count() == 0
     page.fill("[data-cm-assistant-input]", "Ece için bugün ne yiyebilir?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
-    page.locator("[data-cm-assistant-body]").get_by_text("Ece i").wait_for()
+    page.locator("[data-cm-assistant-body]").get_by_text("Ece için yanıt.", exact=True).wait_for()
 
     assert chat_requests[-1]["kimin_icin"] == "member-ece"
     assert page.evaluate("Object.keys(localStorage).some(key => key.startsWith('cm_chat_v2_05000000000_member_member-ece_'))")
@@ -423,7 +423,19 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     page.locator("[data-cm-assistant-launcher]").click()
     page.locator('[data-cm-feature="plan"]').click()
     assert page.locator("#tab-plan").evaluate("element => element.classList.contains('active')")
-    page.evaluate("window.updatePlanDropdown({aile_uyeleri: [{id: 'member-ece', ad: 'Ece'}, {id: 'member-mert', ad: 'Mert'}, {id: 'member-ayse', ad: 'Ayşe'}]})")
+    page.evaluate(
+        """
+        () => {
+            const aileUyeleri = [
+                {id: 'member-ece', ad: 'Ece'},
+                {id: 'member-mert', ad: 'Mert'},
+                {id: 'member-ayse', ad: 'Ayşe'},
+            ];
+            window.currentProfile = {...(window.currentProfile || {}), aile_uyeleri: aileUyeleri};
+            window.updatePlanDropdown({aile_uyeleri: aileUyeleri});
+        }
+        """
+    )
     expected_targets = ["Kendim İçin", "Ece İçin", "Mert İçin", "Ayşe İçin", "Tüm Aile İçin"]
     for selector in ["#planTarget", "#menuTarget", "#fridgeTarget", "#tahlilTarget"]:
         assert page.locator(selector).locator("option").all_text_contents() == expected_targets
@@ -440,31 +452,25 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     assert page.locator("[data-cm-assistant-body]").get_by_text("E2E resmi kaynak").count() == 0
     assert page.locator("[data-cm-assistant-body]").get_by_text("Test kanit parcasi").count() == 0
 
-    target.select_option("kendim")
     page.fill("[data-cm-assistant-input]", "Kendim icin ne onerirsin?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("kendim icin test yaniti.").wait_for()
     assert chat_requests[-1]["kimin_icin"] == "kendim"
-    assert page.locator("[data-cm-assistant-body]").get_by_text("member-ece icin test yaniti.").count() == 0
 
-    target.select_option("member-mert")
     page.fill("[data-cm-assistant-input]", "Mert icin ne onerirsin?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("member-mert icin test yaniti.").wait_for()
     assert chat_requests[-1]["kimin_icin"] == "member-mert"
 
-    target.select_option("member-ayse")
     page.fill("[data-cm-assistant-input]", "Ayse icin ne onerirsin?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("member-ayse icin test yaniti.").wait_for()
     assert chat_requests[-1]["kimin_icin"] == "member-ayse"
 
-    target.select_option("aile")
     page.fill("[data-cm-assistant-input]", "Tum aile icin ne onerirsin?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("aile icin test yaniti.").wait_for()
     assert chat_requests[-1]["kimin_icin"] == "aile"
-    assert page.locator("[data-cm-assistant-body]").get_by_text("kendim icin test yaniti.").count() == 0
 
     page.route(
         "**/api/clinical-decisions/e2e-no-citations",

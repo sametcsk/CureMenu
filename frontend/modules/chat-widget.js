@@ -231,16 +231,21 @@ window.ChatWidget = {
     },
 
     resolveTargetFromMessage(message) {
-        const normalizedMessage = String(message || '').toLocaleLowerCase('tr-TR');
+        const normalizeTargetText = value => String(value || '')
+            .toLocaleLowerCase('tr-TR')
+            .replace(/ı/g, 'i')
+            .normalize('NFKD')
+            .replace(/[\u0300-\u036f]/g, '');
+        const normalizedMessage = normalizeTargetText(message);
         const familyMembers = Array.isArray(window.currentProfile?.aile_uyeleri)
             ? window.currentProfile.aile_uyeleri
             : [];
-        if (/tüm aile|hepimiz|bize|biz ne yiyelim/.test(normalizedMessage)) {
+        if (/tum aile|hepimiz|bize|biz ne yiyelim/.test(normalizedMessage)) {
             return { target: 'aile', label: 'Tüm aile için' };
         }
 
         const namedMember = familyMembers.find(item => {
-            const name = String(item?.ad || '').trim().toLocaleLowerCase('tr-TR');
+            const name = normalizeTargetText(item?.ad).trim();
             return name.length > 1 && normalizedMessage.includes(name);
         });
         if (namedMember?.id) {
@@ -258,7 +263,7 @@ window.ChatWidget = {
         const relationRule = relationRules.find(rule => rule.terms.some(term => normalizedMessage.includes(term)));
         if (relationRule) {
             const relatedMember = familyMembers.find(item => relationRule.relations.some(
-                relation => String(item?.yakinlik || '').toLocaleLowerCase('tr-TR').includes(relation)
+                relation => normalizeTargetText(item?.yakinlik).includes(normalizeTargetText(relation))
             ));
             const resolvedMember = relatedMember || (familyMembers.length === 1 ? familyMembers[0] : null);
             if (resolvedMember?.id) {
