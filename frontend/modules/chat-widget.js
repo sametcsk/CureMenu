@@ -628,12 +628,32 @@ window.ChatWidget = {
             .cm-assistant-context-chip { display: inline-flex; align-items: center; width: fit-content; border: 1px solid rgba(255,255,255,0.24); border-radius: 999px; padding: 3px 8px; color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.1); font-size: 10px; font-weight: 700; }
             .cm-assistant-body { overflow-y: auto; padding: 14px; background: #f7fbfc; display: flex; flex-direction: column; gap: 10px; }
             .cm-assistant-message { max-width: 86%; border-radius: 14px; padding: 11px 12px; font-size: 13px; line-height: 1.55; border: 1px solid transparent; word-wrap: break-word; }
-            .cm-assistant-message.bot p { margin: 0 0 8px; }
+            .cm-assistant-message.bot { align-self: flex-start; max-width: 94%; padding: 14px 15px; background: #ffffff; border-color: rgba(189, 201, 198, 0.7); color: #243b38; line-height: 1.62; box-shadow: 0 7px 20px rgba(16, 32, 51, 0.045); }
+            .cm-assistant-message.bot h1,
+            .cm-assistant-message.bot h2,
+            .cm-assistant-message.bot h3,
+            .cm-assistant-message.bot h4 { margin: 14px 0 7px; color: #0b4f49; font-family: Outfit, Inter, sans-serif; font-weight: 700; line-height: 1.28; letter-spacing: -0.015em; }
+            .cm-assistant-message.bot h1:first-child,
+            .cm-assistant-message.bot h2:first-child,
+            .cm-assistant-message.bot h3:first-child,
+            .cm-assistant-message.bot h4:first-child { margin-top: 0; }
+            .cm-assistant-message.bot h1,
+            .cm-assistant-message.bot h2 { padding-bottom: 7px; border-bottom: 1px solid rgba(0, 92, 85, 0.12); font-size: 16px; }
+            .cm-assistant-message.bot h3 { font-size: 14.5px; }
+            .cm-assistant-message.bot h4 { font-size: 13.5px; }
+            .cm-assistant-message.bot p { margin: 0 0 10px; }
             .cm-assistant-message.bot p:last-child { margin-bottom: 0; }
-            .cm-assistant-message.bot ul { margin: 7px 0 9px; padding-left: 19px; }
-            .cm-assistant-message.bot li { margin: 6px 0; }
-            .cm-assistant-message.bot strong { color: #005c55; font-weight: 800; }
-            .cm-assistant-message.bot { align-self: flex-start; background: #ffffff; border-color: rgba(189, 201, 198, 0.7); color: #102033; }
+            .cm-assistant-message.bot ul { display: grid; gap: 7px; margin: 9px 0 11px; padding: 0; list-style: none; }
+            .cm-assistant-message.bot ul li { position: relative; margin: 0; padding: 9px 10px 9px 27px; border: 1px solid rgba(0, 92, 85, 0.1); border-radius: 10px; background: #f6faf9; }
+            .cm-assistant-message.bot ul li::before { content: ""; position: absolute; top: 15px; left: 11px; width: 6px; height: 6px; border-radius: 50%; background: #0b8a7f; box-shadow: 0 0 0 3px rgba(11, 138, 127, 0.1); }
+            .cm-assistant-message.bot ol { margin: 9px 0 11px; padding-left: 24px; }
+            .cm-assistant-message.bot ol li { margin: 6px 0; padding-left: 3px; }
+            .cm-assistant-message.bot strong { color: #005c55; font-weight: 700; }
+            .cm-assistant-message.bot blockquote { margin: 11px 0 0; padding: 9px 11px; border-left: 3px solid #d5a334; border-radius: 0 9px 9px 0; background: #fffbef; color: #5f5131; }
+            .cm-assistant-message.bot blockquote p { margin: 0; }
+            .cm-assistant-message.bot a { color: #006e65; font-weight: 600; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+            .cm-assistant-message.bot code { border-radius: 5px; padding: 1px 4px; background: #edf4f2; color: #164b46; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.92em; }
+            .cm-assistant-message.bot hr { margin: 12px 0; border: 0; border-top: 1px solid rgba(0, 92, 85, 0.12); }
             .cm-assistant-message.user { align-self: flex-end; background: #005c55; color: #ffffff; }
             .cm-assistant-message.soft { max-width: 100%; background: #e9f7f4; border-color: rgba(0, 92, 85, 0.16); color: #31514d; }
             .cm-assistant-quick { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 14px 12px; background: #ffffff; border-top: 1px solid rgba(189, 201, 198, 0.42); }
@@ -656,6 +676,7 @@ window.ChatWidget = {
                 .cm-assistant-root { right: 14px; bottom: 84px; }
                 .cm-assistant-panel { right: -2px; bottom: 76px; width: calc(100vw - 24px); height: min(620px, calc(100vh - 184px)); }
                 .cm-assistant-launcher { width: 58px; height: 58px; border-radius: 16px; }
+                .cm-assistant-message.bot { max-width: 96%; padding: 13px; }
             }
         `;
         document.head.appendChild(style);
