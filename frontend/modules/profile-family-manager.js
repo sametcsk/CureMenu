@@ -230,14 +230,18 @@ function getTargetCacheContext(selectIdOrTarget = 'kendim') {
 
 function historyMatchesTargetContext(metadata, context) {
     if (!context || !metadata?.target_scope) return false;
-    if (String(metadata.target_scope) !== String(context.targetScope)) return false;
-
+    if (String(metadata.target_scope) !== String(context.targetScope)) {
+        console.log("SCOPE MISMATCH", metadata.target_scope, context.targetScope);
+        return false;
+    }
+    
     // History is already isolated by the authenticated account. Main-profile IDs
     // may change after a profile edit, while the self/family scope stays stable.
     if (context.targetScope === 'self' || context.targetScope === 'family') return true;
 
-    return Boolean(metadata.target_id)
-        && String(metadata.target_id) === String(context.targetId);
+    const match = Boolean(metadata.target_id) && String(metadata.target_id) === String(context.targetId);
+    console.log("MATCH RESULT", match, "meta:", metadata.target_id, "ctx:", context.targetId);
+    return match;
 }
 
 function populateTargetSelect(selectId, familyMembers) {
