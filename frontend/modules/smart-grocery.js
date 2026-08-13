@@ -18,6 +18,7 @@ async function calculateBudget() {
         });
 
         if (data && data.success) {
+            window.CureMenuAnalytics?.track?.('grocery_list_created', { feature: 'grocery', metadata: { result: 'success' } });
             const formatted = formatMarkdownSafe(data.rapor);
             const targetSelect = document.getElementById('planTarget');
             const targetLabel = targetSelect?.selectedOptions?.[0]?.textContent?.trim() || 'Seçili hedef kişi';
@@ -111,6 +112,7 @@ async function openSmartGrocery() {
     const target = groceryTarget?.value || 'kendim';
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+    window.CureMenuAnalytics?.track?.('grocery_opened', { feature: 'grocery' });
     if (!window.currentPlanText) {
         content.innerHTML = emptyState('shopping_cart', 'Plan bulunamadı', 'Akıllı sepet için önce haftalık plan oluşturman gerekiyor.');
         return;
@@ -148,6 +150,7 @@ async function openSmartGrocery() {
             return;
         }
         localStorage.setItem(cacheKey, JSON.stringify({ planText: window.currentPlanText, data }));
+        window.CureMenuAnalytics?.track?.('grocery_list_created', { feature: 'grocery', metadata: { result: 'success' } });
         renderSmartGrocery(data);
     } catch (e) {
         renderTextState(content, baglantiHatasi(e), 'rounded-lg border border-error/20 bg-error-container p-5 text-on-error-container');
@@ -280,7 +283,7 @@ async function sendFeedback(yemekAdi) {
                 kimin_icin,
             }),
         });
-        if (res.ok && data?.success) alert(data.message || 'Geri bildiriminiz kaydedildi.');
+        if (res.ok && data?.success) { window.CureMenuAnalytics?.track?.('meal_feedback_submitted', { feature: 'meal_feedback', metadata: { action_id: 'meal_feedback' } }); alert(data.message || 'Geri bildiriminiz kaydedildi.'); }
         else alert(apiHataMesaji(data, 'Geri bildirim kaydedilemedi.'));
     } catch (e) {
         alert(baglantiHatasi(e));

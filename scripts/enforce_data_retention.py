@@ -13,7 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import settings
-from src.database import retention_summary_db
+from src.database import analytics_retention_summary_db, retention_summary_db
 from src.memory import delete_expired_user_memory
 
 
@@ -25,11 +25,14 @@ def main() -> int:
     retention_days = settings.CUREMENU_RETENTION_DAYS
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
     relational = retention_summary_db(cutoff.isoformat(), apply=args.apply)
+    analytics_cutoff = datetime.now(timezone.utc) - timedelta(days=settings.CUREMENU_ANALYTICS_RETENTION_DAYS)
+    analytics_count = analytics_retention_summary_db(analytics_cutoff.isoformat(), apply=args.apply)
     memory_count = delete_expired_user_memory(int(time.time()) - retention_days * 86400, apply=args.apply)
     print(json.dumps({
         "mode": "apply" if args.apply else "dry-run",
         "retention_days": retention_days,
         "relational": relational,
+        "analytics": {"retention_days": settings.CUREMENU_ANALYTICS_RETENTION_DAYS, "events": analytics_count},
         "timestamped_user_memory": memory_count,
     }, ensure_ascii=True))
     return 0

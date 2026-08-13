@@ -243,6 +243,7 @@
     </main>
 
     <script src="/static/modules/auth-manager.js"></script>
+    <script src="/static/modules/analytics.js?v=1"></script>
     <script src="/static/modules/profile-goals.js?v=12"></script>
     <script>
         const form = document.getElementById('profileWizard');
@@ -323,6 +324,7 @@
         }
 
         nextBtn.addEventListener('click', () => {
+            window.CureMenuAnalytics?.track?.('health_profile_started', { feature: 'onboarding' });
             if (!validateCurrentStep()) return;
             currentStep = Math.min(currentStep + 1, panels.length - 1);
             updateStep();
@@ -347,6 +349,7 @@
 
             try {
                 await window.AuthManager.register(telefon, kullanici_adi, sifre);
+                window.CureMenuAnalytics?.track?.('signup_completed', { feature: 'onboarding' });
 
                 const profileBody = {
                     kullanici_adi,
@@ -376,6 +379,7 @@
                 }
 
                 localStorage.setItem('cm_telefon', telefon);
+                window.CureMenuAnalytics?.track?.('health_profile_completed', { feature: 'onboarding' });
                 localStorage.setItem('cm_kullanici_adi', kullanici_adi);
                 localStorage.setItem('cm_has_profile', 'true');
                 localStorage.setItem('cm_onboarding_done', 'true');
@@ -392,6 +396,7 @@
             }
         });
 
+        window.CureMenuAnalytics?.track?.('signup_started', { feature: 'onboarding' });
         updateStep();
     </script>
 

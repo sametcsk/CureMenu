@@ -176,6 +176,7 @@ window.hydrateChatGovernanceDetails = hydrateChatGovernanceDetails;
 function switchTab(tab) {
     if (!VALID_DASHBOARD_TABS.includes(tab)) tab = 'dashboard';
     localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tab);
+    window.CureMenuAnalytics?.screenViewed?.(tab);
     const tabContent = document.getElementById('tab-' + tab);
     if (!tabContent) {
         if (tab === 'curebot') {

@@ -99,6 +99,7 @@ window.WeeklyPlanManager = {
             if (!user) return; // Will redirect to login
 
             const kimin_icin = document.getElementById('planTarget')?.value || 'kendim';
+            window.CureMenuAnalytics?.track?.('weekly_plan_started', { feature: 'weekly_plan' });
             this.showLoading();
 
             const cacheKey = this.getPlanCacheKey(user, kimin_icin);
@@ -114,6 +115,7 @@ window.WeeklyPlanManager = {
                 const planToRender = { ...data.plan, compatibility: data.compatibility || data.plan.compatibility || null };
                 localStorage.setItem(cacheKey, JSON.stringify(planToRender));
                 this.renderPlan(planToRender);
+                window.CureMenuAnalytics?.track?.('weekly_plan_generated', { feature: 'weekly_plan', metadata: { result: 'success' } });
             } else {
                 this.showError(data?.error?.message || "Plan oluşturulamadı. Lütfen daha sonra tekrar deneyin.");
             }
@@ -337,7 +339,7 @@ window.WeeklyPlanManager = {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ meal: mealText, status: 'consumed' })
-                    }).catch(console.error);
+                    }).then(({ res, data }) => { if (res?.ok && data?.success) window.CureMenuAnalytics?.track?.('meal_feedback_submitted', { feature: 'meal_feedback', metadata: { action_id: 'meal_consumed' } }); }).catch(console.error);
                 }
             }
         } else {

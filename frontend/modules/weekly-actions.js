@@ -105,6 +105,7 @@
             });
 
             if (data && data.success) {
+                window.CureMenuAnalytics?.track?.('weekly_plan_action_used', { feature: 'weekly_plan', metadata: { action_id: 'weekly_plan_recipe' } });
                 refs.title.innerHTML = '<span class="material-symbols-outlined align-middle mr-2">menu_book</span> Tarif: ' + escapeHtml(mealText);
                 refs.subtitle.textContent = 'Afiyet olsun. Yemeğin tarifi hazır.';
                 refs.content.innerHTML = `<div class="prose max-w-none text-on-surface">${formatMarkdownSafe(data.result)}</div>`;
@@ -138,6 +139,7 @@
             });
 
             if (data && data.success && data.result) {
+                window.CureMenuAnalytics?.track?.('weekly_plan_action_used', { feature: 'weekly_plan', metadata: { action_id: 'weekly_plan_snack' } });
                 const suggestions = data.result.snack_onerileri || 'Uygun atıştırmalık önerisi bulunamadı.';
                 refs.title.innerHTML = '<span class="material-symbols-outlined align-middle mr-2 text-success">check_circle</span> Atıştırmalık hazır';
                 refs.subtitle.textContent = 'Profilinize uygun seçenekler bulundu.';
@@ -218,6 +220,7 @@
                 refs.content.innerHTML = `<div class="p-6 text-center text-error font-bold">Alternatif bulunamadı: ${escapeHtml(data?.detail || 'Bilinmeyen hata')}</div>`;
                 return;
             }
+            window.CureMenuAnalytics?.track?.('weekly_plan_action_used', { feature: 'weekly_plan', metadata: { action_id: 'weekly_plan_replace' } });
 
             const changedMeals = data.result.degisen_ogunler || [];
             const explanation = data.result.aciklama || '';

@@ -166,6 +166,31 @@ def _ensure_db():
             revoked_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # Product analytics is deliberately separate from health interaction and
+    # clinical-decision logs. It stores only server-sanitized product events.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS analytics_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            anonymous_user_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            event_name TEXT NOT NULL,
+            screen TEXT,
+            feature TEXT,
+            event_time TEXT NOT NULL,
+            active_duration_ms INTEGER,
+            app_version TEXT,
+            research_cohort TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_analytics_events_user_time
+        ON analytics_events (anonymous_user_id, event_time)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_analytics_events_name_time
+        ON analytics_events (event_name, event_time)
+    """)
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_revoked_refresh_tokens_expires_at
         ON revoked_refresh_tokens(expires_at)
@@ -681,3 +706,45 @@ def retention_summary_db(
         "clinical_decisions": len(decision_ids),
         "decision_events": event_count,
     }
+
+
+def analytics_event_kaydet_db(event: dict, conn: sqlite3.Connection = None) -> None:
+    """Persist one already validated first-party product analytics event."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        _conn.execute(
+            """
+            INSERT INTO analytics_events (
+                anonymous_user_id, session_id, event_name, screen, feature,
+                event_time, active_duration_ms, app_version, research_cohort, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event["anonymous_user_id"], event["session_id"], event["event_name"],
+                event.get("screen"), event.get("feature"), event["event_time"],
+                event.get("active_duration_ms"), event.get("app_version"),
+                event.get("research_cohort"), json.dumps(event.get("metadata") or {}, ensure_ascii=False),
+            ),
+        )
+        _conn.commit()
+
+
+def analytics_delete_account_db(anonymous_user_id: str, conn: sqlite3.Connection = None) -> int:
+    """Delete product analytics for one pseudonymous authenticated account."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        deleted = _conn.execute(
+            "DELETE FROM analytics_events WHERE anonymous_user_id = ?", (anonymous_user_id,)
+        ).rowcount
+        _conn.commit()
+        return int(deleted or 0)
+
+
+def analytics_retention_summary_db(cutoff_iso: str, *, apply: bool = False, conn: sqlite3.Connection = None) -> int:
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        count = int(_conn.execute("SELECT COUNT(*) FROM analytics_events WHERE event_time < ?", (cutoff_iso,)).fetchone()[0])
+        if apply and count:
+            _conn.execute("DELETE FROM analytics_events WHERE event_time < ?", (cutoff_iso,))
+            _conn.commit()
+        return count

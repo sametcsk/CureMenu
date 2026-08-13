@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     # Chroma / log
     CHROMA_PERSIST_DIR: str = "./chroma_db"
     CUREMENU_RETENTION_DAYS: int = 365
+    # Product analytics is first-party, opt-in, and isolated from clinical logs.
+    CUREMENU_ANALYTICS_ENABLED: bool = False
+    CUREMENU_ANALYTICS_RETENTION_DAYS: int = 90
+    CUREMENU_ANALYTICS_HASH_KEY: Optional[str] = None
+    CUREMENU_ANALYTICS_ADMIN_TOKEN: Optional[str] = None
     CLINICAL_RAG_COLLECTION: str = "klinik_kutuphane_v2"
     CLINICAL_OFFICIAL_RAG_COLLECTION: str = "clinical_official_evidence_v1"
     EMBEDDINGS_LOCAL_ONLY: bool = True
@@ -161,6 +166,10 @@ class Settings(BaseSettings):
             raise ValueError("CUREMENU_INSTANCE_COUNT must be at least 1.")
         if self.CUREMENU_RETENTION_DAYS < 1:
             raise ValueError("CUREMENU_RETENTION_DAYS must be at least 1.")
+        if self.CUREMENU_ANALYTICS_RETENTION_DAYS < 1:
+            raise ValueError("CUREMENU_ANALYTICS_RETENTION_DAYS must be at least 1.")
+        if self.CUREMENU_ANALYTICS_ENABLED and not self.CUREMENU_ANALYTICS_HASH_KEY:
+            raise ValueError("CUREMENU_ANALYTICS_HASH_KEY must be set when analytics is enabled.")
         if self.is_production:
             if not self.JWT_SECRET_KEY:
                 raise ValueError("JWT_SECRET_KEY must be set in production.")

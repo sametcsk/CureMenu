@@ -187,6 +187,7 @@ async function uploadHealthRecord(event) {
     result.innerHTML = `<div class="text-center py-12"><div class="loading-dots flex gap-2 justify-center mb-4"><span class="w-3 h-3 rounded-full bg-primary inline-block"></span><span class="w-3 h-3 rounded-full bg-primary inline-block"></span><span class="w-3 h-3 rounded-full bg-primary inline-block"></span></div><p class="text-on-surface-variant font-body-md">Tahlil dosyanı güvenli şekilde okuyorum...<br/>Bu işlem biraz sürebilir.</p></div>`;
 
     const formData = new FormData();
+    window.CureMenuAnalytics?.track?.('lab_analysis_started', { feature: 'lab' });
     formData.append("file", file);
     formData.append("kimin_icin", kimin_icin);
 
@@ -199,6 +200,7 @@ async function uploadHealthRecord(event) {
         const data = await res.json();
 
         if (res.ok && data.success) {
+            window.CureMenuAnalytics?.track?.('lab_analysis_completed', { feature: 'lab', metadata: { result: 'success' } });
             result.innerHTML = `
             <div class="bg-primary-container/20 border border-primary/30 rounded-lg p-6 text-center">
                 <span class="material-symbols-outlined text-primary text-4xl mb-2">task_alt</span>

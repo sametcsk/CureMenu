@@ -236,7 +236,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
   <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">Haftalık Plan</h2><p class="mt-2 text-on-surface-variant">Profil ve aile bilgilerine göre kontrollü öğün planı oluştur.</p></div>
   <div class="mb-5 flex flex-wrap gap-3">
     <select id="planTarget" class="rounded-lg border-outline-variant bg-white px-4 py-3"></select>
-    <button id="generatePlanBtn" class="btn-primary px-6 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">auto_awesome</span>Planı oluştur</button>
+    <button id="generatePlanBtn" data-analytics-id="weekly_plan_generate" class="btn-primary px-6 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">auto_awesome</span>Planı oluştur</button>
     <button type="button" data-weekly-action="snack" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">nutrition</span>Atıştırmalık Öner</button>
   </div>
   <div id="planResult" class="card min-h-[220px] p-6"><div class="py-12 text-center text-on-surface-variant"><span class="material-symbols-outlined mb-3 block text-5xl opacity-40">calendar_month</span>Plan oluşturmak için yukarıdaki butonu kullan.</div></div>
@@ -245,7 +245,7 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 <div id="tab-tarayici" class="tab-content">
   <div class="mb-6"><h2 class="font-display text-4xl font-extrabold">Menü Analizi</h2><p class="mt-2 text-on-surface-variant">Restoran menüsünü bağlantı, QR veya fotoğrafla profil bilgilerine göre değerlendir.</p></div>
   <section class="card p-5">
-    <div class="menu-scan-controls"><input id="menuRestaurantName" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3" placeholder="Restoran adı (isteğe bağlı)"/><input id="menuUrlInput" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3" placeholder="https://ornekrestoran.com/menu" type="url"/><select id="menuTarget" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3"></select><button onclick="window.MenuScanner.scanMenu()" class="btn-primary px-6 py-3 font-bold">Linki tara</button></div>
+<div class="menu-scan-controls"><input id="menuRestaurantName" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3" placeholder="Restoran adı (isteğe bağlı)"/><input id="menuUrlInput" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3" placeholder="https://ornekrestoran.com/menu" type="url"/><select id="menuTarget" class="rounded-lg border-outline-variant bg-surface-container-low px-4 py-3"></select><button data-analytics-id="menu_link_analyze" onclick="window.MenuScanner.scanMenu()" class="btn-primary px-6 py-3 font-bold">Linki tara</button></div>
     <div class="mt-5 flex flex-wrap gap-3"><label class="btn-secondary cursor-pointer px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">photo_camera</span>Menü fotoğrafı<input type="file" id="menuImageInput" accept="image/*" class="hidden" onchange="window.MenuScanner.scanMenuImage(this)"/></label><button onclick="window.MenuScanner.startQRScanner()" class="btn-secondary px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">qr_code_scanner</span>QR oku</button><label class="btn-secondary cursor-pointer px-5 py-3 font-bold inline-flex items-center gap-2"><span class="material-symbols-outlined">image_search</span>Galeriden QR okut<input type="file" id="qrImageInput" accept="image/*" class="hidden" onchange="window.MenuScanner.scanQRImage(this)"/></label></div>
     <div id="qr-reader" style="width:100%;max-width:420px;display:none" class="mt-4 overflow-hidden rounded-lg border border-outline-variant bg-white"></div>
   </section>
@@ -359,10 +359,11 @@ header button[onclick="openCureBotWidget()"]{display:none!important}
 <button type="button" data-tab="buzdolabi" onclick="switchTab('buzdolabi')" class="mobile-tab-btn flex flex-col items-center gap-0.5 text-on-surface-variant text-[10px] font-bold"><span class="material-symbols-outlined text-[22px]">kitchen</span>Buzdolabı</button>
 </nav>
 
-<script src="/static/modules/api-client.js?v=14"></script>
+<script src="/static/modules/api-client.js?v=15"></script>
 <script src="/static/modules/ui-utils.js"></script>
 <script src="/static/modules/auth-manager.js"></script>
-<script src="/static/modules/chat-widget.js?v=21"></script>
+<script src="/static/modules/analytics.js?v=1"></script>
+<script src="/static/modules/chat-widget.js?v=22"></script>
 <script src="/static/modules/chat-governance-panel.js?v=12"></script>
 <script src="/static/modules/weekly-plan-manager.js?v=17"></script>
 <script src="/static/modules/smart-grocery.js?v=14"></script>

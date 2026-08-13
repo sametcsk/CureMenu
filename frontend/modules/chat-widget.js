@@ -491,6 +491,7 @@ window.ChatWidget = {
                 throw new Error(response.status === 401 ? "Oturumunu yenilememiz gerekiyor." : "Şu an yanıtı hazırlayamadım.");
             }
 
+            window.CureMenuAnalytics?.track?.('curebot_message_sent', { feature: 'curebot' });
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = "";
@@ -563,6 +564,7 @@ window.ChatWidget = {
             }
             if (fullAnswer) {
                 this.appendCachedMessage("bot", fullAnswer);
+                window.CureMenuAnalytics?.track?.('curebot_response_received', { feature: 'curebot', metadata: { result: 'success' } });
             }
         } catch (error) {
             if (error.name === "AbortError" || this.controller === null) {

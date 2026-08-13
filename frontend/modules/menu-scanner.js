@@ -307,6 +307,7 @@ async function loadMenuHistory(delayMs = 0) {
 
 async function scanMenu() {
     return withMenuScanLock(async () => {
+    window.CureMenuAnalytics?.track?.('menu_analysis_started', { feature: 'menu_analysis', metadata: { method: 'link' } });
     const urlRaw = document.getElementById('menuUrlInput')?.value?.trim() || '';
     const kimin_icin = document.getElementById('menuTarget')?.value || 'kendim';
     const restoran_adi = document.getElementById('menuRestaurantName')?.value?.trim() || '';
@@ -332,6 +333,7 @@ async function scanMenu() {
             body: JSON.stringify({ kimin_icin, url: safeUrl, restoran_adi })
         });
         if (data && data.success) {
+            window.CureMenuAnalytics?.track?.('menu_analysis_completed', { feature: 'menu_analysis', metadata: { method: 'link', result: 'success' } });
             renderMenuAnalysis(data);
             loadMenuHistory(800);
         } else {
@@ -355,6 +357,7 @@ async function scanMenuImage(inputEl) {
         return;
     }
     await withMenuScanLock(() => new Promise(resolve => {
+    window.CureMenuAnalytics?.track?.('menu_analysis_started', { feature: 'menu_analysis', metadata: { method: 'photo' } });
     const kimin_icin = document.getElementById('menuTarget')?.value || 'kendim';
     const restoran_adi = document.getElementById('menuRestaurantName')?.value?.trim() || '';
     if (result) {
@@ -376,6 +379,7 @@ async function scanMenuImage(inputEl) {
                 body: JSON.stringify({ kimin_icin, image_base64: base64, restoran_adi }),
             });
             if (data && data.success) {
+                window.CureMenuAnalytics?.track?.('menu_analysis_completed', { feature: 'menu_analysis', metadata: { method: 'photo', result: 'success' } });
                 renderMenuAnalysis(data);
                 loadMenuHistory(800);
             } else if (result) {
@@ -487,6 +491,7 @@ function handleFridgeImage(event) {
 
 async function scanFridge(imageBase64, imagePreviewBase64 = '') {
     return withFridgeScanLock(async () => {
+    window.CureMenuAnalytics?.track?.('fridge_analysis_started', { feature: 'fridge' });
     const kimin_icin = document.getElementById('fridgeTarget')?.value || 'kendim';
     const result = document.getElementById('fridgeScanResult');
     const inputEl = document.getElementById('fridgeImageInput');
@@ -508,6 +513,7 @@ async function scanFridge(imageBase64, imagePreviewBase64 = '') {
         }
 
         const malzemeler = data.malzemeler || data.analiz?.bulunan_malzemeler || data.sonuc?.bulunan_malzemeler || '';
+        window.CureMenuAnalytics?.track?.('fridge_analysis_completed', { feature: 'fridge', metadata: { result: 'success' } });
         const tarif = data.tarif || data.analiz?.tarif_metni || data.sonuc?.tarif_metni || data.analiz?.uyari_mesaji || '';
         const preview = safePreviewDataUrl(data.image_preview_base64 || imagePreviewBase64);
         result.innerHTML = `

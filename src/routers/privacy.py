@@ -10,7 +10,9 @@ from src.database import (
     get_db,
     profil_getir_db,
     sifre_hash_getir,
+    analytics_delete_account_db,
 )
+from src.analytics import analytics_enabled, pseudonymous_account_id
 from src.logger import get_logger, log_failure
 from src.memory import build_memory_namespace, delete_account_memory
 from src.models import AccountDeletionRequest
@@ -98,11 +100,15 @@ async def delete_account(
         ) from exc
 
     deleted_relational = delete_account_relational_db(telefon, conn=db)
+    deleted_analytics = 0
+    if analytics_enabled():
+        deleted_analytics = analytics_delete_account_db(pseudonymous_account_id(telefon), conn=db)
     _clear_auth_cookies(response)
     return {
         "success": True,
         "deleted": {
             "user_memory_records": deleted_memory_records,
+            "analytics_events": deleted_analytics,
             **deleted_relational,
         },
     }

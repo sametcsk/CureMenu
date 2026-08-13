@@ -184,6 +184,7 @@ async function completeOnboarding() {
         });
         const data = await res.json();
         if (res.ok && data.success) {
+            window.CureMenuAnalytics?.track?.('health_profile_' + (localStorage.getItem('cm_has_profile') === 'true' ? 'updated' : 'completed'), { feature: 'profile' });
             localStorage.setItem('cm_has_profile', 'true');
             localStorage.setItem('cm_onboarding_done', 'true');
             localStorage.setItem('cm_kullanici_adi', ad);
@@ -282,6 +283,7 @@ function populateTargetSelect(selectId, familyMembers) {
 
     if (select.dataset.targetPersistenceBound !== 'true') {
         select.addEventListener('change', () => {
+            window.CureMenuAnalytics?.track?.('family_profile_switched', { feature: 'family', metadata: { target_type: select.value === 'kendim' ? 'self' : 'family' } });
             localStorage.setItem(storageKey, select.value);
             if (selectId === 'planTarget') window.WeeklyPlanManager?.loadExistingPlan?.();
             if (selectId === 'chatTarget') window.ChatWidget?.loadCachedConversation?.();
@@ -338,6 +340,7 @@ async function addMember() {
             body: JSON.stringify(body),
         });
         if (data && data.success) {
+            window.CureMenuAnalytics?.track?.(hasProfile === 'true' ? 'family_profile_created' : 'health_profile_completed', { feature: hasProfile === 'true' ? 'family' : 'profile', metadata: { target_type: hasProfile === 'true' ? 'family' : 'self' } });
             if (hasProfile !== 'true') {
                 localStorage.setItem('cm_has_profile', 'true');
                 localStorage.setItem('cm_onboarding_done', 'true');
