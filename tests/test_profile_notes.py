@@ -103,3 +103,16 @@ def test_registration_and_family_forms_submit_optional_notes():
     assert "notlar: document.getElementById('additionalNotes')" in registration
     assert 'id="m_notlar"' in dashboard
     assert "notlar: document.getElementById('m_notlar')" in profile_manager
+
+
+def test_profile_form_uses_mode_specific_success_flow():
+    profile_manager = (ROOT / "frontend" / "modules" / "profile-family-manager.js").read_text(encoding="utf-8")
+
+    assert "let profileFormMode = 'create';" in profile_manager
+    assert "async function showOnboarding(mode = 'create')" in profile_manager
+    assert "await showOnboarding('edit');" in profile_manager
+    assert "const isEdit = profileFormMode === 'edit';" in profile_manager
+    assert "'health_profile_' + (isEdit ? 'updated' : 'completed')" in profile_manager
+    assert "await loadProfile();\n            if (isEdit) return;" in profile_manager
+    assert "openCureBotWidget(ornek || undefined);" in profile_manager
+    assert "openCureBotWidget();" not in profile_manager

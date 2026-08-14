@@ -1,4 +1,6 @@
 (function() {
+let profileFormMode = 'create';
+
 function parseListInput(value) {
     return value.split(',').map(s => s.trim()).filter(Boolean);
 }
@@ -77,7 +79,8 @@ async function checkOnboarding() {
     await showOnboarding();
 }
 
-async function showOnboarding() {
+async function showOnboarding(mode = 'create') {
+    profileFormMode = mode;
     const metinler = await loadPublicMetinler();
     const modal = document.getElementById('onboardingModal');
     const user = window.AuthManager.getUser();
@@ -132,7 +135,7 @@ async function openProfileEditor() {
     // Onboarding modalinin mevcut kurulumunu (oneri cipleri, feragat, ornekler)
     // koru; ardindan formu mevcut profille doldur ki guncelleme bos formla
     // baslamasin.
-    await showOnboarding();
+    await showOnboarding('edit');
     const modal = document.getElementById('onboardingModal');
     if (!modal) return;
     const setValue = (id, value) => {
@@ -162,6 +165,7 @@ async function openProfileEditor() {
 }
 
 async function completeOnboarding() {
+    const isEdit = profileFormMode === 'edit';
     const user = window.AuthManager.getUser();
     const ad = document.getElementById('ob_ad').value.trim();
     const nameRegex = /^[A-Za-z\u00C7\u00E7\u011E\u011F\u0130\u0131\u00D6\u00F6\u015E\u015F\u00DC\u00FC\s]+$/;
@@ -202,18 +206,16 @@ async function completeOnboarding() {
         });
         const data = await res.json();
         if (res.ok && data.success) {
-            window.CureMenuAnalytics?.track?.('health_profile_' + (localStorage.getItem('cm_has_profile') === 'true' ? 'updated' : 'completed'), { feature: 'profile' });
+            window.CureMenuAnalytics?.track?.('health_profile_' + (isEdit ? 'updated' : 'completed'), { feature: 'profile' });
             localStorage.setItem('cm_has_profile', 'true');
             localStorage.setItem('cm_onboarding_done', 'true');
             localStorage.setItem('cm_kullanici_adi', ad);
             document.getElementById('onboardingModal').classList.add('hidden');
             await loadProfile();
-            openCureBotWidget();
+            if (isEdit) return;
             const metinler = await loadPublicMetinler();
             const ornek = (metinler.ornek_sorular || [])[0];
-            if (ornek) {
-                openCureBotWidget(ornek);
-            }
+            openCureBotWidget(ornek || undefined);
         } else {
             alert(apiHataMesaji(data, 'Profil kaydedilemedi.'));
         }
