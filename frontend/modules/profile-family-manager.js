@@ -312,8 +312,10 @@ function updatePlanDropdown(profil) {
 
 async function addMember() {
     const user = window.AuthManager.getUser();
-    const hasProfile = localStorage.getItem('cm_has_profile');
-    const endpoint = hasProfile === 'true' ? '/api/family/add' : '/api/profile/save';
+    // Karari kayitli bayraga degil, bu oturumun gercek profiline gore ver;
+    // aksi halde bayat localStorage ana profili ezebilir.
+    const hasMainProfile = !!(window.currentProfile && window.currentProfile.ana_kullanici);
+    const endpoint = hasMainProfile ? '/api/family/add' : '/api/profile/save';
 
     const ad_val = document.getElementById('m_ad').value.trim();
     const nameRegex = /^[A-Za-z\u00C7\u00E7\u011E\u011F\u0130\u0131\u00D6\u00F6\u015E\u015F\u00DC\u00FC\s]+$/;
@@ -344,8 +346,8 @@ async function addMember() {
             body: JSON.stringify(body),
         });
         if (data && data.success) {
-            window.CureMenuAnalytics?.track?.(hasProfile === 'true' ? 'family_profile_created' : 'health_profile_completed', { feature: hasProfile === 'true' ? 'family' : 'profile', metadata: { target_type: hasProfile === 'true' ? 'family' : 'self' } });
-            if (hasProfile !== 'true') {
+            window.CureMenuAnalytics?.track?.(hasMainProfile ? 'family_profile_created' : 'health_profile_completed', { feature: hasMainProfile ? 'family' : 'profile', metadata: { target_type: hasMainProfile ? 'family' : 'self' } });
+            if (!hasMainProfile) {
                 localStorage.setItem('cm_has_profile', 'true');
                 localStorage.setItem('cm_onboarding_done', 'true');
                 localStorage.setItem('cm_kullanici_adi', ad_val);
