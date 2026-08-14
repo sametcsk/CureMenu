@@ -53,8 +53,8 @@ def test_admin_metrics_require_token_and_aggregate_events(client, test_db_path, 
         analytics_event_kaydet_db(record, conn=db)
     assert client.get("/api/admin/analytics/summary").status_code == 403
     response = client.get("/api/admin/analytics/summary", headers={"Authorization": "Bearer test-admin-token"})
-    assert response.status_code == 200 and response.json()["users"]["total"] == 1
-    assert client.get("/api/admin/analytics/funnel", headers={"Authorization": "Bearer test-admin-token"}).json()["funnel"]["first_value"]["users"] == 1
+    assert response.status_code == 200 and response.json()["users"]["tracked_identities"] == 1
+    assert client.get("/api/admin/analytics/funnel", headers={"Authorization": "Bearer test-admin-token"}).json()["funnel"]["activation"]["first_value"]["users"] == 0
 
 
 @pytest.mark.parametrize("event_name", ["lab_analysis_completed", "grocery_list_created"])
@@ -64,7 +64,7 @@ def test_first_value_includes_successful_lab_and_grocery_events(client, test_db_
         record.update({"event_time": datetime.now(timezone.utc).isoformat(), "anonymous_user_id": "anon-value"})
         analytics_event_kaydet_db(record, conn=db)
     response = client.get("/api/admin/analytics/funnel", headers={"Authorization": "Bearer test-admin-token"})
-    assert response.json()["funnel"]["first_value"]["users"] == 1
+    assert response.json()["funnel"]["activation"]["first_value"]["users"] == 0
 
 
 def test_analytics_retention_is_separate_and_bounded(client, test_db_path, analytics_on):

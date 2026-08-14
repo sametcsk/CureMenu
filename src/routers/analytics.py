@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from src.analytics import analytics_enabled, build_cta_rows, build_feature_rows, build_funnel, build_retention, build_screen_rows, build_summary, validate_event
+from src.analytics import analytics_enabled, build_completion_rows, build_cta_rows, build_feature_rows, build_funnel, build_retention, build_screen_rows, build_summary, validate_event
 from src.auth import get_current_user, verify_token
 from src.config import settings
 from src.database import analytics_event_kaydet_db, get_db
@@ -94,6 +94,11 @@ async def retention(request: Request, db: sqlite3.Connection = Depends(get_db)):
 @router.get("/api/admin/analytics/features")
 async def features(request: Request, db: sqlite3.Connection = Depends(get_db)):
     _require_admin(request); return {"success": True, "features": build_feature_rows(_all_events(db))}
+
+
+@router.get("/api/admin/analytics/completions")
+async def completions(request: Request, db: sqlite3.Connection = Depends(get_db)):
+    _require_admin(request); return {"success": True, "completions": build_completion_rows(_all_events(db))}
 
 
 @router.get("/api/admin/analytics/screens")

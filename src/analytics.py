@@ -37,6 +37,11 @@ SAFE_METADATA_VALUES = {
     "target_type": {"self", "family", "member"},
 }
 FIRST_VALUE_EVENTS = frozenset({"weekly_plan_generated", "menu_analysis_completed", "curebot_response_received", "fridge_analysis_completed", "lab_analysis_completed", "grocery_list_created"})
+COMPLETION_EVENTS = {
+    "weekly_plan": "weekly_plan_generated", "menu_analysis": "menu_analysis_completed",
+    "curebot": "curebot_response_received", "fridge": "fridge_analysis_completed",
+    "lab": "lab_analysis_completed", "grocery": "grocery_list_created",
+}
 
 
 def analytics_enabled() -> bool:
@@ -131,19 +136,25 @@ def build_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     for event in events:
         duration_by_session[event["session_id"]] += int(event.get("active_duration_ms") or 0)
     durations = list(duration_by_session.values())
-    return {"users": {"total": len(users), "active_24h": len(active_24h), "active_7d": len(active_7d)}, "sessions": {"total": len(sessions), "average_active_duration_ms": round(sum(durations) / len(durations)) if durations else 0, "median_active_duration_ms": round(median(durations)) if durations else 0}}
+    return {"users": {"tracked_identities": len(users), "active_24h_identities": len(active_24h), "active_7d_identities": len(active_7d)}, "sessions": {"total": len(sessions), "average_active_duration_ms": round(sum(durations) / len(durations)) if durations else 0, "median_active_duration_ms": round(median(durations)) if durations else 0}}
 
 
 def build_funnel(rows: list[dict[str, Any]]) -> dict[str, Any]:
     events = _parsed_rows(rows)
-    # signup_started fires before authentication (anonymous browser id); signup_completed
-    # and every later stage fire authenticated (pseudonymous account id). Including the
-    # pre-auth event would double-count a single real user, so the funnel base is
-    # signup_completed, which shares the id space with the later stages.
-    stages = {"signup": {"signup_completed"}, "profile_started": {"health_profile_started"}, "profile_completed": {"health_profile_completed"}, "first_value": FIRST_VALUE_EVENTS}
-    counts = {name: len({e["anonymous_user_id"] for e in events if e["event_name"] in names}) for name, names in stages.items()}
-    base = counts["signup"] or 0
-    return {name: {"users": count, "conversion_rate": round((count / base) * 100, 1) if base else 0.0} for name, count in counts.items()}
+    def cohort_funnel(base_events: set[str], stages: dict[str, set[str]]) -> dict[str, dict[str, int | float]]:
+        cohort = {e["anonymous_user_id"] for e in events if e["event_name"] in base_events}
+        base = len(cohort)
+        result = {}
+        for name, names in stages.items():
+            users = {e["anonymous_user_id"] for e in events if e["event_name"] in names} & cohort
+            result[name] = {"users": len(users), "conversion_rate": round(len(users) * 100 / base, 1) if base else 0.0}
+        return result
+
+    # Pre-auth browser ids and authenticated account ids are separate identity spaces.
+    return {
+        "registration": cohort_funnel({"signup_started"}, {"signup_started": {"signup_started"}, "profile_started": {"health_profile_started"}}),
+        "activation": cohort_funnel({"signup_completed"}, {"signup_completed": {"signup_completed"}, "profile_completed": {"health_profile_completed"}, "first_value": set(FIRST_VALUE_EVENTS)}),
+    }
 
 
 def build_retention(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -153,14 +164,18 @@ def build_retention(rows: list[dict[str, Any]]) -> dict[str, Any]:
     features: dict[str, set[str]] = defaultdict(set)
     for event in events:
         user, day = event["anonymous_user_id"], event["when"].date()
-        first[user] = min(first.get(user, event["when"]), event["when"])
+        if event["event_name"] == "signup_completed":
+            first[user] = min(first.get(user, event["when"]), event["when"])
         days[user].add(day)
         if event.get("feature"):
             features[user].add(str(event["feature"]))
-    def retained(offset: int) -> int:
-        return sum(1 for user, started in first.items() if started.date() + timedelta(days=offset) in days[user])
-    base = len(first)
-    return {f"D{offset}": {"users": retained(offset), "rate": round(retained(offset) * 100 / base, 1) if base else 0.0} for offset in (1, 3, 7)}
+    now = datetime.now(timezone.utc)
+    result = {}
+    for offset in (1, 3, 7):
+        eligible = {user for user, started in first.items() if now >= started + timedelta(days=offset)}
+        retained = sum(1 for user in eligible if first[user].date() + timedelta(days=offset) in days[user])
+        result[f"D{offset}"] = {"users": retained, "eligible_users": len(eligible), "rate": round(retained * 100 / len(eligible), 1) if eligible else None}
+    return result
 
 
 def build_feature_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -172,6 +187,18 @@ def build_feature_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{"feature": k, "total_use": v["events"], "distinct_users": len(v["users"])} for k, v in sorted(data.items())]
 
 
+def build_completion_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    events = _parsed_rows(rows)
+    by_event = {event: feature for feature, event in COMPLETION_EVENTS.items()}
+    data: dict[str, dict[str, Any]] = defaultdict(lambda: {"events": 0, "users": set()})
+    for event in events:
+        feature = by_event.get(event["event_name"])
+        if feature:
+            data[feature]["events"] += 1
+            data[feature]["users"].add(event["anonymous_user_id"])
+    return [{"feature": feature, "successful_completions": value["events"], "distinct_users": len(value["users"])} for feature, value in sorted(data.items())]
+
+
 def build_screen_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     events = _parsed_rows(rows)
     data: dict[str, dict[str, Any]] = defaultdict(lambda: {"duration": 0, "users": set()})
@@ -179,7 +206,7 @@ def build_screen_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if event["event_name"] == "screen_active_time" and event.get("screen"):
             data[event["screen"]]["duration"] += int(event.get("active_duration_ms") or 0)
             data[event["screen"]]["users"].add(event["anonymous_user_id"])
-    return [{"screen": name, "total_active_duration_ms": value["duration"], "average_active_duration_ms": round(value["duration"] / len(value["users"])) if value["users"] else 0, "distinct_users": len(value["users"])} for name, value in sorted(data.items())]
+    return [{"screen": name, "total_active_duration_ms": value["duration"], "average_per_tracked_identity_active_duration_ms": round(value["duration"] / len(value["users"])) if value["users"] else 0, "distinct_users": len(value["users"])} for name, value in sorted(data.items())]
 
 
 def build_cta_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
