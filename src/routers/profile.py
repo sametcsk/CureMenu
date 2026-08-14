@@ -45,7 +45,14 @@ async def save_profile(req: ProfilKaydetRequest, telefon: str = Depends(get_curr
         notlar=req.notlar,
     )
     if profil.ana_kullanici is not None:
-        main_profile_data["id"] = profil.ana_kullanici.id
+        existing_main = profil.ana_kullanici
+        main_profile_data["id"] = existing_main.id
+        # Profil güncelleme formu bu alanları yönetmiyor; kayıtlı değerleri
+        # koru ki güncelleme sırasında sessizce sıfırlanmasınlar.
+        main_profile_data["boy"] = existing_main.boy
+        main_profile_data["kilo"] = existing_main.kilo
+        main_profile_data["genetik_hastaliklar"] = existing_main.genetik_hastaliklar
+        main_profile_data["tibbi_gecmis"] = existing_main.tibbi_gecmis
     ana_kullanici = AileUyesi(**main_profile_data)
     profil.ana_kullanici = ana_kullanici
     profil_kaydet_db(telefon, req.kullanici_adi, profil, conn=db)

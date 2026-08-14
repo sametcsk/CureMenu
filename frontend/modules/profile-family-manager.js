@@ -123,12 +123,16 @@ async function showOnboarding() {
     modal.classList.remove('hidden');
 }
 
-function openProfileEditor() {
+async function openProfileEditor() {
     const profil = window.currentProfile?.ana_kullanici;
     if (!profil) {
         showOnboarding();
         return;
     }
+    // Onboarding modalinin mevcut kurulumunu (oneri cipleri, feragat, ornekler)
+    // koru; ardindan formu mevcut profille doldur ki guncelleme bos formla
+    // baslamasin.
+    await showOnboarding();
     const modal = document.getElementById('onboardingModal');
     if (!modal) return;
     const setValue = (id, value) => {
