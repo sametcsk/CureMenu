@@ -170,10 +170,18 @@ async function completeOnboarding() {
         return;
     }
 
+    // Yas saglik onerilerinde (or. pediatrik degerlendirme) kullanildigi icin zorunlu;
+    // bos birakilirsa uydurma varsayilan yazmak yerine kullaniciyi uyar.
+    const yas = parseInt(document.getElementById('ob_yas').value, 10);
+    if (!Number.isFinite(yas) || yas < 1 || yas > 100) {
+        alert('Lütfen geçerli bir yaş girin (1-100). Öneriler yaşa göre değerlendirildiği için bu alan gereklidir.');
+        return;
+    }
+
     const body = {
         kullanici_adi: user.kullanici_adi,
         ad,
-        yas: parseInt(document.getElementById('ob_yas').value) || 30,
+        yas,
         cinsiyet: document.getElementById('ob_cinsiyet').value,
         hastaliklar: parseListInput(document.getElementById('ob_hastaliklar').value),
         alerjiler: parseListInput(document.getElementById('ob_alerjiler').value),
@@ -287,7 +295,11 @@ function populateTargetSelect(selectId, familyMembers) {
 
     if (select.dataset.targetPersistenceBound !== 'true') {
         select.addEventListener('change', () => {
-            window.CureMenuAnalytics?.track?.('family_profile_switched', { feature: 'family', metadata: { target_type: select.value === 'kendim' ? 'self' : 'family' } });
+            const mainProfile = window.currentProfile?.ana_kullanici;
+            const targetType = select.value === 'aile'
+                ? 'family'
+                : (select.value === 'kendim' || (mainProfile && select.value === mainProfile.id) ? 'self' : 'member');
+            window.CureMenuAnalytics?.track?.('family_profile_switched', { feature: 'family', metadata: { target_type: targetType } });
             localStorage.setItem(storageKey, select.value);
             if (selectId === 'planTarget') window.WeeklyPlanManager?.loadExistingPlan?.();
             if (selectId === 'chatTarget') window.ChatWidget?.loadCachedConversation?.();
@@ -324,12 +336,30 @@ async function addMember() {
         return;
     }
 
+    // Saglik baglami: yas/boy/kilo uydurulmus varsayilanla saklanmamali.
+    // Cocuk/ileri yas senaryolarinda yanlis default guvenlik degerlendirmesini bozar.
+    const yas_val = parseInt(document.getElementById('m_yas').value, 10);
+    const boy_val = parseInt(document.getElementById('m_boy').value, 10);
+    const kilo_val = parseFloat(document.getElementById('m_kilo').value);
+    if (!Number.isFinite(yas_val) || yas_val < 1 || yas_val > 100) {
+        alert('Lütfen geçerli bir yaş girin (1-100). Sağlık önerileri yaşa göre değerlendirildiği için bu alan gereklidir.');
+        return;
+    }
+    if (!Number.isFinite(boy_val) || boy_val < 1 || boy_val > 250) {
+        alert('Lütfen geçerli bir boy girin (1-250 cm).');
+        return;
+    }
+    if (!Number.isFinite(kilo_val) || kilo_val < 1 || kilo_val > 200) {
+        alert('Lütfen geçerli bir kilo girin (1-200 kg).');
+        return;
+    }
+
     const body = {
         ad: ad_val,
-        yas: parseInt(document.getElementById('m_yas').value) || 30,
+        yas: yas_val,
         cinsiyet: document.getElementById('m_cinsiyet').value,
-        boy: parseInt(document.getElementById('m_boy').value) || 170,
-        kilo: parseFloat(document.getElementById('m_kilo').value) || 70,
+        boy: boy_val,
+        kilo: kilo_val,
         hastaliklar: parseListInput(document.getElementById('m_hastaliklar').value),
         alerjiler: parseListInput(document.getElementById('m_alerjiler').value),
         ilaclar: parseListInput(document.getElementById('m_ilaclar').value),

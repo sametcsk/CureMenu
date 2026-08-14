@@ -136,7 +136,11 @@ def build_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def build_funnel(rows: list[dict[str, Any]]) -> dict[str, Any]:
     events = _parsed_rows(rows)
-    stages = {"signup": {"signup_started", "signup_completed"}, "profile_started": {"health_profile_started"}, "profile_completed": {"health_profile_completed"}, "first_value": FIRST_VALUE_EVENTS}
+    # signup_started fires before authentication (anonymous browser id); signup_completed
+    # and every later stage fire authenticated (pseudonymous account id). Including the
+    # pre-auth event would double-count a single real user, so the funnel base is
+    # signup_completed, which shares the id space with the later stages.
+    stages = {"signup": {"signup_completed"}, "profile_started": {"health_profile_started"}, "profile_completed": {"health_profile_completed"}, "first_value": FIRST_VALUE_EVENTS}
     counts = {name: len({e["anonymous_user_id"] for e in events if e["event_name"] in names}) for name, names in stages.items()}
     base = counts["signup"] or 0
     return {name: {"users": count, "conversion_rate": round((count / base) * 100, 1) if base else 0.0} for name, count in counts.items()}
