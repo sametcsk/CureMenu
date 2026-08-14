@@ -140,8 +140,8 @@ async function openProfileEditor() {
         if (el) el.value = value ?? '';
     };
     setValue('ob_ad', profil.ad || window.AuthManager.getUser().kullanici_adi || '');
-    setValue('ob_yas', profil.yas || 35);
-    setValue('ob_cinsiyet', profil.cinsiyet || 'kadın');
+    setValue('ob_yas', profil.yas ?? '');
+    setValue('ob_cinsiyet', profil.cinsiyet ?? '');
     const goalSelect = document.getElementById('ob_hedef');
     if (window.ProfileGoals && goalSelect) {
         window.ProfileGoals.populateSelect(goalSelect, profil.hedef);
@@ -178,11 +178,17 @@ async function completeOnboarding() {
         return;
     }
 
+    const cinsiyet = document.getElementById('ob_cinsiyet').value;
+    if (!cinsiyet) {
+        alert('Lütfen cinsiyet seçin.');
+        return;
+    }
+
     const body = {
         kullanici_adi: user.kullanici_adi,
         ad,
         yas,
-        cinsiyet: document.getElementById('ob_cinsiyet').value,
+        cinsiyet,
         hastaliklar: parseListInput(document.getElementById('ob_hastaliklar').value),
         alerjiler: parseListInput(document.getElementById('ob_alerjiler').value),
         ilaclar: parseListInput(document.getElementById('ob_ilaclar').value),
@@ -353,11 +359,16 @@ async function addMember() {
         alert('Lütfen geçerli bir kilo girin (1-200 kg).');
         return;
     }
+    const cinsiyet_val = document.getElementById('m_cinsiyet').value;
+    if (!cinsiyet_val) {
+        alert('Lütfen cinsiyet seçin.');
+        return;
+    }
 
     const body = {
         ad: ad_val,
         yas: yas_val,
-        cinsiyet: document.getElementById('m_cinsiyet').value,
+        cinsiyet: cinsiyet_val,
         boy: boy_val,
         kilo: kilo_val,
         hastaliklar: parseListInput(document.getElementById('m_hastaliklar').value),
@@ -384,7 +395,7 @@ async function addMember() {
             }
             document.getElementById('addModal').classList.add('hidden');
             // Formu temizle
-            ['m_ad', 'm_yas', 'm_hastaliklar', 'm_alerjiler', 'm_ilaclar', 'm_genetik', 'm_tibbi', 'm_notlar'].forEach(id => document.getElementById(id).value = '');
+            ['m_ad', 'm_yas', 'm_boy', 'm_kilo', 'm_hastaliklar', 'm_alerjiler', 'm_ilaclar', 'm_genetik', 'm_tibbi', 'm_notlar'].forEach(id => document.getElementById(id).value = '');
             loadProfile();
         } else { alert(apiHataMesaji(data, 'Hata oluştu')); }
     } catch (e) { alert('Bağlantı kurulamadı. Lütfen birazdan tekrar deneyin.'); }
