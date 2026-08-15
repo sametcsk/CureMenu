@@ -10,6 +10,7 @@ from src.curebot_intent import (
     generate_curebot_natural_answer,
     natural_fallback_answer,
     plan_curebot_semantically,
+    semantic_continuity_labels,
 )
 
 
@@ -83,6 +84,47 @@ def test_short_followup_uses_only_local_context_labels():
     assert plan.meal_context == "dinner"
     assert plan.target == "family"
     assert plan.is_followup is True
+
+
+def test_semantic_continuity_preserves_artifact_without_raw_history():
+    previous = CureBotConversationContext(
+        last_intent="menu_followup",
+        last_subject="artifact",
+        last_object="menu_analysis",
+        last_artifact_reference="menu_analysis",
+        last_target_scope="member",
+        has_previous_turn=True,
+    )
+    plan = classify_intent_plan(
+        "Peki onun için daha güvenli ne seçebiliriz?",
+        previous.model_dump(),
+        "member",
+    )
+    labels = semantic_continuity_labels(plan, "Peki onun için daha güvenli ne seçebiliriz?", previous)
+
+    assert plan.intent == "meal_followup"
+    assert labels == {
+        "last_subject": "artifact",
+        "last_object": "",
+        "last_object_type": "unknown",
+        "last_artifact_reference": "menu_analysis",
+    }
+
+
+def test_implicit_first_person_hunger_is_a_new_meal_request_not_stale_followup():
+    previous = CureBotConversationContext(
+        last_intent="menu_followup",
+        last_subject="artifact",
+        last_object="menu_analysis",
+        last_artifact_reference="menu_analysis",
+        last_target_scope="member",
+        has_previous_turn=True,
+    )
+
+    plan = classify_intent_plan("çok acıktım ne yemeliyim", previous.model_dump(), "self")
+
+    assert plan.intent == "meal_recommendation"
+    assert plan.is_followup is False
 
 
 def test_domain_intents_cover_medication_food_and_nutrition_overwhelm():

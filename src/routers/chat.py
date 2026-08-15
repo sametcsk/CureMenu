@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request, Depends, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.concurrency import run_in_threadpool
 import sqlite3
+from dataclasses import dataclass
 
 from src.models import ChatRequest
 from src.database import (
@@ -14,6 +15,7 @@ from src.database import (
     klinik_karar_kaydet,
     klinik_kararlari_getir,
     loglari_getir_db,
+    son_sayfa_kayitlari,
 )
 from src.auth import get_current_user
 from src.messages import PROFIL_GEREKLI
@@ -25,29 +27,82 @@ from src.graph import app as langgraph_app
 from src.nodes import _quality_profile_from_snapshot
 from src.quality.policy_engine import PolicyEngine
 from src.quality.rule_engine import RuleEngine
+from src.quality.evidence import (
+    SafetyFinding,
+    carry_findings_without_new_evidence,
+    coerce_finding,
+    render_finding,
+)
 from src.logger import get_logger, log_failure
 from src.config import settings
-from src.profile_context import ResolvedProfileSnapshot, history_matches_snapshot, resolve_profile_snapshot
+from src.profile_context import ResolvedProfileSnapshot, history_matches_snapshot, resolve_profile_snapshot, resolve_target_snapshot
+from src.target_resolution import TargetResolution, clarification_prompt
 from src.chat_intents import intent_fast_answer, merge_medications, normalized_message
 from src.chat_response import final_response_text, safety_outcome
 from src.curebot_intent import (
     CureBotConversationContext,
     CureBotIntentPlan,
+    ResolvedTurn,
     fallback_intent_plan,
     extract_suggestion_topics,
     generate_curebot_natural_answer,
     natural_fallback_answer,
     plan_curebot_semantically,
     plan_requires_safety_gate,
+    resolve_semantic_turn,
+    semantic_continuity_labels,
+    soften_unsourced_clinical_limits,
 )
 from src.presentation import (
     friendly_source_title,
-    format_rule_risks_for_user,
 )
 from src.rate_limit import authenticated_user_or_ip, limiter
 
 logger = get_logger(__name__)
 router = APIRouter()
+CHAT_HISTORY_RESPONSE_LIMIT = 3000
+
+
+@dataclass(frozen=True)
+class CureBotResponseContext:
+    """Canonical, already-resolved input consumed by response composers."""
+
+    turn: ResolvedTurn
+    snapshot: ResolvedProfileSnapshot | None
+    plan: CureBotIntentPlan | None
+    conversation: CureBotConversationContext
+    user_message: str
+    findings: tuple[SafetyFinding, ...] = ()
+
+    @property
+    def object_dependent(self) -> bool:
+        return self.turn.intent in {
+            "allergy_conflict", "food_suitability", "medication_food_question",
+            "meal_followup", "menu_followup", "weekly_plan_followup",
+        }
+
+    @property
+    def response_input(self) -> str:
+        if self.object_dependent and self.turn.object_label.strip():
+            return self.turn.object_label.strip()
+        return self.user_message
+
+
+@dataclass(frozen=True)
+class ResponseDecision:
+    answer: str
+    findings: tuple[SafetyFinding, ...] = ()
+
+
+@dataclass(frozen=True)
+class ArtifactRecallResult:
+    answer: str
+    artifact_reference: str
+    findings: tuple[SafetyFinding, ...] = ()
+
+
+def _history_response_text(value: str) -> str:
+    return str(value or "")[:CHAT_HISTORY_RESPONSE_LIMIT]
 
 
 def _infer_chat_target(requested_target: str) -> tuple[str, str]:
@@ -58,25 +113,175 @@ def _infer_chat_target(requested_target: str) -> tuple[str, str]:
     return requested_target, "Seçili hedef kişi"
 
 
+def _log_metadata(item: dict) -> dict:
+    try:
+        value = item.get("metadata") or "{}"
+        return json.loads(value) if isinstance(value, str) else dict(value)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def _conversation_curebot_logs(logs: list[dict], conversation_id: str | None) -> list[dict]:
+    """Return CureBot turns belonging to one household conversation.
+
+    Legacy API clients do not send a conversation id; for those clients the
+    historical account-wide behavior is retained. Once a conversation id is
+    supplied, turns from another browser conversation can never influence target
+    continuity or local intent labels.
+    """
+    curebot_logs = [item for item in logs if item.get("sayfa") == "CureBot"]
+    if not conversation_id:
+        return curebot_logs
+    return [
+        item for item in curebot_logs
+        if str(_log_metadata(item).get("conversation_id") or "") == conversation_id
+    ]
+
+
+def _previous_curebot_target(logs: list[dict]) -> str | None:
+    """Most recent CureBot turn's resolved target, for follow-up continuity.
+
+    Read from the persisted interaction log (backend conversation state), not a
+    frontend variable. Clarification/legacy turns carry no target and are skipped.
+    """
+    for item in logs:  # loglari_getir_db returns newest-first
+        if item.get("sayfa") != "CureBot":
+            continue
+        metadata = _log_metadata(item)
+        scope = str(metadata.get("target_scope") or "").strip()
+        target_id = str(metadata.get("target_id") or "").strip()
+        if not scope or not target_id:
+            continue
+        if scope == "self":
+            return "kendim"
+        if scope == "family":
+            return "aile"
+        return target_id
+    return None
+
+
 def _chat_history_metadata(
-    snapshot: ResolvedProfileSnapshot,
+    snapshot: ResolvedProfileSnapshot | None,
     plan: CureBotIntentPlan | None = None,
     answer_type: str = "",
     answer_text: str = "",
+    conversation_id: str | None = None,
+    target_resolution: TargetResolution | None = None,
+    user_message: str = "",
+    previous_context: CureBotConversationContext | dict | None = None,
+    artifact_reference: str = "",
+    resolved_turn: ResolvedTurn | None = None,
+    response_path: str = "unknown",
+    findings: tuple[SafetyFinding, ...] = (),
 ) -> str:
     metadata = dict(snapshot.history_metadata())
-    if plan is not None:
+    if conversation_id:
+        metadata["conversation_id"] = conversation_id
+    if target_resolution is not None:
+        metadata.update({
+            "target_resolution_source": target_resolution.source,
+            "target_explicit": target_resolution.source.startswith("message_"),
+            "target_inherited": target_resolution.source in {"continuity", "pronoun"},
+        })
+    if resolved_turn is not None:
+        metadata.update(resolved_turn.metadata(response_path=response_path))
+        if plan is not None:
+            metadata["last_meal_context"] = plan.meal_context
+            metadata["last_answer_type"] = answer_type or plan.answer_style
+    elif plan is not None:
+        continuity = semantic_continuity_labels(plan, user_message, previous_context)
         metadata.update({
             "last_intent": plan.intent,
             "last_meal_context": plan.meal_context,
+            **continuity,
             "last_answer_type": answer_type or plan.answer_style,
+            "last_target_scope": snapshot.target_scope,
+            "privacy_mode": "minimal",
+        })
+    elif artifact_reference in {"weekly_plan", "menu_analysis", "lab_analysis", "fridge_analysis"}:
+        metadata.update({
+            "last_intent": "menu_followup" if artifact_reference == "menu_analysis" else "unknown_nutrition_related",
+            "last_meal_context": "unknown",
+            "last_subject": "artifact",
+            "last_object": "",
+            "last_object_type": "unknown",
+            "last_artifact_reference": artifact_reference,
+            "last_answer_type": answer_type or "explanatory",
             "last_target_scope": snapshot.target_scope,
             "privacy_mode": "minimal",
         })
     topics = extract_suggestion_topics(answer_text)
     if topics:
         metadata["recent_suggestion_topics"] = list(topics)
+    if findings:
+        metadata["structured_findings"] = [finding.persisted() for finding in findings]
+    metadata.update({
+        "resolved_object_present": bool(resolved_turn and resolved_turn.object_label),
+        "responder_received_object": bool(resolved_turn and resolved_turn.object_label),
+        "finding_count": len(findings),
+        "evidence_levels": sorted({finding.evidence_level for finding in findings}),
+        "evidence_upgraded": any(
+            bool(finding.provenance.get("evidence_upgrade_reason"))
+            for finding in findings
+        ),
+        "upgrade_source_present": all(
+            bool(finding.evidence_source)
+            for finding in findings
+            if finding.provenance.get("evidence_upgrade_reason")
+        ),
+        "artifact_reference_present": bool(
+            resolved_turn and resolved_turn.artifact_reference != "none"
+        ),
+    })
     return json.dumps(metadata, ensure_ascii=False)
+
+
+def _schedule_turn_commit(
+    bg_tasks: BackgroundTasks,
+    *,
+    telefon: str,
+    snapshot: ResolvedProfileSnapshot,
+    user_message: str,
+    answer_text: str,
+    turn: ResolvedTurn,
+    response_path: str,
+    plan: CureBotIntentPlan | None = None,
+    findings: tuple[SafetyFinding, ...] = (),
+) -> str:
+    """The single semantic-state commit point for every resolved response path."""
+    if snapshot is None:
+        unresolved_metadata = turn.metadata(response_path=response_path)
+        unresolved_metadata["last_answer_type"] = "clarification"
+        metadata = json.dumps(unresolved_metadata, ensure_ascii=False)
+    else:
+        metadata = _chat_history_metadata(
+            snapshot,
+            plan,
+            answer_text=answer_text,
+            conversation_id=turn.conversation_id,
+            user_message=user_message,
+            resolved_turn=turn,
+            response_path=response_path,
+            findings=findings,
+        )
+    bg_tasks.add_task(
+        etkilesim_logla,
+        telefon,
+        snapshot.target_name if snapshot is not None else "",
+        "CureBot",
+        user_message,
+        _history_response_text(answer_text),
+        metadata,
+    )
+    logger.info(
+        "event=curebot_turn_committed conversation_id=%s response_path=%s target_source=%s "
+        "object_changed=%s state_committed=true",
+        turn.conversation_id or "legacy",
+        response_path,
+        turn.target_resolution_source,
+        turn.object_changed,
+    )
+    return metadata
 
 
 def _local_conversation_context(logs: list[dict], snapshot: ResolvedProfileSnapshot) -> CureBotConversationContext:
@@ -114,10 +319,18 @@ def _local_conversation_context(logs: list[dict], snapshot: ResolvedProfileSnaps
             return CureBotConversationContext(
                 last_intent=str(metadata.get("last_intent") or ""),
                 last_meal_context=str(metadata.get("last_meal_context") or "unknown"),
+                last_subject=str(metadata.get("last_subject") or "unknown"),
+                last_object=str(metadata.get("last_object") or ""),
+                last_object_type=str(metadata.get("last_object_type") or "unknown"),
+                last_artifact_reference=str(metadata.get("last_artifact_reference") or "none"),
                 last_answer_type=str(metadata.get("last_answer_type") or ""),
                 last_target_scope=str(metadata.get("last_target_scope") or snapshot.target_scope),
                 has_previous_turn=True,
                 recent_suggestion_topics=tuple(recent_topics),
+                structured_findings=tuple(
+                    item for item in (metadata.get("structured_findings") or [])
+                    if isinstance(item, dict)
+                ),
             )
         except ValueError:
             logger.warning("Invalid local CureBot context labels; rebuilding from the previous local intent.")
@@ -127,9 +340,11 @@ def _local_conversation_context(logs: list[dict], snapshot: ResolvedProfileSnaps
         str(previous.get("istek") or ""),
         snapshot.target_scope,
     )
+    continuity = semantic_continuity_labels(previous_plan, str(previous.get("istek") or ""))
     return CureBotConversationContext(
         last_intent=previous_plan.intent,
         last_meal_context=previous_plan.meal_context,
+        **continuity,
         last_answer_type=previous_plan.answer_style,
         last_target_scope=snapshot.target_scope,
         has_previous_turn=True,
@@ -149,6 +364,20 @@ if settings.ENABLE_NEMO_GUARDRAILS:
 
 def _sse(event: str, payload: dict | None = None) -> str:
     return f"event: {event}\ndata: {json.dumps(payload or {}, ensure_ascii=False)}\n\n"
+
+
+def _chat_stream_response(
+    stream,
+    snapshot: ResolvedProfileSnapshot | None = None,
+    resolution: TargetResolution | None = None,
+) -> StreamingResponse:
+    headers: dict[str, str] = {}
+    if snapshot is not None:
+        headers["X-CureMenu-Resolved-Target"] = str(snapshot.target_key)
+        headers["X-CureMenu-Target-Scope"] = str(snapshot.target_scope)
+    if resolution is not None:
+        headers["X-CureMenu-Resolution-Source"] = str(resolution.source)
+    return StreamingResponse(stream, media_type="text/event-stream", headers=headers)
 
 def _normalized_message(message: str) -> str:
     return normalized_message(message)
@@ -273,8 +502,10 @@ def _simple_chat_state(initial_state: dict, answer: str) -> dict:
     return state
 
 
-def _intent_fast_answer(snapshot: ResolvedProfileSnapshot, message: str) -> str | None:
-    return intent_fast_answer(snapshot, message)
+def _intent_fast_answer(context: CureBotResponseContext) -> str | None:
+    if context.snapshot is None:
+        return None
+    return intent_fast_answer(context.snapshot, context.response_input)
 
 
 def _merge_medications(profile_medications: list[str], message: str) -> tuple[list[str], list[str]]:
@@ -377,7 +608,28 @@ def _chat_fallback_state(initial_state: dict, fallback_message: str, error: Exce
     return fallback_state
 
 
-def _explicit_input_safety_answer(snapshot: ResolvedProfileSnapshot, message: str) -> str | None:
+def _explicit_input_safety_answer(context: CureBotResponseContext) -> ResponseDecision | None:
+    if context.snapshot is None:
+        return None
+    # Hard conflict is reserved for a concrete food the user actually supplies to
+    # evaluate this turn: either an explicit suitability question ("... uygun
+    # mu?") or a concrete food named in the current message. A generic
+    # recommendation ("ne önerirsin?") — even one that only inherits a prior food
+    # object through follow-up continuity — must not produce a hard conflict;
+    # downstream the profile restrictions become a candidate-generation filter
+    # (the natural path avoids them and the output safety gate still runs).
+    plan = context.plan
+    explicit_suitability = bool(
+        plan and (plan.needs_safety_gate or plan.risk_subject == "explicit_food_request")
+    )
+    supplied_food_this_turn = (
+        context.turn.object_resolution_source == "current_message"
+        and context.turn.object_type == "food"
+        and bool(context.turn.object_label.strip())
+    )
+    if not (explicit_suitability or supplied_food_this_turn):
+        return None
+    message = context.response_input
     request_parts = []
     for part in re.split(r"[.!?\n]+", message or ""):
         normalized = _normalized_message(part)
@@ -388,29 +640,312 @@ def _explicit_input_safety_answer(snapshot: ResolvedProfileSnapshot, message: st
             request_parts.append(part)
     request_text = " ".join(request_parts).strip()
     result = RuleEngine().check_rules(
-        snapshot.quality_profile(),
+        context.snapshot.quality_profile(),
         request_text,
         [request_text],
     )
-    risks = list(result.get("found_risks") or [])
-    if not risks:
+    findings = tuple(
+        coerce_finding(item, target_profile_id=context.snapshot.target_key).model_copy(update={
+            "inherited_from_previous_turn": context.turn.object_resolution_source == "previous_turn",
+            "new_evidence_this_turn": bool(
+                context.turn.object_resolution_source == "current_message"
+                and item.get("matched_ingredient")
+            ),
+            "originating_turn_id": context.turn.turn_id,
+            "provenance": {
+                "object_resolution_source": (
+                    context.turn.object_resolution_source
+                ),
+                "target_resolution_source": context.turn.target_resolution_source,
+            },
+        })
+        for item in (result.get("evidence_findings") or [])
+    )
+    confirmed = tuple(item for item in findings if item.evidence_level == "CONFIRMED")
+    if not confirmed:
         return None
-    risk_lines = "\n".join(f"- {risk}" for risk in format_rule_risks_for_user(risks))
-    return (
+    risk_lines = "\n".join(f"- {render_finding(finding)}" for finding in confirmed)
+    answer = (
         "Bu seçeneği mevcut haliyle önermiyorum. Profilinizle şu açık çakışmalar bulundu:\n"
         f"{risk_lines}\n\n"
         "Bu malzemeleri kullanmadan hazırlanmış bir alternatif seçin. İsterseniz aynı öğünün kayıtlı "
         "alerjenleri içermeyen bir alternatifini önerebilirim."
     )
+    return ResponseDecision(answer=answer, findings=findings)
+
+def _is_weekly_plan_recall(text: str) -> bool:
+    return any(cue in text for cue in (
+        "planim", "planinda", "planimda", "hazirladigin plan",
+        "bu haftaki plan", "haftalik planim", "haftalik planinda", "haftaki planim",
+    ))
+
+
+def _is_menu_recall(text: str) -> bool:
+    if "menu" not in text:
+        return False
+    return any(cue in text for cue in ("gecen", "onceki", "gecmis", "daha once", "ana risk", "hangi risk", "neydi"))
+
+
+def _is_generic_clinical_notice(value: str) -> bool:
+    text = _normalized_message(value)
+    return any(cue in text for cue in (
+        "doktor", "diyetisyen", "eczaci", "saglik profesyoneli",
+        "uzmaniniza", "uzmana danis", "yerine gecmez", "genel bilgilendirme",
+    ))
+
+
+def _is_weekly_plan_ingredient_recall(text: str) -> bool:
+    return _is_weekly_plan_recall(text) and any(
+        cue in text for cue in ("malzeme", "icerik", "neler vardi", "ne vardi")
+    )
+
+
+def _weekly_plan_recall_answer(
+    log: dict,
+    snapshot: ResolvedProfileSnapshot,
+    *,
+    wants_ingredients: bool = False,
+) -> str:
+    label = snapshot.target_name or "Bu profil"
+    metadata = _log_metadata(log)
+    if wants_ingredients:
+        normalized_ingredients = [
+            str(item).strip()
+            for item in (metadata.get("normalized_ingredients") or [])
+            if str(item).strip()
+        ]
+        if normalized_ingredients:
+            bullets = "\n".join(f"- {item}" for item in normalized_ingredients[:30])
+            return f"{label} için kayıtlı haftalık plandaki standartlaştırılmış malzemeler:\n{bullets}"
+        return (
+            f"{label} için kayıtlı plan eski formatta olduğu için doğrulanmış standart malzeme listesine "
+            "erişemiyorum. Ham plan metnini güvenlik bulgusu gibi yeniden yorumlamıyorum."
+        )
+    try:
+        plan = json.loads(log.get("cevap") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        plan = {}
+    warnings = [
+        str(w).strip()
+        for w in (plan.get("warnings") or [])
+        if str(w).strip() and not _is_generic_clinical_notice(str(w))
+    ] if isinstance(plan, dict) else []
+    considerations = [
+        str(item).strip()
+        for item in (metadata.get("health_considerations") or [])
+        if str(item).strip()
+    ]
+    compat = (plan.get("compatibility") or {}) if isinstance(plan, dict) else {}
+    if not compat and isinstance(metadata.get("compatibility"), dict):
+        compat = metadata["compatibility"]
+    compat_msg = str(compat.get("message") or "").strip()
+    if considerations:
+        bullets = "\n".join(f"- {item}" for item in considerations[:8])
+        return (
+            f"{label} için bu haftaki plan oluşturulurken kayda geçen sağlık ve güvenlik bağlamı:\n"
+            f"{bullets}"
+        )
+    if warnings:
+        bullets = "\n".join(f"- {item}" for item in warnings[:6])
+        return f"{label} için bu haftaki planında özellikle şu noktalara dikkat edildi:\n{bullets}"
+    if compat_msg and not _is_generic_clinical_notice(compat_msg):
+        return f"{label} için bu haftaki planında öne çıkan not: {compat_msg}"
+    return (
+        f"{label} için kayıtlı bir haftalık plan var ama içinde ayrı bir uyarı notu bulamadım. "
+        "Planı Haftalık Plan ekranından açıp ayrıntılarını görebilirsin."
+    )
+
+
+def _artifact_evidence_findings(
+    metadata: dict,
+    snapshot: ResolvedProfileSnapshot,
+    artifact_reference: str,
+) -> tuple[SafetyFinding, ...]:
+    findings: list[SafetyFinding] = []
+    for item in (metadata.get("evidence_findings") or []):
+        if not isinstance(item, dict):
+            continue
+        finding = coerce_finding(
+            item,
+            target_profile_id=snapshot.target_key,
+            artifact_reference=artifact_reference,
+        )
+        if finding.target_profile_id != snapshot.target_key:
+            logger.warning(
+                "event=artifact_finding_scope_rejected artifact=%s target_mismatch=true",
+                artifact_reference,
+            )
+            continue
+        findings.append(finding)
+    return tuple(findings)
+
+
+def _menu_recall_answer(log: dict, snapshot: ResolvedProfileSnapshot) -> ResponseDecision:
+    label = snapshot.target_name or "Bu profil"
+    metadata = _log_metadata(log)
+    findings = _artifact_evidence_findings(metadata, snapshot, "menu_analysis")
+    relevant = tuple(item for item in findings if item.evidence_level != "CLEAR")
+    if relevant:
+        bullets = "\n".join(f"- {render_finding(item)}" for item in relevant[:6])
+        return ResponseDecision(
+            answer=f"{label} için geçen menü analizindeki yapılandırılmış bulgular:\n{bullets}",
+            findings=findings,
+        )
+    if metadata.get("detected_risks") or metadata.get("analysis_findings"):
+        return ResponseDecision(
+            answer=(
+                f"{label} için bu eski menü kaydında risk notları var, ancak kanıt düzeyi yapılandırılmış "
+                "olarak saklanmamış. Bu nedenle notları kesin eşleşme gibi aktarmıyorum; menüyü yeniden "
+                "açarak içeriği doğrulayabilirsin."
+            ),
+        )
+    return ResponseDecision(answer=(
+        f"{label} için bu menü analizi kaydında spesifik bir risk bulgusu yapılandırılmış olarak saklanmamış. "
+        "Genel güvenlik notlarını geçmiş analiz bulgusu gibi aktarmıyorum; menüyü Menü Analizi ekranından tekrar açabilirsin."
+    ))
+
+
+def _artifact_missing_answer(wants_plan: bool, snapshot: ResolvedProfileSnapshot) -> str:
+    label = snapshot.target_name or "Bu profil"
+    if wants_plan:
+        return (
+            f"{label} için güncel bir haftalık plana şu anda erişemiyorum. "
+            "Haftalık Plan ekranından yeni bir plan oluşturabilirsin."
+        )
+    return (
+        f"{label} için önceki bir menü analizine şu anda erişemiyorum. "
+        "Menü Analizi ekranından menüyü tekrar yükleyip analiz edebilirsin."
+    )
+
+
+def _artifact_recall_answer(
+    snapshot: ResolvedProfileSnapshot,
+    message: str,
+    *,
+    db: sqlite3.Connection,
+) -> ArtifactRecallResult | None:
+    """Profile-scoped, fail-closed recall of the target's own stored plan/menu.
+
+    Never returns another profile's artifact and never guesses: if the target has
+    no matching artifact it returns an explicit 'erişemiyorum' message.
+    """
+    text = _normalized_message(message)
+    wants_plan = _is_weekly_plan_recall(text)
+    wants_menu = _is_menu_recall(text) if not wants_plan else False
+    if not (wants_plan or wants_menu):
+        return None
+    sayfa = "Haftalık Plan" if wants_plan else "Menü Analizi"
+    rows = son_sayfa_kayitlari(snapshot.account_id, sayfa, limit=15, conn=db)
+    matches = [row for row in rows if history_matches_snapshot(row, snapshot)]
+    if not matches:
+        return ArtifactRecallResult(
+            answer=_artifact_missing_answer(wants_plan, snapshot),
+            artifact_reference="weekly_plan" if wants_plan else "menu_analysis",
+        )
+    latest = matches[0]  # son_sayfa_kayitlari returns newest-first
+    if wants_plan:
+        metadata = _log_metadata(latest)
+        findings = _artifact_evidence_findings(metadata, snapshot, "weekly_plan")
+        return ArtifactRecallResult(
+            answer=_weekly_plan_recall_answer(
+            latest,
+            snapshot,
+            wants_ingredients=_is_weekly_plan_ingredient_recall(text),
+            ),
+            artifact_reference="weekly_plan",
+            findings=findings,
+        )
+    decision = _menu_recall_answer(latest, snapshot)
+    return ArtifactRecallResult(
+        answer=decision.answer,
+        artifact_reference="menu_analysis",
+        findings=decision.findings,
+    )
+
+
+def _artifact_followup_decision(context: CureBotResponseContext) -> ResponseDecision | None:
+    if (
+        context.turn.artifact_reference == "none"
+        or context.turn.intent not in {"meal_followup", "menu_followup", "weekly_plan_followup"}
+        or not context.findings
+    ):
+        return None
+    inherited = carry_findings_without_new_evidence(context.findings)
+    relevant = [item for item in inherited if item.evidence_level != "CLEAR"]
+    if not relevant:
+        return ResponseDecision(
+            answer=(
+                "Önceki kaydın yapılandırılmış içeriğinde kayıtlı kısıtlarla bir eşleşme görünmüyordu. "
+                "Yine de kesin güvenlik için güncel etiket veya içerik bilgisini kontrol etmek gerekir."
+            ),
+            findings=inherited,
+        )
+    bullets = "\n".join(f"- {render_finding(item)}" for item in relevant[:6])
+    return ResponseDecision(
+        answer=(
+            "Önceki analizdeki kanıt düzeyini değiştirmeden daha güvenli seçim için şu bulguları koruyorum:\n"
+            f"{bullets}\n\nKesin eşleşen içeriği dışarıda bırak; olası veya belirsiz içerikleri etiket ya da işletmeden teyit et."
+        ),
+        findings=inherited,
+    )
+
 
 @router.post("/api/chat")
 @limiter.limit("12/minute", key_func=authenticated_user_or_ip)
 async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
-    resolved_target, context_reason = _infer_chat_target(req.kimin_icin)
-    snapshot = resolve_profile_snapshot(telefon, resolved_target, db=db)
+    # Fail-closed target resolution: the message itself decides the person when it
+    # names one; the client hint is used only when the message names nobody. A clear
+    # reference to someone we cannot resolve asks for clarification instead of
+    # silently using the account owner's health profile. Profile is read only via
+    # the canonical snapshot layer (never a direct profile read in this router).
+    recent_logs = loglari_getir_db(telefon, limit=50, conn=db)
+    conversation_logs = _conversation_curebot_logs(recent_logs, req.conversation_id)
+    previous_target = _previous_curebot_target(conversation_logs)
+    snapshot, target_resolution = resolve_target_snapshot(
+        telefon, req.mesaj, req.kimin_icin, previous_target=previous_target, db=db
+    )
+    logger.info(
+        "event=curebot_target_resolved conversation_id=%s target_id=%s source=%s needs_clarification=%s referenced_other=%s",
+        req.conversation_id or "legacy",
+        snapshot.target_key if snapshot is not None else "unresolved",
+        target_resolution.source,
+        target_resolution.needs_clarification,
+        target_resolution.referenced_someone_else,
+    )
+    if target_resolution.needs_clarification:
+        clarify_answer = clarification_prompt(target_resolution)
+        clarification_turn = ResolvedTurn(
+            conversation_id=str(req.conversation_id or ""),
+            target_profile_id="",
+            target_scope="unknown",
+            target_resolution_source=target_resolution.source,
+            intent="clarification",
+            subject="unknown",
+            ambiguity_status="clarification_required",
+        )
+        _schedule_turn_commit(
+            bg_tasks,
+            telefon=telefon,
+            snapshot=None,
+            user_message=req.mesaj,
+            answer_text=clarify_answer,
+            turn=clarification_turn,
+            response_path="clarification",
+        )
+
+        async def clarify_stream():
+            yield _sse("message", {"chunk": clarify_answer})
+            yield _sse("done")
+
+        return _chat_stream_response(clarify_stream(), resolution=target_resolution)
+
     profil_ozeti = snapshot.profile_summary
     kullanici_id = snapshot.memory_namespace
-    history_metadata = _chat_history_metadata(snapshot)
+    history_metadata = _chat_history_metadata(
+        snapshot,
+        conversation_id=req.conversation_id,
+        target_resolution=target_resolution,
+    )
     ilaclar, message_medications = _merge_medications(
         list(snapshot.medications),
         req.mesaj,
@@ -426,10 +961,43 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
     
     son_loglar = [
         item
-        for item in loglari_getir_db(telefon, limit=50, conn=db)
+        for item in conversation_logs
         if history_matches_snapshot(item, snapshot)
     ][:10]
-    conversation_context = _local_conversation_context(son_loglar, snapshot)
+    conversation_context = _local_conversation_context(conversation_logs[:10], snapshot)
+    local_intent_plan = fallback_intent_plan(req.mesaj, snapshot.target_scope, conversation_context)
+    resolved_turn = resolve_semantic_turn(
+        local_intent_plan,
+        req.mesaj,
+        conversation_context,
+        conversation_id=req.conversation_id,
+        target_profile_id=snapshot.target_key,
+        target_scope=snapshot.target_scope,
+        target_resolution_source=target_resolution.source,
+    )
+    carried_findings = tuple(
+        coerce_finding(item)
+        for item in conversation_context.structured_findings
+        if str(item.get("target_profile_id") or "") == snapshot.target_key
+    )
+    response_context = CureBotResponseContext(
+        turn=resolved_turn,
+        snapshot=snapshot,
+        plan=local_intent_plan,
+        conversation=conversation_context,
+        user_message=req.mesaj,
+        findings=carried_findings,
+    )
+    history_metadata = _chat_history_metadata(
+        snapshot,
+        local_intent_plan,
+        conversation_id=req.conversation_id,
+        target_resolution=target_resolution,
+        user_message=req.mesaj,
+        previous_context=conversation_context,
+        resolved_turn=resolved_turn,
+        response_path="resolved",
+    )
     sohbet_gecmisi = []
     for log in reversed(son_loglar):
         sayfa = log.get("sayfa", "Sistem")
@@ -447,6 +1015,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
         sohbet_gecmisi=sohbet_gecmisi,
         ilaclar=ilaclar,
         resolved_profile_snapshot=snapshot.state_payload(),
+        resolved_turn=resolved_turn.model_dump(),
     )
     if message_medications:
         initial_state = apply_event(
@@ -464,12 +1033,16 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
         blocked_state = _guardrail_block_state(initial_state, injection_answer)
         decision_record = build_decision_record(blocked_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=injection_answer)
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, injection_answer[:500], history_metadata)
+        _schedule_turn_commit(
+            bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+            answer_text=injection_answer, turn=resolved_turn, response_path="input_guardrail",
+            plan=local_intent_plan,
+        )
         async def injection_stream():
             yield _sse("message", {"chunk": injection_answer})
             yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "input_guardrail": True})
             yield _sse("done")
-        return StreamingResponse(injection_stream(), media_type="text/event-stream")
+        return _chat_stream_response(injection_stream(), snapshot, target_resolution)
 
     source_disclosure = _previous_answer_source_state(initial_state, telefon=telefon, db=db, snapshot=snapshot)
     if source_disclosure:
@@ -481,7 +1054,11 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             final_answer=source_answer,
         )
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, source_answer[:500], history_metadata)
+        _schedule_turn_commit(
+            bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+            answer_text=source_answer, turn=resolved_turn, response_path="source_disclosure",
+            plan=local_intent_plan,
+        )
 
         async def source_stream():
             yield _sse("message", {"chunk": source_answer})
@@ -496,7 +1073,48 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             )
             yield _sse("done")
 
-        return StreamingResponse(source_stream(), media_type="text/event-stream")
+        return _chat_stream_response(source_stream(), snapshot, target_resolution)
+
+    # Profile-scoped recall of the target's own stored weekly plan / menu analysis.
+    # Real artifact from interaction_logs (fail-closed); never another profile.
+    artifact_result = _artifact_recall_answer(snapshot, req.mesaj, db=db)
+    if artifact_result:
+        artifact_answer = artifact_result.answer
+        artifact_reference = artifact_result.artifact_reference
+        artifact_turn = resolve_semantic_turn(
+            local_intent_plan,
+            req.mesaj,
+            conversation_context,
+            conversation_id=req.conversation_id,
+            target_profile_id=snapshot.target_key,
+            target_scope=snapshot.target_scope,
+            target_resolution_source=target_resolution.source,
+            artifact_reference=artifact_reference,
+        )
+        artifact_turn = artifact_turn.model_copy(update={
+            "intent": f"{artifact_reference}_followup",
+            "subject": "artifact",
+            "object_label": "",
+            "object_type": "unknown",
+            "artifact_reference": artifact_reference,
+        })
+        artifact_state = _simple_chat_state(initial_state, artifact_answer)
+        artifact_state["hedef_islem"] = "ARTIFACT_RECALL"
+        decision_record = build_decision_record(artifact_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=artifact_answer)
+        bg_tasks.add_task(klinik_karar_kaydet, decision_record)
+        _schedule_turn_commit(
+            bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+            answer_text=artifact_answer, turn=artifact_turn, response_path="artifact_recall",
+            plan=local_intent_plan,
+            findings=artifact_result.findings,
+        )
+
+        async def artifact_stream():
+            yield _sse("message", {"chunk": artifact_answer})
+            yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "artifact_recall": True})
+            yield _sse("done")
+
+        return _chat_stream_response(artifact_stream(), snapshot, target_resolution)
 
     # Everyday conversation must be resolved before generic input/rule safety.
     # Risky food questions return None here and continue to the explicit safety gate below.
@@ -505,7 +1123,11 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
         intent_state = _simple_chat_state(initial_state, intent_answer)
         decision_record = build_decision_record(intent_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=intent_answer)
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, intent_answer[:500], history_metadata)
+        _schedule_turn_commit(
+            bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+            answer_text=intent_answer, turn=resolved_turn, response_path="precheck_fast_path",
+            plan=local_intent_plan,
+        )
 
         async def intent_stream_precheck():
             yield _sse("status", {"status": "Yanıt hazırlanıyor..."})
@@ -513,14 +1135,14 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "fast_path": True})
             yield _sse("done")
 
-        return StreamingResponse(intent_stream_precheck(), media_type="text/event-stream")
+        return _chat_stream_response(intent_stream_precheck(), snapshot, target_resolution)
 
     try:
         intent_plan = await asyncio.wait_for(
             run_in_threadpool(
                 plan_curebot_semantically,
                 req.mesaj,
-                conversation_context.model_dump(),
+                conversation_context.model_dump(exclude={"structured_findings"}),
                 snapshot.target_scope,
                 [snapshot.target_name],
                 {
@@ -534,22 +1156,76 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
     except Exception:
         intent_plan = fallback_intent_plan(req.mesaj, req.kimin_icin, conversation_context)
 
-    history_metadata = _chat_history_metadata(snapshot, intent_plan)
+    resolved_turn = resolve_semantic_turn(
+        intent_plan,
+        req.mesaj,
+        conversation_context,
+        conversation_id=req.conversation_id,
+        target_profile_id=snapshot.target_key,
+        target_scope=snapshot.target_scope,
+        target_resolution_source=target_resolution.source,
+    )
+    response_context = CureBotResponseContext(
+        turn=resolved_turn,
+        snapshot=snapshot,
+        plan=intent_plan,
+        conversation=conversation_context,
+        user_message=req.mesaj,
+        findings=carried_findings,
+    )
+    initial_state["resolved_turn"] = resolved_turn.model_dump()
+
+    history_metadata = _chat_history_metadata(
+        snapshot,
+        intent_plan,
+        conversation_id=req.conversation_id,
+        target_resolution=target_resolution,
+        user_message=req.mesaj,
+        previous_context=conversation_context,
+        resolved_turn=resolved_turn,
+        response_path="resolved",
+    )
 
     if intent_plan.intent == "off_topic":
         off_topic_answer = "Ben beslenme ve sağlık odaklı bir asistanım. Lütfen CureMenu'nün temel amacı olan bu konularda sorular sorun."
         off_topic_state = _simple_chat_state(initial_state, off_topic_answer)
         decision_record = build_decision_record(off_topic_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=off_topic_answer)
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, off_topic_answer[:500], history_metadata)
+        _schedule_turn_commit(
+            bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+            answer_text=off_topic_answer, turn=resolved_turn, response_path="off_topic",
+            plan=intent_plan,
+        )
         
         async def off_topic_stream():
             yield _sse("message", {"chunk": off_topic_answer})
             yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "fast_path": True})
             yield _sse("done")
-        return StreamingResponse(off_topic_stream(), media_type="text/event-stream")
+        return _chat_stream_response(off_topic_stream(), snapshot, target_resolution)
 
-    input_safety_answer = _explicit_input_safety_answer(snapshot, req.mesaj)
+    input_safety_decision = _explicit_input_safety_answer(response_context)
+    input_safety_answer = input_safety_decision.answer if input_safety_decision else None
+    artifact_followup = _artifact_followup_decision(response_context)
+    if not input_safety_answer and artifact_followup:
+        artifact_state = _simple_chat_state(initial_state, artifact_followup.answer)
+        decision_record = build_decision_record(
+            artifact_state, telefon=telefon, kimin_icin=snapshot.target_key,
+            final_answer=artifact_followup.answer,
+        )
+        bg_tasks.add_task(klinik_karar_kaydet, decision_record)
+        _schedule_turn_commit(
+            bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+            answer_text=artifact_followup.answer, turn=resolved_turn,
+            response_path="artifact_followup", plan=intent_plan,
+            findings=artifact_followup.findings,
+        )
+
+        async def artifact_followup_stream():
+            yield _sse("message", {"chunk": artifact_followup.answer})
+            yield _sse("done")
+
+        return _chat_stream_response(artifact_followup_stream(), snapshot, target_resolution)
+
     if not input_safety_answer and intent_plan.intent in {
         "meal_recommendation", "meal_followup", "dessert_craving", "coffee_habit",
         "explanation_followup", "emotional_support", "product_question",
@@ -568,15 +1244,16 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
                         req.mesaj,
                         "Önceki konuşma bağlamı yerel etiketlerle mevcut." if conversation_context.has_previous_turn else "",
                         conversation_context,
+                        resolved_turn,
                     ),
                     timeout=6,
                 )
         except Exception:
-            natural_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context)
+            natural_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context, resolved_turn)
         if natural_answer:
             natural_state = _simple_chat_state(initial_state, natural_answer)
             if natural_state.get("guvenli_mi") is False:
-                natural_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context)
+                natural_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context, resolved_turn)
                 natural_state = _simple_chat_state(initial_state, natural_answer)
                 if natural_state.get("guvenli_mi") is False:
                     natural_answer = (
@@ -586,19 +1263,18 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
                     natural_state = _simple_chat_state(initial_state, natural_answer)
             decision_record = build_decision_record(natural_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=natural_answer)
             bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-            natural_history_metadata = _chat_history_metadata(
-                snapshot,
-                intent_plan,
-                answer_text=natural_answer,
+            _schedule_turn_commit(
+                bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+                answer_text=natural_answer, turn=resolved_turn, response_path="natural_fast_path",
+                plan=intent_plan,
             )
-            bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, natural_answer[:500], natural_history_metadata)
 
             async def natural_stream():
                 yield _sse("message", {"chunk": natural_answer})
                 yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "fast_path": True})
                 yield _sse("done")
 
-            return StreamingResponse(natural_stream(), media_type="text/event-stream")
+            return _chat_stream_response(natural_stream(), snapshot, target_resolution)
     if input_safety_answer:
         blocked_state = _guardrail_block_state(initial_state, input_safety_answer)
         decision_record = build_decision_record(
@@ -608,7 +1284,12 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             final_answer=input_safety_answer,
         )
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, input_safety_answer[:500], history_metadata)
+        _schedule_turn_commit(
+            bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+            answer_text=input_safety_answer, turn=resolved_turn, response_path="deterministic_safety",
+            plan=intent_plan,
+            findings=input_safety_decision.findings,
+        )
 
         async def input_safety_stream():
             yield _sse("message", {"chunk": input_safety_answer})
@@ -623,14 +1304,18 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             )
             yield _sse("done")
 
-        return StreamingResponse(input_safety_stream(), media_type="text/event-stream")
+        return _chat_stream_response(input_safety_stream(), snapshot, target_resolution)
 
-    intent_answer = _intent_fast_answer(snapshot, req.mesaj)
+    intent_answer = _intent_fast_answer(response_context)
     if intent_answer:
         intent_state = _simple_chat_state(initial_state, intent_answer)
         decision_record = build_decision_record(intent_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=intent_answer)
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, intent_answer[:500], history_metadata)
+        _schedule_turn_commit(
+            bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+            answer_text=intent_answer, turn=resolved_turn, response_path="deterministic_intent",
+            plan=intent_plan,
+        )
 
         async def intent_stream():
             yield _sse("status", {"status": "Yanıt hazırlanıyor..."})
@@ -638,20 +1323,24 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "fast_path": True})
             yield _sse("done")
 
-        return StreamingResponse(intent_stream(), media_type="text/event-stream")
+        return _chat_stream_response(intent_stream(), snapshot, target_resolution)
 
     simple_answer = _simple_chat_message(req.mesaj, profil_ozeti, gecmis_klinik)
     if simple_answer:
         simple_state = _simple_chat_state(initial_state, simple_answer)
         decision_record = build_decision_record(simple_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=simple_answer)
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-        bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, simple_answer[:500], history_metadata)
+        _schedule_turn_commit(
+            bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+            answer_text=simple_answer, turn=resolved_turn, response_path="simple_response",
+            plan=intent_plan,
+        )
         async def simple_stream():
             yield _sse("status", {"status": "Yanıt hazırlanıyor..."})
             yield _sse("message", {"chunk": simple_answer})
             yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "fast_path": True})
             yield _sse("done")
-        return StreamingResponse(simple_stream(), media_type="text/event-stream")
+        return _chat_stream_response(simple_stream(), snapshot, target_resolution)
 
     if rails:
         try:
@@ -662,12 +1351,16 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
                 blocked_state = _guardrail_block_state(initial_state, icerik)
                 decision_record = build_decision_record(blocked_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=icerik)
                 bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-                bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "Guardrails Blok", req.mesaj, icerik[:500], history_metadata)
+                _schedule_turn_commit(
+                    bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+                    answer_text=icerik[:500], turn=resolved_turn, response_path="runtime_guardrail",
+                    plan=intent_plan,
+                )
                 async def guardrail_stream():
                     yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"]})
                     msg_text = f"🛡️ **Sistem Uyarısı (NeMo Guardrails):**\n\n{icerik}"
                     yield f"event: error\ndata: {json.dumps({'message': msg_text})}\n\n"
-                return StreamingResponse(guardrail_stream(), media_type="text/event-stream")
+                return _chat_stream_response(guardrail_stream(), snapshot, target_resolution)
         except Exception as e:
             log_failure(logger, "guardrails_request", e, component="chat")
 
@@ -690,28 +1383,32 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             
             final_answer = _final_cevap_metni(final_state, "")
             if not final_answer:
-                final_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context)
+                final_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context, resolved_turn)
+            final_answer = soften_unsourced_clinical_limits(final_answer)
             yield _sse("message", {"chunk": final_answer})
                 
             decision_record = build_decision_record(final_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=final_answer)
             bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-            final_history_metadata = _chat_history_metadata(
-                snapshot,
-                intent_plan,
-                answer_text=final_answer,
+            _schedule_turn_commit(
+                bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+                answer_text=final_answer, turn=resolved_turn, response_path="model_graph",
+                plan=intent_plan,
             )
-            bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, final_answer[:500], final_history_metadata)
             yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"]})
             yield _sse("done")
         except Exception as e:
             log_failure(logger, "chat_stream", e, component="chat")
-            fallback_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context)
+            fallback_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context, resolved_turn)
             fallback_state = _chat_fallback_state(initial_state, fallback_answer, e)
             decision_record = build_decision_record(fallback_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=fallback_answer)
             bg_tasks.add_task(klinik_karar_kaydet, decision_record)
-            bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "CureBot", req.mesaj, fallback_answer[:500], history_metadata)
+            _schedule_turn_commit(
+                bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+                answer_text=fallback_answer, turn=resolved_turn, response_path="error_fallback",
+                plan=intent_plan,
+            )
             yield _sse("message", {"chunk": fallback_answer})
             yield _sse("governance", {"decision_id": decision_record["decision_id"], "risk_score": decision_record["risk_score"], "confidence_score": decision_record["confidence_score"], "fallback": True})
             yield _sse("done")
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return _chat_stream_response(event_generator(), snapshot, target_resolution)

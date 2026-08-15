@@ -17,6 +17,7 @@ from src.messages import PROFIL_BULUNAMADI, PROFIL_GEREKLI
 from src.models import AileUyesi, KullaniciProfili
 from src.privacy.redaction import redact_text
 from src.profil_utils import aile_profil_ozeti_olustur, profil_ozeti_olustur
+from src.target_resolution import TargetResolution, resolve_target_from_message
 
 
 def _dedupe(values: list[str]) -> tuple[str, ...]:
@@ -89,6 +90,7 @@ class ResolvedProfileSnapshot:
     notes: tuple[str, ...]
     family_member_id: str | None
     profile_summary: str
+    relationship: str = ""
 
     @property
     def memory_namespace(self) -> str:
@@ -197,6 +199,7 @@ def resolve_profile_snapshot_from_profile(
         notes=notes,
         family_member_id=family_member_id,
         profile_summary=summary,
+        relationship=(members[0].yakinlik or "") if target_scope == "member" and members else "",
     )
 
 
@@ -210,6 +213,33 @@ def resolve_profile_snapshot(
     if profile is None:
         raise HTTPException(status_code=404, detail=PROFIL_BULUNAMADI)
     return resolve_profile_snapshot_from_profile(account_id, profile, requested_target)
+
+
+def resolve_target_snapshot(
+    account_id: str,
+    message: str,
+    client_hint: str,
+    *,
+    previous_target: str | None = None,
+    db: sqlite3.Connection,
+) -> tuple[ResolvedProfileSnapshot | None, TargetResolution]:
+    """Resolve the chat target from the message (fail-closed) and build its snapshot.
+
+    Canonical entry point for CureBot: the message decides the person when it names
+    one; the client hint is used only when the message names nobody. When the
+    reference is ambiguous the snapshot is None and ``resolution.needs_clarification``
+    is True, and the caller must ask for clarification instead of falling back to
+    any profile. Kept here (not in a router) so personalized flows never read the
+    raw profile directly.
+    """
+    profile = profil_getir_db(account_id, conn=db)
+    if profile is None:
+        raise HTTPException(status_code=404, detail=PROFIL_BULUNAMADI)
+    resolution = resolve_target_from_message(profile, message, client_hint, previous_target)
+    if resolution.needs_clarification:
+        return None, resolution
+    snapshot = resolve_profile_snapshot_from_profile(account_id, profile, resolution.target)
+    return snapshot, resolution
 
 
 def history_matches_snapshot(record: dict[str, Any], snapshot: ResolvedProfileSnapshot) -> bool:

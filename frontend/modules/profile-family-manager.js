@@ -65,7 +65,6 @@ async function loadProfile() {
 
         const hasMain = !!data.profil.ana_kullanici;
         localStorage.setItem('cm_has_profile', hasMain ? 'true' : 'false');
-        window.ChatWidget?.loadCachedConversation?.();
         return data.profil;
     } catch (e) { console.error(e); renderEmptyFamily(); return null; }
 }
@@ -251,18 +250,13 @@ function getTargetCacheContext(selectIdOrTarget = 'kendim') {
 
 function historyMatchesTargetContext(metadata, context) {
     if (!context || !metadata?.target_scope) return false;
-    if (String(metadata.target_scope) !== String(context.targetScope)) {
-        console.log("SCOPE MISMATCH", metadata.target_scope, context.targetScope);
-        return false;
-    }
+    if (String(metadata.target_scope) !== String(context.targetScope)) return false;
     
     // History is already isolated by the authenticated account. Main-profile IDs
     // may change after a profile edit, while the self/family scope stays stable.
     if (context.targetScope === 'self' || context.targetScope === 'family') return true;
 
-    const match = Boolean(metadata.target_id) && String(metadata.target_id) === String(context.targetId);
-    console.log("MATCH RESULT", match, "meta:", metadata.target_id, "ctx:", context.targetId);
-    return match;
+    return Boolean(metadata.target_id) && String(metadata.target_id) === String(context.targetId);
 }
 
 function populateTargetSelect(selectId, familyMembers) {
@@ -298,7 +292,6 @@ function populateTargetSelect(selectId, familyMembers) {
         : 'kendim';
     localStorage.setItem(storageKey, select.value);
     if (selectId === 'planTarget') window.WeeklyPlanManager?.loadExistingPlan?.();
-    if (selectId === 'chatTarget') window.ChatWidget?.loadCachedConversation?.();
     if (selectId === 'menuTarget') window.loadMenuHistory?.();
 
     if (select.dataset.targetPersistenceBound !== 'true') {
@@ -310,7 +303,6 @@ function populateTargetSelect(selectId, familyMembers) {
             window.CureMenuAnalytics?.track?.('family_profile_switched', { feature: 'family', metadata: { target_type: targetType } });
             localStorage.setItem(storageKey, select.value);
             if (selectId === 'planTarget') window.WeeklyPlanManager?.loadExistingPlan?.();
-            if (selectId === 'chatTarget') window.ChatWidget?.loadCachedConversation?.();
             if (selectId === 'tahlilTarget') window.loadLabHistory?.();
             if (selectId === 'fridgeTarget') window.loadFridgeHistory?.();
             if (selectId === 'groceryTarget') window.openSmartGrocery?.();
@@ -330,12 +322,57 @@ function updatePlanDropdown(profil) {
         });
 }
 
+const YAKINLIK_LABELS = { ogul: 'Oğlum', kiz: 'Kızım', es: 'Eşim', anne: 'Annem', baba: 'Babam', kardes: 'Kardeşim', diger: 'Diğer' };
+
+function _resetMemberForm() {
+    const editEl = document.getElementById('m_edit_id');
+    if (editEl) editEl.value = '';
+    const titleEl = document.getElementById('addModalTitle');
+    if (titleEl) titleEl.textContent = 'Yeni kişi ekle';
+    ['m_ad', 'm_yas', 'm_boy', 'm_kilo', 'm_yakinlik', 'm_cinsiyet', 'm_hastaliklar', 'm_alerjiler', 'm_ilaclar', 'm_genetik', 'm_tibbi', 'm_notlar']
+        .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    const hedef = document.getElementById('m_hedef');
+    if (window.ProfileGoals && hedef) window.ProfileGoals.populateSelect(hedef, '');
+}
+
+function openAddMember() {
+    _resetMemberForm();
+    document.getElementById('addModal')?.classList.remove('hidden');
+}
+
+function editMember(uyeId) {
+    const member = (window.currentProfile?.aile_uyeleri || []).find(item => item.id === uyeId);
+    if (!member) return;
+    _resetMemberForm();
+    const setVal = (id, value) => { const el = document.getElementById(id); if (el) el.value = value ?? ''; };
+    document.getElementById('m_edit_id').value = uyeId;
+    const titleEl = document.getElementById('addModalTitle');
+    if (titleEl) titleEl.textContent = 'Aile üyesini düzenle';
+    setVal('m_ad', member.ad);
+    setVal('m_yas', member.yas);
+    setVal('m_cinsiyet', member.cinsiyet);
+    setVal('m_yakinlik', member.yakinlik);
+    setVal('m_boy', member.boy);
+    setVal('m_kilo', member.kilo);
+    setVal('m_hastaliklar', (member.hastaliklar || []).join(', '));
+    setVal('m_alerjiler', (member.alerjiler || []).join(', '));
+    setVal('m_ilaclar', (member.ilaclar || []).join(', '));
+    setVal('m_genetik', (member.genetik_hastaliklar || []).join(', '));
+    setVal('m_tibbi', member.tibbi_gecmis);
+    setVal('m_notlar', member.notlar);
+    const hedef = document.getElementById('m_hedef');
+    if (window.ProfileGoals && hedef) window.ProfileGoals.populateSelect(hedef, member.hedef);
+    document.getElementById('addModal')?.classList.remove('hidden');
+}
+
 async function addMember() {
     const user = window.AuthManager.getUser();
+    const editId = (document.getElementById('m_edit_id')?.value || '').trim();
     // Karari kayitli bayraga degil, bu oturumun gercek profiline gore ver;
     // aksi halde bayat localStorage ana profili ezebilir.
     const hasMainProfile = !!(window.currentProfile && window.currentProfile.ana_kullanici);
-    const endpoint = hasMainProfile ? '/api/family/add' : '/api/profile/save';
+    const endpoint = editId ? ('/api/family/' + editId) : (hasMainProfile ? '/api/family/add' : '/api/profile/save');
+    const method = editId ? 'PUT' : 'POST';
 
     const ad_val = document.getElementById('m_ad').value.trim();
     const nameRegex = /^[A-Za-z\u00C7\u00E7\u011E\u011F\u0130\u0131\u00D6\u00F6\u015E\u015F\u00DC\u00FC\s]+$/;
@@ -371,6 +408,7 @@ async function addMember() {
         ad: ad_val,
         yas: yas_val,
         cinsiyet: cinsiyet_val,
+        yakinlik: document.getElementById('m_yakinlik')?.value || null,
         boy: boy_val,
         kilo: kilo_val,
         hastaliklar: parseListInput(document.getElementById('m_hastaliklar').value),
@@ -384,20 +422,21 @@ async function addMember() {
 
     try {
         const { res, data } = await safeFetchJson(API + endpoint, {
-            method: 'POST',
+            method: method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
         if (data && data.success) {
-            window.CureMenuAnalytics?.track?.(hasMainProfile ? 'family_profile_created' : 'health_profile_completed', { feature: hasMainProfile ? 'family' : 'profile', metadata: { target_type: hasMainProfile ? 'family' : 'self' } });
-            if (!hasMainProfile) {
-                localStorage.setItem('cm_has_profile', 'true');
-                localStorage.setItem('cm_onboarding_done', 'true');
-                localStorage.setItem('cm_kullanici_adi', ad_val);
+            if (!editId) {
+                window.CureMenuAnalytics?.track?.(hasMainProfile ? 'family_profile_created' : 'health_profile_completed', { feature: hasMainProfile ? 'family' : 'profile', metadata: { target_type: hasMainProfile ? 'family' : 'self' } });
+                if (!hasMainProfile) {
+                    localStorage.setItem('cm_has_profile', 'true');
+                    localStorage.setItem('cm_onboarding_done', 'true');
+                    localStorage.setItem('cm_kullanici_adi', ad_val);
+                }
             }
             document.getElementById('addModal').classList.add('hidden');
-            // Formu temizle
-            ['m_ad', 'm_yas', 'm_boy', 'm_kilo', 'm_hastaliklar', 'm_alerjiler', 'm_ilaclar', 'm_genetik', 'm_tibbi', 'm_notlar'].forEach(id => document.getElementById(id).value = '');
+            _resetMemberForm();
             loadProfile();
         } else { alert(apiHataMesaji(data, 'Hata oluştu')); }
     } catch (e) { alert('Bağlantı kurulamadı. Lütfen birazdan tekrar deneyin.'); }
@@ -444,9 +483,15 @@ function renderFamily(profil) {
         const isMain = member.isMain;
         return `
             <article class="rounded-xl border border-outline-variant bg-surface-container-low p-6 transition hover:border-primary">
-                <div class="flex items-center justify-between">
-                    <h4 class="font-display text-xl font-bold text-on-surface">${escapeHtml(member.ad || 'İsimsiz')}</h4>
-                    <span class="rounded-full bg-primary-container px-3 py-1 text-xs font-bold text-primary">${isMain ? 'Ana Profil' : 'Aile Üyesi'}</span>
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <h4 class="font-display text-xl font-bold text-on-surface">${escapeHtml(member.ad || 'İsimsiz')}</h4>
+                        ${(!isMain && member.yakinlik) ? `<p class="text-xs text-on-surface-variant">${escapeHtml(YAKINLIK_LABELS[member.yakinlik] || member.yakinlik)}</p>` : ''}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="rounded-full bg-primary-container px-3 py-1 text-xs font-bold text-primary">${isMain ? 'Ana Profil' : 'Aile Üyesi'}</span>
+                        ${!isMain ? `<button type="button" onclick="window.ProfileManager.editMember('${memberId}')" class="btn-icon" title="Düzenle" aria-label="Düzenle"><span class="material-symbols-outlined text-[18px]">edit</span></button>` : ''}
+                    </div>
                 </div>
                 <div class="mt-4 grid gap-4">
                     <div><p class="metric-label font-bold">Hastalıklar</p><div class="mt-2 flex flex-wrap gap-2">${diseases.length ? diseases.map(v => `<span class="status-pill status-warn">${escapeHtml(v)}</span>`).join('') : '<span class="text-sm text-on-surface-variant">Kayıt yok</span>'}</div></div>
@@ -505,6 +550,8 @@ function renderMedicationOverview(profil) {
         openProfileEditor,
         updatePlanDropdown,
         addMember,
+        openAddMember,
+        editMember,
         deleteMember,
         renderHealthProfile,
         renderEmptyFamily,
@@ -524,6 +571,8 @@ function renderMedicationOverview(profil) {
     window.updatePlanDropdown = updatePlanDropdown;
     window.populateTargetSelect = populateTargetSelect;
     window.addMember = addMember;
+    window.openAddMember = openAddMember;
+    window.editMember = editMember;
     window.deleteMember = deleteMember;
     window.renderHealthProfile = renderHealthProfile;
     window.renderEmptyFamily = renderEmptyFamily;

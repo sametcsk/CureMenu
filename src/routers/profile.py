@@ -70,6 +70,7 @@ async def add_family_member(req: AileUyesiEkleRequest, telefon: str = Depends(ge
         ad=req.ad,
         yas=req.yas,
         cinsiyet=req.cinsiyet,
+        yakinlik=req.yakinlik,
         boy=req.boy,
         kilo=req.kilo,
         hastaliklar=req.hastaliklar,
@@ -84,6 +85,41 @@ async def add_family_member(req: AileUyesiEkleRequest, telefon: str = Depends(ge
     profil_kaydet_db(telefon, "", profil, conn=db)
     
     return {"success": True, "message": f"{req.ad} aileye eklendi", "uye_id": uye.id}
+
+@router.put("/api/family/{uye_id}")
+async def update_family_member(uye_id: str, req: AileUyesiEkleRequest, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+    """Mevcut aile üyesinin düzenlenebilir alanlarını (yakinlik dahil) güncelle.
+
+    Üyenin kimliği (id) korunur; diğer üyeler ve ana profil değişmez.
+    """
+    profil = profil_getir_db(telefon, conn=db)
+    if profil is None:
+        raise HTTPException(status_code=404, detail=PROFIL_BULUNAMADI)
+    mevcut = next((u for u in profil.aile_uyeleri if u.id == uye_id), None)
+    if mevcut is None:
+        raise HTTPException(status_code=404, detail="Aile üyesi bulunamadı.")
+
+    guncel = AileUyesi(
+        id=mevcut.id,
+        ad=req.ad,
+        yas=req.yas,
+        cinsiyet=req.cinsiyet,
+        yakinlik=req.yakinlik,
+        boy=req.boy,
+        kilo=req.kilo,
+        hastaliklar=req.hastaliklar,
+        alerjiler=req.alerjiler,
+        genetik_hastaliklar=req.genetik_hastaliklar,
+        tibbi_gecmis=req.tibbi_gecmis,
+        ilaclar=req.ilaclar,
+        hedef=req.hedef,
+        notlar=req.notlar,
+    )
+    profil.aile_uyeleri = [guncel if u.id == uye_id else u for u in profil.aile_uyeleri]
+    profil_kaydet_db(telefon, "", profil, conn=db)
+
+    return {"success": True, "message": f"{req.ad} güncellendi", "uye_id": mevcut.id}
+
 
 @router.delete("/api/family/{uye_id}")
 async def delete_family_member(uye_id: str, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):

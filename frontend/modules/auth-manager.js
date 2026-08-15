@@ -6,6 +6,8 @@ function clearAccountHealthCaches(accountKey) {
 
     const ownedPrefixes = [
         `cm_chat_v2_${normalizedAccountKey}_`,
+        `cm_chat_v3_${normalizedAccountKey}_`,
+        `cm_chat_conversation_${normalizedAccountKey}`,
         `cm_saved_plan_json_${normalizedAccountKey}_`,
         `cm_grocery_${normalizedAccountKey}_`,
         `cm_check_${normalizedAccountKey}_`,

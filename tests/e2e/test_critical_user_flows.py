@@ -135,6 +135,7 @@ def test_family_target_selectors_and_chat_payload(browser_page, e2e_base_url: st
             route.fulfill(
                 status=200,
                 content_type="text/event-stream",
+                headers={"X-CureMenu-Resolved-Target": "member-ece"},
                 body='event: token\ndata: {"chunk":"Ece için yanıt."}\n\nevent: done\ndata: {}\n\n',
             )
         else:
@@ -166,8 +167,9 @@ def test_family_target_selectors_and_chat_payload(browser_page, e2e_base_url: st
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("Ece için yanıt.", exact=True).wait_for()
 
-    assert chat_requests[-1]["kimin_icin"] == "member-ece"
-    assert page.evaluate("localStorage.getItem('cm_chat_v2_05000000000_member_member-ece_backend-ece-fingerprint') !== null")
+    assert chat_requests[-1]["kimin_icin"] == "kendim"
+    assert chat_requests[-1]["conversation_id"]
+    assert page.evaluate("Object.keys(localStorage).some(key => key.startsWith('cm_chat_v3_05000000000_'))")
     assert page.locator("[data-cm-header-context]").inner_text() == "Ece için"
     assert not runtime_errors
 
@@ -202,6 +204,8 @@ def test_register_wrong_password_login_and_logout(browser_page, e2e_base_url: st
 
     owned_cache_keys = [
         f"cm_chat_v2_{phone}_self_main-fingerprint",
+        f"cm_chat_v3_{phone}_e2e-conversation",
+        f"cm_chat_conversation_{phone}",
         f"cm_saved_plan_json_{phone}_self_main-fingerprint",
         f"cm_grocery_{phone}_self_main-fingerprint",
         f"cm_check_{phone}_self_main-fingerprint_meal-0-0",
@@ -487,7 +491,14 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     def chat_stream(route) -> None:
         request = json.loads(route.request.post_data or "{}")
         chat_requests.append(request)
-        target_name = request.get("kimin_icin", "kendim")
+        message = str(request.get("mesaj") or "").casefold()
+        target_name = (
+            "member-ece" if "ece" in message
+            else "member-mert" if "mert" in message
+            else "member-ayse" if "ayse" in message
+            else "aile" if "tum aile" in message
+            else "kendim"
+        )
         body = "".join(
             [
                 'event: status\ndata: {"status":"Kontroller calisiyor"}\n\n',
@@ -496,7 +507,12 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
                 "event: done\ndata: {}\n\n",
             ]
         )
-        route.fulfill(status=200, content_type="text/event-stream", body=body)
+        route.fulfill(
+            status=200,
+            content_type="text/event-stream",
+            headers={"X-CureMenu-Resolved-Target": target_name},
+            body=body,
+        )
 
     page.route("**/api/chat", chat_stream)
     page.route(
@@ -536,7 +552,7 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     page.fill("[data-cm-assistant-input]", "Ece için akşam ne yiyebilirim?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("member-ece icin test yaniti.").wait_for()
-    assert chat_requests[-1]["kimin_icin"] == "member-ece"
+    assert chat_requests[-1]["kimin_icin"] == "kendim"
     assert page.locator("[data-cm-header-context]").inner_text() == "Ece için"
     assert page.locator("[data-cm-assistant-body]").get_by_text("e2e-chat-decision").count() == 0
     assert page.locator("[data-cm-assistant-body]").get_by_text("Operasyonel güven").count() == 0
@@ -548,22 +564,23 @@ def test_curebot_upload_menu_fridge_and_qr_fallback(authenticated_page) -> None:
     page.fill("[data-cm-assistant-input]", "Kendim icin ne onerirsin?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("kendim icin test yaniti.").wait_for()
-    assert chat_requests[-1]["kimin_icin"] == "kendim"
+    assert chat_requests[-1]["kimin_icin"] == "member-ece"
 
     page.fill("[data-cm-assistant-input]", "Mert icin ne onerirsin?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("member-mert icin test yaniti.").wait_for()
-    assert chat_requests[-1]["kimin_icin"] == "member-mert"
+    assert chat_requests[-1]["kimin_icin"] == "kendim"
 
     page.fill("[data-cm-assistant-input]", "Ayse icin ne onerirsin?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("member-ayse icin test yaniti.").wait_for()
-    assert chat_requests[-1]["kimin_icin"] == "member-ayse"
+    assert chat_requests[-1]["kimin_icin"] == "member-mert"
 
     page.fill("[data-cm-assistant-input]", "Tum aile icin ne onerirsin?")
     page.locator("[data-cm-assistant-form]").evaluate("form => form.requestSubmit()")
     page.locator("[data-cm-assistant-body]").get_by_text("aile icin test yaniti.").wait_for()
-    assert chat_requests[-1]["kimin_icin"] == "aile"
+    assert chat_requests[-1]["kimin_icin"] == "member-ayse"
+    assert len({request["conversation_id"] for request in chat_requests}) == 1
 
     page.route(
         "**/api/clinical-decisions/e2e-no-citations",
@@ -1362,13 +1379,17 @@ def test_smart_grocery_data_isolation(authenticated_page) -> None:
 
 def test_curebot_history_restore_and_isolation(authenticated_page) -> None:
     page, _context, runtime_errors, _user = authenticated_page
-    
-    page.on("console", lambda msg: print(f"CONSOLE: {msg.text}")); page.wait_for_function("window.ProfileManager && window.ProfileManager.getTargetCacheContext")
+
+    page.wait_for_function("window.ProfileManager && window.ProfileManager.getTargetCacheContext")
     
     kendim_context = page.evaluate("window.ProfileManager.getTargetCacheContext('kendim')")
     mert_context = page.evaluate("window.ProfileManager.getTargetCacheContext('member-mert')")
     
-    page.evaluate("localStorage.clear()"); print("fetchHistoryRecords:", page.evaluate("typeof window.fetchHistoryRecords"))
+    conversation_id = "e2e-household-conversation"
+    page.evaluate(
+        "conversationId => { Object.keys(localStorage).filter(key => key.startsWith('cm_chat_v3_')).forEach(key => localStorage.removeItem(key)); localStorage.setItem('cm_chat_conversation_' + localStorage.getItem('cm_telefon'), conversationId); }",
+        conversation_id,
+    )
     
     def history_handler(route):
         _json(
@@ -1387,6 +1408,7 @@ def test_curebot_history_restore_and_isolation(authenticated_page) -> None:
                             "target_id": kendim_context["targetId"],
                             "target_scope": kendim_context["targetScope"],
                             "profile_fingerprint": kendim_context["profileFingerprint"],
+                            "conversation_id": conversation_id,
                         })
                     },
                     {
@@ -1400,6 +1422,7 @@ def test_curebot_history_restore_and_isolation(authenticated_page) -> None:
                             "target_id": mert_context["targetId"],
                             "target_scope": mert_context["targetScope"],
                             "profile_fingerprint": mert_context["profileFingerprint"],
+                            "conversation_id": conversation_id,
                         })
                     }
                 ],
@@ -1411,13 +1434,17 @@ def test_curebot_history_restore_and_isolation(authenticated_page) -> None:
     page.reload(); page.wait_for_function("window.ChatWidget"); page.locator("[data-cm-assistant-launcher]").click()
     page.locator("#cm-assistant-root[data-open='true']").wait_for(state="visible")
     
-    print("BODY: ", page.locator("[data-cm-assistant-body]").inner_text()); page.locator("[data-cm-assistant-body]").get_by_text("Merhaba, benim icin ozel mesaj").wait_for(timeout=5000)
+    page.locator("[data-cm-assistant-body]").get_by_text("Merhaba, benim icin ozel mesaj").wait_for(timeout=5000)
     page.locator("[data-cm-assistant-body]").get_by_text("Kendim icin cevap").wait_for(timeout=5000)
-    assert page.locator("[data-cm-assistant-body]").get_by_text("Mert icin ozel mesaj").count() == 0
-    
-    page.evaluate("window.ChatWidget.activeTarget = 'member-mert'; window.ChatWidget.loadCachedConversation();");
     page.locator("[data-cm-assistant-body]").get_by_text("Mert icin ozel mesaj").wait_for(timeout=5000)
     page.locator("[data-cm-assistant-body]").get_by_text("Mert icin cevap").wait_for(timeout=5000)
-    assert page.locator("[data-cm-assistant-body]").get_by_text("Merhaba, benim icin ozel mesaj").count() == 0
-    
+
+    page.evaluate(
+        "() => { window.currentProfile = {...window.currentProfile, aile_uyeleri: [{id: 'member-mert', ad: 'Mert'}]}; window.updatePlanDropdown(window.currentProfile); }"
+    )
+    page.evaluate("window.switchTab('plan')")
+    page.locator("#planTarget").select_option("member-mert")
+    assert page.locator("[data-cm-assistant-body]").get_by_text("Merhaba, benim icin ozel mesaj").count() == 1
+    assert page.locator("[data-cm-assistant-body]").get_by_text("Mert icin ozel mesaj").count() == 1
+
     assert not runtime_errors

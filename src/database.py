@@ -342,6 +342,30 @@ def loglari_getir_db(telefon: str, limit: int = 10, offset: int = 0, conn: sqlit
         return [dict(zip(columns, row)) for row in rows]
 
 
+def son_sayfa_kayitlari(telefon: str, sayfa: str, limit: int = 10, conn: sqlite3.Connection = None) -> list:
+    """Return an account's most recent interaction logs for one page (newest first).
+
+    Source-of-truth for profile-scoped artifact recall (weekly plan, menu analysis).
+    Scopes by account only; callers must still filter by the resolved profile
+    snapshot (history_matches_snapshot) for profile isolation.
+    """
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        cursor = _conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, kullanici_adi, sayfa, istek, cevap, metadata, tarih
+            FROM interaction_logs
+            WHERE telefon = ? AND sayfa = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (telefon, sayfa, limit),
+        )
+        columns = [col[0] for col in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
 def log_sayisi_getir_db(telefon: str, conn: sqlite3.Connection = None) -> int:
     """Kullanıcının toplam log sayısı (pagination için)."""
     _ensure_db()

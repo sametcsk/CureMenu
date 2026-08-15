@@ -1,4 +1,4 @@
-from src.presentation import soften_generated_guidance, user_facing_safety_guidance
+from src.presentation import format_rule_risks_for_user, soften_generated_guidance, user_facing_safety_guidance
 from src.chat_intents import normalized_message
 
 _GENERIC_REVIEW_GUIDANCE = (
@@ -58,6 +58,27 @@ def _has_specific_review_signal(result: dict) -> bool:
     return False
 
 
+def _food_specific_block_answer(result: dict) -> str:
+    """Render deterministic blocked food findings without exposing rule labels."""
+    risks: list[str] = []
+    for event in result.get("governance_events") or []:
+        if event.get("event_type") != "RuleTriggered" or event.get("status") != "blocked":
+            continue
+        metadata = event.get("metadata") or {}
+        event_risks = metadata.get("risks") or []
+        if isinstance(event_risks, (list, tuple)):
+            risks.extend(str(item).strip() for item in event_risks if str(item).strip())
+    formatted = format_rule_risks_for_user(list(dict.fromkeys(risks)))
+    if not formatted:
+        return ""
+    bullets = "\n".join(f"- {item}" for item in formatted)
+    return (
+        "Bu seçeneği mevcut haliyle önermiyorum. Profilinizle şu açık çakışmalar bulundu:\n"
+        f"{bullets}\n\n"
+        "Riskli malzeme çıkarılmış bir alternatif seçmek daha doğru olur."
+    )
+
+
 def final_response_text(result: dict, streamed_text: str = "") -> str:
     warning = str(result.get("uyari_mesaji") or "").strip()
     profile = result.get("resolved_profile_snapshot")
@@ -72,6 +93,9 @@ def final_response_text(result: dict, streamed_text: str = "") -> str:
         return base_answer or "Rica ederim. Ba\u015fka bir konuda yard\u0131mc\u0131 olmam\u0131 ister misin?"
     blocked, review_required = safety_outcome(result)
     if blocked:
+        food_specific_answer = _food_specific_block_answer(result)
+        if food_specific_answer:
+            return food_specific_answer
         return user_facing_safety_guidance(warning, blocked=True, profile=profile)
     if review_required:
         if base_answer and (not warning or not _has_specific_review_signal(result)):

@@ -20,6 +20,10 @@ def disable_external_curebot_generation(monkeypatch):
     """Keep API tests deterministic without requiring a model provider."""
     from src.curebot_intent import classify_intent_plan
 
+    monkeypatch.setattr(
+        "src.profil_utils.icd_11_cevir",
+        lambda diseases: ", ".join(str(item) for item in diseases) if diseases else "Bilinen hastalık yok",
+    )
     monkeypatch.setattr("src.routers.chat.generate_curebot_natural_answer", lambda *_args, **_kwargs: "")
     monkeypatch.setattr(
         "src.routers.chat.plan_curebot_semantically",

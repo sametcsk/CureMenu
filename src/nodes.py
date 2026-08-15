@@ -20,6 +20,27 @@ from src.quality.citation_validator import CitationValidator
 logger = get_logger(__name__)
 
 
+def _canonical_response_request(state: AgentState) -> str:
+    """Expose upstream-resolved semantics to graph responders as authoritative."""
+    request = str(state.get("istek") or "")
+    turn = dict(state.get("resolved_turn") or {})
+    if not turn:
+        return request
+    contract = {
+        "intent": turn.get("intent"),
+        "subject": turn.get("subject"),
+        "object": turn.get("object_label"),
+        "object_type": turn.get("object_type"),
+        "artifact_reference": turn.get("artifact_reference"),
+        "target_scope": turn.get("target_scope"),
+    }
+    return (
+        f"{request}\n\n"
+        "CANONICAL RESPONSE CONTRACT (authoritative; do not re-resolve): "
+        f"{json.dumps(contract, ensure_ascii=False)}"
+    )
+
+
 def _governance_update(
     state: AgentState,
     event_type: str,
@@ -114,7 +135,7 @@ def supervisor_node(state: AgentState) -> dict:
     Kullanıcının niyetini analiz eder ve LangGraph'ta hangi ajanların (node) tetikleneceğine karar verir.
     (Örn: Basit sohbet ise diğer ajanları yormadan doğrudan yanıt döner).
     """
-    istek = state['istek']
+    istek = _canonical_response_request(state)
     
     hafiza_metni = _hafiza_metni_olustur(state)
     sohbet_gecmisi_str = _sohbet_gecmisi_metni(state)
@@ -170,7 +191,7 @@ def onceliklendirme_node(state: AgentState) -> dict:
     prompt = PromptManager.hydrate_prompt(template, {
         "profil_ozeti": state['profil_ozeti'],
         "ilaclar": state.get('ilaclar', []),
-        "istek": state['istek']
+        "istek": _canonical_response_request(state)
     })
     cevap = invoke_with_model_fallback(prompt)
     icerik = parse_llm_response(cevap)
@@ -202,7 +223,7 @@ def beslenme_uzmani(state: AgentState) -> dict:
         "klinik_oncelik": state.get('klinik_oncelik', 'Bulunmuyor.'),
         "hafiza_metni": hafiza_metni,
         "sohbet_gecmisi_str": sohbet_gecmisi_str,
-        "istek": state['istek'],
+        "istek": _canonical_response_request(state),
         "hata_notu": hata_notu
     })
     

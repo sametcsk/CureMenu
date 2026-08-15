@@ -6,6 +6,7 @@ import sqlite3
 import json
 import re
 import time
+import unicodedata
 
 from src.models import AlternativeMealsPayload, ComplianceRequest, FridgeScanRequest, GeriBildirimRequest, HaftalikPlanRequest, PlanActionRequest, RecipeRecommendation, ScanMenuImageRequest, ScanMenuRequest, SnackSuggestionsPayload
 from src.database import get_db, etkilesim_logla, klinik_karar_kaydet
@@ -26,11 +27,12 @@ from src.grocery.profile import grocery_profile_facts
 from src.profile_context import ResolvedProfileSnapshot, resolve_profile_snapshot
 from src.medical_knowledge.safety_checker import check_medication_food_safety, medication_safety_events
 from src.quality.rule_engine import RuleEngine
+from src.quality.evidence import SafetyFinding, coerce_finding, render_finding
 from src.quality.recommendation_contract import extract_recommendation_safety_input
 from src.quality.scope_policy import profile_scope_review_reasons
 from src.rate_limit import authenticated_user_or_ip, limiter
 from src.logger import get_logger, log_failure
-from src.presentation import user_facing_safety_guidance
+from src.presentation import format_rule_risks_for_user, user_facing_safety_guidance
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
@@ -256,7 +258,23 @@ def _check_tool_output_safety(snapshot: ResolvedProfileSnapshot, output) -> dict
         ingredients,
         structured_ingredients=safety_input.has_structured_ingredients,
     )
+    evidence_findings = [
+        coerce_finding(finding, target_profile_id=snapshot.target_key).persisted()
+        for finding in (rule_result.get("evidence_findings") or [])
+    ]
     medication_result = check_medication_food_safety(facts.medications, safety_text)
+    evidence_findings.extend(SafetyFinding(
+        restriction_type="medication_food",
+        restriction_identifier=str(rule.get("medication") or ""),
+        evidence_level="CONFIRMED",
+        evidence_source="deterministic_medication_rule",
+        matched_ingredient=", ".join(str(item) for item in (rule.get("matched_terms") or [])),
+        input_span=", ".join(str(item) for item in (rule.get("matched_terms") or [])),
+        explanation=str(rule.get("explanation") or ""),
+        confidence=1.0,
+        target_profile_id=snapshot.target_key,
+        new_evidence_this_turn=True,
+    ).persisted() for rule in (medication_result.get("matched_rules") or []))
     scope_reasons = profile_scope_review_reasons(snapshot)
     matched_rules = medication_result.get("matched_rules") or []
     avoid_rules = [rule for rule in matched_rules if rule.get("severity") == "avoid"]
@@ -280,6 +298,9 @@ def _check_tool_output_safety(snapshot: ResolvedProfileSnapshot, output) -> dict
     if health_assessment.status == "caution":
         warnings.append(health_assessment.reason)
     warnings.extend(str(rule.get("explanation") or "") for rule in caution_rules)
+    specific_findings = list(dict.fromkeys(
+        finding for finding in [*blocked_reasons, *warnings] if finding
+    ))
     warnings.extend(scope_reasons)
     warnings = list(dict.fromkeys(warning for warning in warnings if warning))
     if medication_result.get("needs_professional_review"):
@@ -305,9 +326,16 @@ def _check_tool_output_safety(snapshot: ResolvedProfileSnapshot, output) -> dict
     return {
         "blocked": bool(blocked_reasons),
         "reasons": blocked_reasons,
+        "findings": specific_findings,
         "review_required": review_required,
         "warning": warning,
         "has_structured_ingredients": safety_input.has_structured_ingredients,
+        "raw_ingredients": list(safety_input.raw_ingredients),
+        "normalized_ingredients": list(safety_input.ingredients),
+        "ingredient_records": [record.metadata() for record in safety_input.ingredient_records],
+        "unresolved_ingredients": list(rule_result.get("unknown_ingredients") or []),
+        "evidence_findings": evidence_findings,
+        "catalog_version": rule_result.get("catalog_version"),
         "events": events,
     }
 
@@ -336,26 +364,170 @@ def _compatibility_status_from_safety(safety: dict) -> dict:
     }
 
 
-def _safety_block_detail(reasons: list[str] | None = None) -> str:
+def _safety_block_detail(
+    reasons: list[str] | None = None,
+    evidence_findings: list[dict] | None = None,
+) -> str:
+    typed_findings = [coerce_finding(item) for item in (evidence_findings or [])]
+    confirmed_details = [
+        render_finding(finding)
+        for finding in typed_findings
+        if finding.evidence_level == "CONFIRMED"
+    ]
+    if confirmed_details:
+        return (
+            "Bu içerik mevcut haliyle uygun görünmüyor. "
+            + " ".join(dict.fromkeys(confirmed_details))
+            + " Riskli malzemeyi çıkararak tekrar deneyebilirsiniz."
+        )
+    specific = format_rule_risks_for_user(list(reasons or []))
+    if not specific:
+        return (
+            "Bu içerik kayıtlı alerji veya beslenme kısıtlarınızla uyuşmuyor. "
+            "Malzemeleri değiştirerek tekrar deneyebilirsiniz."
+        )
     return (
-        "Bu içerik kayıtlı alerji veya beslenme kısıtlarınızla uyuşmuyor. "
-        "Malzemeleri değiştirerek tekrar deneyebilirsiniz."
+        "Bu içerik mevcut haliyle uygun görünmüyor. "
+        + " ".join(specific)
+        + " Riskli malzemeyi çıkararak tekrar deneyebilirsiniz."
     )
 
 
 def _prepend_menu_safety_alerts(analysis: str, safety: dict) -> str:
     if not safety.get("reasons") and not safety.get("warning"):
         return analysis
-    alerts = [*safety.get("reasons", [])]
+    typed_findings = [
+        coerce_finding(item)
+        for item in (safety.get("evidence_findings") or [])
+        if isinstance(item, dict)
+    ]
+    alerts = [
+        render_finding(item)
+        for item in typed_findings
+        if item.evidence_level != "CLEAR"
+    ]
+    # Non-finding policy/medication notes can still be shown, but they are kept
+    # separate from evidence wording and never parsed into a new finding.
+    finding_explanations = {item.explanation for item in typed_findings if item.explanation}
+    alerts.extend(
+        str(reason).strip()
+        for reason in safety.get("reasons", [])
+        if str(reason).strip() and str(reason).strip() not in finding_explanations
+    )
     if safety.get("warning"):
         alerts.append(safety["warning"])
+    alerts = list(dict.fromkeys(item for item in alerts if item))
     alert_lines = "\n".join(f"- {reason}" for reason in alerts)
     return f"### Profil İçin Zorunlu Güvenlik Uyarıları\n{alert_lines}\n\n{analysis}"
 
-def _menu_history_metadata(snapshot, restaurant_name: str | None, source: str) -> dict:
+def _weekly_plan_history_metadata(snapshot, plan: dict, compatibility: dict, safety: dict) -> dict:
+    metadata = dict(snapshot.history_metadata())
+    plan_warnings = [str(item).strip() for item in (plan.get("warnings") or []) if str(item).strip()]
+    generic_notices = [item for item in plan_warnings if _is_generic_clinical_notice(item)]
+    rationale = [item for item in plan_warnings if not _is_generic_clinical_notice(item)]
+    rationale.extend(str(item).strip() for item in (safety.get("findings") or []) if str(item).strip())
+    rationale.extend(
+        f"{allergy} alerjisi güvenlik kontrolüne dahil edildi."
+        for allergy in snapshot.allergies
+    )
+    rationale.extend(
+        f"{disease} kaydı planın kişiselleştirme bağlamına dahil edildi."
+        for disease in snapshot.diseases
+    )
+    for medication in snapshot.medications:
+        if "warfarin" in str(medication).casefold():
+            rationale.append(
+                "Warfarin kaydı nedeniyle K vitamini içeren besinlerde tamamen yasaklama yerine tüketim tutarlılığı gözetildi."
+            )
+        else:
+            rationale.append(f"{medication} kaydı ilaç-besin güvenlik bağlamına dahil edildi.")
+    safety_notice = str(safety.get("warning") or "").strip()
+    if safety_notice:
+        generic_notices.append(safety_notice)
+    metadata.update({
+        "artifact_type": "weekly_plan",
+        "artifact_schema_version": 3,
+        "raw_ingredients": list(safety.get("raw_ingredients") or []),
+        "normalized_ingredients": list(safety.get("normalized_ingredients") or []),
+        "ingredient_records": list(safety.get("ingredient_records") or []),
+        "unresolved_ingredients": list(safety.get("unresolved_ingredients") or []),
+        "ingredient_catalog_version": safety.get("catalog_version"),
+        "evidence_findings": list(safety.get("evidence_findings") or []),
+        "detected_risks": [
+            str(item.get("explanation") or "").strip()
+            for item in (safety.get("evidence_findings") or [])
+            if item.get("evidence_level") in {"CONFIRMED", "INFERRED-LIKELY"}
+            and str(item.get("explanation") or "").strip()
+        ],
+        "health_considerations": list(dict.fromkeys(rationale))[:12],
+        "clinical_safety_notices": list(dict.fromkeys(generic_notices))[:6],
+        "compatibility": compatibility,
+    })
+    return metadata
+
+
+def _normalize_artifact_heading(value: str) -> str:
+    text = unicodedata.normalize("NFKD", str(value or "").casefold())
+    return "".join(ch for ch in text if not unicodedata.combining(ch)).replace("ı", "i")
+
+
+def _is_generic_clinical_notice(value: str) -> bool:
+    text = _normalize_artifact_heading(value)
+    return any(cue in text for cue in (
+        "doktor", "diyetisyen", "eczaci", "saglik profesyoneli",
+        "uzmaniniza", "uzmana danis", "yerine gecmez", "genel bilgilendirme",
+    ))
+
+
+def _menu_avoidance_findings(analysis: str) -> list[str]:
+    findings: list[str] = []
+    in_avoidance_section = False
+    for raw_line in str(analysis or "").splitlines():
+        line = raw_line.strip()
+        normalized = _normalize_artifact_heading(line)
+        if line.startswith("#"):
+            in_avoidance_section = "kacinilmasi" in normalized or "uyusmayan" in normalized
+            continue
+        if not in_avoidance_section or not line:
+            continue
+        if line.startswith(("-", "*", "[")):
+            finding = line.lstrip("-*• ").strip()
+            if finding:
+                findings.append(finding)
+        if len(findings) >= 8:
+            break
+    return findings
+
+
+def _menu_history_metadata(
+    snapshot,
+    restaurant_name: str | None,
+    source: str,
+    *,
+    analysis: str = "",
+    safety: dict | None = None,
+) -> dict:
     metadata = dict(snapshot.history_metadata())
     title = (restaurant_name or "").strip()[:120] or "Menü analizi"
-    metadata.update({"analysis_type": "menu", "analysis_title": title, "restaurant_name": title, "source": source, "target_label": snapshot.target_name})
+    safety = safety or {}
+    metadata.update({
+        "analysis_type": "menu",
+        "artifact_type": "menu_analysis",
+        "artifact_schema_version": 3,
+        "analysis_title": title,
+        "restaurant_name": title,
+        "source": source,
+        "target_label": snapshot.target_name,
+        "evidence_findings": list(safety.get("evidence_findings") or []),
+        "detected_risks": [
+            str(item.get("explanation") or "").strip()
+            for item in (safety.get("evidence_findings") or [])
+            if item.get("evidence_level") in {"CONFIRMED", "INFERRED-LIKELY"}
+            and str(item.get("explanation") or "").strip()
+        ],
+        "analysis_findings": _menu_avoidance_findings(analysis),
+        "clinical_safety_notices": [str(safety.get("warning")).strip()] if safety.get("warning") else [],
+    })
     return metadata
 
 
@@ -469,7 +641,7 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
                 status_code=422,
                 content={
                     "ok": False,
-                    "error": {"code": "PLAN_SAFETY_BLOCKED", "message": _safety_block_detail(safety["reasons"])},
+                    "error": {"code": "PLAN_SAFETY_BLOCKED", "message": _safety_block_detail(safety["reasons"], safety.get("evidence_findings"))},
                 },
             )
         if safety["warning"]:
@@ -496,6 +668,7 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
         compatibility = _compatibility_status_from_safety(safety)
         persisted_plan = dict(plan)
         persisted_plan["compatibility"] = compatibility
+        plan_metadata = _weekly_plan_history_metadata(snapshot, persisted_plan, compatibility, safety)
         bg_tasks.add_task(
             etkilesim_logla,
             telefon,
@@ -503,7 +676,7 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
             "Haftalık Plan",
             f"{snapshot.target_name} için plan",
             json.dumps(persisted_plan, ensure_ascii=False),
-            json.dumps(snapshot.history_metadata(), ensure_ascii=False),
+            json.dumps(plan_metadata, ensure_ascii=False),
         )
         
         return {"ok": True, "plan": plan, "compatibility": compatibility}
@@ -540,7 +713,13 @@ async def scan_menu(request: Request, req: ScanMenuRequest, bg_tasks: Background
         analiz_sonucu = await run_in_threadpool(menu_danismani, ham_metin, profil_ozeti)
         safety = _check_tool_output_safety(snapshot, ham_metin)
         analiz_sonucu = _normalize_menu_language(_prepend_menu_safety_alerts(analiz_sonucu, safety))
-        history_metadata = _menu_history_metadata(snapshot, req.restoran_adi, "menu")
+        history_metadata = _menu_history_metadata(
+            snapshot,
+            req.restoran_adi,
+            "menu",
+            analysis=analiz_sonucu,
+            safety=safety,
+        )
 
         initial_state = create_initial_state(
             istek=f"Menü Tarama: {req.url}",
@@ -583,7 +762,13 @@ async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks:
         analiz_sonucu = await run_in_threadpool(menu_danismani, ham_metin, profil_ozeti)
         safety = _check_tool_output_safety(snapshot, ham_metin)
         analiz_sonucu = _normalize_menu_language(_prepend_menu_safety_alerts(analiz_sonucu, safety))
-        history_metadata = _menu_history_metadata(snapshot, req.restoran_adi, "photo")
+        history_metadata = _menu_history_metadata(
+            snapshot,
+            req.restoran_adi,
+            "photo",
+            analysis=analiz_sonucu,
+            safety=safety,
+        )
         
         initial_state = create_initial_state(
             istek="Menü Fotoğrafı Tarama",
@@ -650,7 +835,7 @@ async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: Backgr
         if safety["blocked"]:
             return JSONResponse(
                 status_code=422,
-                content={"success": False, "detail": _safety_block_detail(safety["reasons"])},
+                content={"success": False, "detail": _safety_block_detail(safety["reasons"], safety.get("evidence_findings"))},
             )
         if safety["warning"]:
             tarif = f"{safety['warning']}\n\n{tarif}"
@@ -775,8 +960,9 @@ async def upload_health_record(
                     
                 parsed_json = json.loads(clean_json_text)
                 metadata_payload.update(parsed_json)
-            except Exception:
-                pass
+            except Exception as e:
+                log_failure(logger, "biomarker_json_parse", e, component="tools")
+                ozet += "\n\n⚠️ Bu tahlildeki bazı sayısal değerler otomatik okunamadı, bu nedenle biyomarker grafikleri eksik olabilir."
 
         lab_report_date = _extract_lab_report_date(text, metadata_payload)
         if lab_report_date:
@@ -856,7 +1042,7 @@ List every ingredient that will actually be used, including sauces, oils, garnis
             if safety["blocked"]:
                 return JSONResponse(
                     status_code=422,
-                    content={"success": False, "detail": _safety_block_detail(safety["reasons"])},
+                    content={"success": False, "detail": _safety_block_detail(safety["reasons"], safety.get("evidence_findings"))},
                 )
             tarif_metni = _render_recipe(recipe)
             if safety["warning"]:
@@ -907,7 +1093,7 @@ WARNING: Provide your response ONLY in the following JSON format. Do not use mar
             if safety["blocked"]:
                 return JSONResponse(
                     status_code=422,
-                    content={"success": False, "detail": _safety_block_detail(safety["reasons"])},
+                    content={"success": False, "detail": _safety_block_detail(safety["reasons"], safety.get("evidence_findings"))},
                 )
             if safety["warning"]:
                 data["warning"] = safety["warning"]
@@ -973,7 +1159,7 @@ Put only foods that will actually be used under ingredients. Keep safety explana
             if safety["blocked"]:
                 return JSONResponse(
                     status_code=422,
-                    content={"success": False, "detail": _safety_block_detail(safety["reasons"])},
+                    content={"success": False, "detail": _safety_block_detail(safety["reasons"], safety.get("evidence_findings"))},
                 )
             if safety["warning"]:
                 data["warning"] = safety["warning"]

@@ -5,7 +5,8 @@ from unittest.mock import patch
 from src.models import AileUyesi, Cinsiyet, KullaniciProfili
 from src.nodes import _quality_profile_from_snapshot
 from src.profile_context import resolve_profile_snapshot_from_profile
-from src.routers.chat import _explicit_input_safety_answer
+from src.curebot_intent import CureBotConversationContext, fallback_intent_plan, resolve_semantic_turn
+from src.routers.chat import CureBotResponseContext, _explicit_input_safety_answer
 
 
 def _register_and_save(client, phone: str, *, diseases=None, allergies=None, medications=None):
@@ -107,9 +108,20 @@ def test_user_safety_answer_does_not_invent_profile_conditions():
         "kendim",
     )
 
-    answer = _explicit_input_safety_answer(snapshot, "Yumurtalı tost yiyebilir miyim?")
+    message = "Yumurtalı tost yiyebilir miyim?"
+    conversation = CureBotConversationContext(last_target_scope="self")
+    plan = fallback_intent_plan(message, "self", conversation)
+    turn = resolve_semantic_turn(
+        plan, message, conversation, conversation_id="test", target_profile_id="kendim",
+        target_scope="self", target_resolution_source="message_self",
+    )
+    decision = _explicit_input_safety_answer(CureBotResponseContext(
+        turn=turn, snapshot=snapshot, plan=plan, conversation=conversation,
+        user_message=message,
+    ))
 
-    assert answer is not None
+    assert decision is not None
+    answer = decision.answer
     assert "yumurta" in answer.casefold()
     assert "böbrek" not in answer.casefold()
     assert "warfarin" not in answer.casefold()
@@ -245,6 +257,9 @@ def test_weekly_plan_uses_member_snapshot_and_matching_history_metadata(mock_pla
     assert metadata["target_id"] == member_id
     assert metadata["target_scope"] == "member"
     assert metadata["profile_fingerprint"]
+    assert metadata["artifact_type"] == "weekly_plan"
+    assert metadata["artifact_schema_version"] == 3
+    assert isinstance(metadata["health_considerations"], list)
     persisted_plan = json.loads(plan_log["asistan_ciktisi"])
     assert persisted_plan["days"]
     assert persisted_plan["compatibility"] == response.json()["compatibility"]

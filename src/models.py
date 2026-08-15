@@ -1,8 +1,31 @@
 # Veri Modelleri
-from pydantic import BaseModel, Field   
+from pydantic import BaseModel, BeforeValidator, Field
 from enum import Enum   
 from typing import Annotated, Literal, Optional, List, Dict
 import uuid
+
+
+_YAKINLIK_ALIASES = {
+    "ogul": "ogul", "oğul": "ogul", "oğlu": "ogul",
+    "kiz": "kiz", "kız": "kiz", "kızı": "kiz",
+    "es": "es", "eş": "es", "eşim": "es",
+    "anne": "anne", "annem": "anne", "baba": "baba", "babam": "baba",
+    "kardes": "kardes", "kardeş": "kardes", "diger": "diger", "diğer": "diger",
+    # Legacy/general child labels do not safely imply son or daughter.
+    "cocuk": "diger", "çocuk": "diger",
+}
+
+
+def _normalize_yakinlik(value: object) -> str | None:
+    if value is None or not str(value).strip():
+        return None
+    normalized = _YAKINLIK_ALIASES.get(str(value).strip().casefold())
+    if normalized is None:
+        raise ValueError("Geçersiz yakınlık değeri.")
+    return normalized
+
+
+Yakinlik = Annotated[Optional[str], BeforeValidator(_normalize_yakinlik)]
 
 
 class Cinsiyet(str, Enum):
@@ -31,6 +54,7 @@ class AileUyesi(BaseModel):
     ad: str
     yas: int = Field(ge=1, le=100)
     cinsiyet: Cinsiyet
+    yakinlik: Yakinlik = Field(default=None, description="Hesap sahibine göre normalize yakınlık")
     boy: int = Field(default=170, description="cm", ge=1, le=250)
     kilo: float = Field(default=70, description="kg", ge=1, le=200)
     genetik_hastaliklar: list[str] = Field(default_factory=list)
@@ -95,6 +119,7 @@ class AileUyesiEkleRequest(BaseModel):
     ad: str = Field(..., min_length=2, max_length=40, pattern=r"^[A-Za-zÇçĞğİıÖöŞşÜü\s]+$")
     yas: int = Field(..., ge=1, le=100)
     cinsiyet: Cinsiyet
+    yakinlik: Yakinlik = Field(default=None)
     boy: int = Field(default=170, ge=1, le=250)
     kilo: float = Field(default=70, ge=1, le=200)
     hastaliklar: list[str] = Field(default_factory=list)
@@ -109,6 +134,12 @@ class ChatRequest(BaseModel):
     mesaj: str
     kimin_icin: str = "kendim"
     history_context: Optional[str] = None
+    conversation_id: Optional[str] = Field(
+        default=None,
+        min_length=8,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9_-]+$",
+    )
 
 class HaftalikPlanRequest(BaseModel):
     kimin_icin: str = "kendim"

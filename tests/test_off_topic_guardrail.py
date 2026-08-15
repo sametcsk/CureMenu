@@ -15,7 +15,10 @@ def mock_auth():
 
 @pytest.fixture
 def mock_profile():
-    with patch("src.routers.chat.resolve_profile_snapshot") as mock:
+    # CureBot resolves the target through the canonical resolve_target_snapshot,
+    # which returns (snapshot, TargetResolution). Mock that seam.
+    from src.target_resolution import TargetResolution
+    with patch("src.routers.chat.resolve_target_snapshot") as mock:
         snapshot = MagicMock()
         snapshot.target_key = "kendim"
         snapshot.target_name = "Test User"
@@ -26,7 +29,10 @@ def mock_profile():
         snapshot.memory_namespace = "test_memory_namespace"
         snapshot.state_payload.return_value = {"isim": "Test User"}
         snapshot.history_metadata.return_value = {}
-        mock.return_value = snapshot
+        mock.return_value = (
+            snapshot,
+            TargetResolution(target="kendim", target_label="Test User", source="client_hint"),
+        )
         yield mock
 
 @pytest.mark.parametrize("off_topic_msg", [

@@ -7,6 +7,7 @@ class AgentState(TypedDict):
 
     profil_ozeti: str
     resolved_profile_snapshot: Dict[str, Any]
+    resolved_turn: Dict[str, Any]
     istek: str 
     hafiza: List[str]
     uzman_onerisi: Optional[str]
@@ -31,6 +32,7 @@ class AgentState(TypedDict):
 initial_state = AgentState(
     profil_ozeti="",
     resolved_profile_snapshot={},
+    resolved_turn={},
     istek="",
     hafiza=[],
     uzman_onerisi=None,
@@ -60,6 +62,7 @@ def create_initial_state(
     sohbet_gecmisi: List[Dict[str, Any]] = None,
     ilaclar: List[str] | None = None,
     resolved_profile_snapshot: Dict[str, Any] | None = None,
+    resolved_turn: Dict[str, Any] | None = None,
 ) -> AgentState:
     """Grafik ilk çalıştırıldığında başlangıç durumunu oluşturur."""
     if sohbet_gecmisi is None:
@@ -69,6 +72,7 @@ def create_initial_state(
     return AgentState(
         profil_ozeti=profil_ozeti,
         resolved_profile_snapshot=resolved_profile_snapshot or {},
+        resolved_turn=resolved_turn or {},
         istek=istek,
         hafiza=hafiza,
         uzman_onerisi=None,

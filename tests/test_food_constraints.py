@@ -185,6 +185,80 @@ def test_unknown_structured_product_is_marked_uncertain_not_safe():
     )
 
 
+def test_profile_restriction_without_matching_structured_food_is_clear_not_conflict():
+    result = _check(
+        allergies=["yer fıstığı"],
+        ingredients=["tavuk", "brokoli"],
+        structured_ingredients=True,
+    )
+
+    finding = next(item for item in result["evidence_findings"] if item["restriction_type"] == "allergy")
+    assert result["found_risks"] == []
+    assert result["confirmed_conflicts"] == []
+    assert finding["evidence_level"] == "CLEAR"
+    assert finding["matched_ingredient"] == ""
+
+
+def test_explicit_structured_allergen_has_confirmed_evidence():
+    result = _check(
+        allergies=["yer fıstığı"],
+        ingredients=["yer fıstığı"],
+        structured_ingredients=True,
+    )
+
+    finding = next(item for item in result["confirmed_conflicts"] if item["restriction_type"] == "allergy")
+    assert finding["evidence_level"] == "CONFIRMED"
+    assert finding["evidence_source"] in {"ingredient_catalog", "explicit_input"}
+    assert finding["matched_ingredient"]
+
+
+def test_unknown_structured_food_requires_verification_without_claiming_conflict():
+    result = _check(
+        allergies=["yer fıstığı"],
+        ingredients=["işletme özel karışımı"],
+        structured_ingredients=True,
+    )
+
+    allergy_finding = next(item for item in result["evidence_findings"] if item["restriction_type"] == "allergy")
+    assert result["found_risks"] == []
+    assert result["confirmed_conflicts"] == []
+    assert allergy_finding["evidence_level"] == "UNKNOWN"
+    assert result["unknown_ingredients"] == ["işletme özel karışımı"]
+
+
+def test_only_the_observed_allergen_is_confirmed_when_profile_has_multiple_allergies():
+    result = _check(
+        allergies=["yer fıstığı", "yumurta"],
+        ingredients=["yumurta", "domates"],
+        structured_ingredients=True,
+    )
+
+    confirmed = {
+        item["restriction_identifier"].casefold()
+        for item in result["confirmed_conflicts"]
+    }
+    assert confirmed == {"yumurta"}
+    peanut = next(
+        item for item in result["evidence_findings"]
+        if item["restriction_identifier"].casefold() == "yer fıstığı"
+    )
+    assert peanut["evidence_level"] == "CLEAR"
+
+
+def test_unstructured_missing_food_evidence_is_unknown_not_found():
+    result = _check(
+        allergies=["yer fıstığı"],
+        meal="İçerik bilgisi paylaşılmadı",
+        ingredients=[],
+        structured_ingredients=False,
+    )
+
+    finding = next(item for item in result["evidence_findings"] if item["restriction_type"] == "allergy")
+    assert result["found_risks"] == []
+    assert result["confirmed_conflicts"] == []
+    assert finding["evidence_level"] == "UNKNOWN"
+
+
 def test_warfarin_vitamin_k_guidance_emphasizes_consistency_not_ban():
     result = check_medication_food_safety(["Warfarin"], "Ispanak yemeği")
     explanation = " ".join(rule["explanation"] for rule in result["matched_rules"])

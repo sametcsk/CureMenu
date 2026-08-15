@@ -7,10 +7,11 @@ window.ChatWidget = {
     typingNode: null,
     requestInFlight: false,
     progressTimers: [],
+    conversationLoadVersion: 0,
     activeTarget: "kendim",
     CHAT_RESPONSE_TIMEOUT_MS: 85000,
     STORAGE_OPEN: "cm_assistant_open",
-    MAX_CACHED_MESSAGES: 12,
+    MAX_CACHED_MESSAGES: 30,
 
     authenticatedQuickPrompts: [
         { label: "Bugün ne yesem?", prompt: "Profilime ve sağlık bilgilerime göre bugün güvenli bir akşam yemeği önerir misin?" },
@@ -36,10 +37,38 @@ window.ChatWidget = {
 
     getConversationCacheKey() {
         if (!this.isAuthenticatedMode()) return null;
-        const target = this.activeTarget || "kendim";
-        const context = window.ProfileManager?.getTargetCacheContext?.(target);
-        if (!context) return null;
-        return `cm_chat_v2_${context.accountKey}_${context.targetScope}_${context.targetId}_${context.profileFingerprint}`;
+        const accountKey = window.AuthManager?.getUser?.()?.telefon || "";
+        const conversationId = this.getConversationId();
+        if (!accountKey || !conversationId) return null;
+        return `cm_chat_v3_${accountKey}_${conversationId}`;
+    },
+
+    getConversationId() {
+        if (!this.isAuthenticatedMode()) return null;
+        const accountKey = window.AuthManager?.getUser?.()?.telefon || "";
+        if (!accountKey) return null;
+        const storageKey = `cm_chat_conversation_${accountKey}`;
+        let conversationId = localStorage.getItem(storageKey);
+        if (!conversationId) {
+            conversationId = globalThis.crypto?.randomUUID?.()
+                || `local_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+            localStorage.setItem(storageKey, conversationId);
+        }
+        return conversationId;
+    },
+
+    applyResolvedTarget(target) {
+        const canonicalTarget = String(target || "").trim();
+        if (!canonicalTarget) return;
+        this.activeTarget = canonicalTarget;
+        const main = window.currentProfile?.ana_kullanici;
+        const member = (window.currentProfile?.aile_uyeleri || [])
+            .find(item => String(item?.id) === canonicalTarget);
+        const label = canonicalTarget === "kendim" || canonicalTarget === String(main?.id || "")
+            ? `${main?.ad || window.AuthManager?.getUser?.()?.kullanici_adi || "Ben"} için`
+            : (canonicalTarget === "aile" ? "Tüm aile için" : `${member?.ad || "Seçili kişi"} için`);
+        const headerChip = this.root?.querySelector('[data-cm-header-context]');
+        if (headerChip) headerChip.textContent = label;
     },
 
     readCachedConversation() {
@@ -70,18 +99,82 @@ window.ChatWidget = {
         this.writeCachedConversation(messages);
     },
 
-    loadCachedConversation() {
-        if (!this.root || !this.isAuthenticatedMode()) return false;
-        const messages = this.readCachedConversation();
-        if (!messages.length) {
-            this.renderWelcome(true);
-            return false;
-        }
-        const body = this.root.querySelector("[data-cm-assistant-body]");
-        if (!body) return false;
+    renderConversation(messages) {
+        const body = this.root?.querySelector("[data-cm-assistant-body]");
+        if (!body || !Array.isArray(messages) || !messages.length) return false;
         body.replaceChildren();
         messages.forEach(item => this.addMessage(item.text, item.type, false));
+        this.root.querySelector("[data-cm-assistant-quick]")?.classList.add("is-hidden");
         return true;
+    },
+
+    async loadPersistedConversation(loadVersion) {
+        if (!window.fetchHistoryRecords) return false;
+        const conversationId = this.getConversationId();
+        if (!conversationId) return false;
+
+        try {
+            const history = await window.fetchHistoryRecords({ limit: 50, maxPages: 4 });
+            if (loadVersion !== this.conversationLoadVersion || !history.ok) return false;
+            if (this.readCachedConversation().length) return false;
+
+            const curebotRecords = (history.records || [])
+                .filter(record => String(record?.eylem || "").toLocaleLowerCase("tr-TR") === "curebot");
+            const matchingConversation = curebotRecords.filter(record => {
+                    let metadata = {};
+                    try {
+                        metadata = typeof record.metadata === "object"
+                            ? record.metadata
+                            : JSON.parse(record.metadata || "{}");
+                    } catch (_error) {
+                        return false;
+                    }
+                    return String(metadata.conversation_id || "") === conversationId;
+                });
+            // Before conversation ids existed, CureBot turns were stored only at
+            // account level. Restore those once as one household conversation;
+            // newly persisted turns are always scoped by conversation_id.
+            const interactions = (matchingConversation.length
+                ? matchingConversation
+                : curebotRecords.filter(record => {
+                    try {
+                        const metadata = typeof record.metadata === "object"
+                            ? record.metadata
+                            : JSON.parse(record.metadata || "{}");
+                        return !metadata.conversation_id;
+                    } catch (_error) {
+                        return true;
+                    }
+                }))
+                .sort((left, right) => Number(left.id || 0) - Number(right.id || 0))
+                .slice(-Math.ceil(this.MAX_CACHED_MESSAGES / 2));
+
+            const messages = interactions.flatMap(record => {
+                const pair = [];
+                if (String(record.kullanici_girdisi || "").trim()) {
+                    pair.push({ type: "user", text: String(record.kullanici_girdisi), at: Date.parse(record.tarih) || Date.now() });
+                }
+                if (String(record.asistan_ciktisi || "").trim()) {
+                    pair.push({ type: "bot", text: String(record.asistan_ciktisi), at: Date.parse(record.tarih) || Date.now() });
+                }
+                return pair;
+            }).slice(-this.MAX_CACHED_MESSAGES);
+
+            if (!messages.length || loadVersion !== this.conversationLoadVersion) return false;
+            this.writeCachedConversation(messages);
+            return this.renderConversation(messages);
+        } catch (_error) {
+            return false;
+        }
+    },
+
+    async loadCachedConversation() {
+        if (!this.root || !this.isAuthenticatedMode()) return false;
+        const loadVersion = ++this.conversationLoadVersion;
+        const messages = this.readCachedConversation();
+        if (messages.length) return this.renderConversation(messages);
+        this.renderWelcome(true);
+        return this.loadPersistedConversation(loadVersion);
     },
 
     isPersonalHealthRequest(message) {
@@ -228,51 +321,6 @@ window.ChatWidget = {
             }
         });
 
-    },
-
-    resolveTargetFromMessage(message) {
-        const normalizeTargetText = value => String(value || '')
-            .toLocaleLowerCase('tr-TR')
-            .replace(/ı/g, 'i')
-            .normalize('NFKD')
-            .replace(/[\u0300-\u036f]/g, '');
-        const normalizedMessage = normalizeTargetText(message);
-        const familyMembers = Array.isArray(window.currentProfile?.aile_uyeleri)
-            ? window.currentProfile.aile_uyeleri
-            : [];
-        if (/tum aile|hepimiz|bize|biz ne yiyelim/.test(normalizedMessage)) {
-            return { target: 'aile', label: 'Tüm aile için' };
-        }
-
-        const namedMember = familyMembers.find(item => {
-            const name = normalizeTargetText(item?.ad).trim();
-            return name.length > 1 && normalizedMessage.includes(name);
-        });
-        if (namedMember?.id) {
-            return { target: String(namedMember.id), label: `${namedMember.ad} için` };
-        }
-
-        const relationRules = [
-            { terms: ['annem', 'anneme'], relations: ['anne', 'mother'] },
-            { terms: ['babam', 'babama'], relations: ['baba', 'father'] },
-            { terms: ['oğlum', 'oğluma', 'oglum', 'ogluma'], relations: ['oğul', 'ogul', 'son', 'çocuk', 'cocuk'] },
-            { terms: ['kızım', 'kızıma', 'kizim', 'kizima'], relations: ['kız', 'kiz', 'daughter', 'çocuk', 'cocuk'] },
-            { terms: ['eşim', 'eşime', 'esim', 'esime'], relations: ['eş', 'es', 'spouse'] },
-            { terms: ['kardeşim', 'kardeşime', 'kardesim', 'kardesime'], relations: ['kardeş', 'kardes', 'sibling'] },
-        ];
-        const relationRule = relationRules.find(rule => rule.terms.some(term => normalizedMessage.includes(term)));
-        if (relationRule) {
-            const relatedMember = familyMembers.find(item => relationRule.relations.some(
-                relation => normalizeTargetText(item?.yakinlik).includes(normalizeTargetText(relation))
-            ));
-            const resolvedMember = relatedMember || (familyMembers.length === 1 ? familyMembers[0] : null);
-            if (resolvedMember?.id) {
-                return { target: String(resolvedMember.id), label: `${resolvedMember.ad} için` };
-            }
-        }
-
-        const userName = window.AuthManager?.getUser()?.kullanici_adi;
-        return { target: 'kendim', label: userName ? `${userName} için` : 'Benim için' };
     },
 
     open(message) {
@@ -436,12 +484,6 @@ window.ChatWidget = {
 
     async sendMessage(message) {
         if (!this.root) this.init();
-        const resolved = this.isAuthenticatedMode() ? this.resolveTargetFromMessage(message) : null;
-        if (resolved) {
-            this.activeTarget = resolved.target;
-            const headerChip = this.root.querySelector('[data-cm-header-context]');
-            if (headerChip) headerChip.textContent = resolved.label;
-        }
         
         const sendBtn = this.root.querySelector("[data-cm-assistant-send]");
         if (this.requestInFlight || sendBtn.disabled) return;
@@ -476,20 +518,27 @@ window.ChatWidget = {
 
         try {
             const apiEndpoint = (window.API || '') + '/api/chat';
-            const resolvedTarget = resolved?.target || 'kendim';
+            const resolvedTarget = this.activeTarget || 'kendim';
+            const conversationId = this.getConversationId();
             
             if (!window.safeFetchStream) throw new Error("API client yüklü değil.");
             
             const response = await window.safeFetchStream(apiEndpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ mesaj: message, kimin_icin: resolvedTarget }),
+                body: JSON.stringify({
+                    mesaj: message,
+                    kimin_icin: resolvedTarget,
+                    conversation_id: conversationId,
+                }),
                 signal: this.controller.signal
             });
 
             if (!response.ok || !response.body) {
                 throw new Error(response.status === 401 ? "Oturumunu yenilememiz gerekiyor." : "Şu an yanıtı hazırlayamadım.");
             }
+
+            this.applyResolvedTarget(response.headers.get('X-CureMenu-Resolved-Target'));
 
             window.CureMenuAnalytics?.track?.('curebot_message_sent', { feature: 'curebot' });
             const reader = response.body.getReader();

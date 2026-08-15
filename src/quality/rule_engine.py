@@ -3,6 +3,7 @@ import unicodedata
 from typing import Any, Dict, List
 
 from src.quality.ingredient_catalog import IngredientCatalog, IngredientMatch
+from src.quality.evidence import SafetyFinding
 from src.rules.registry import load_food_constraint_registry
 
 
@@ -83,6 +84,45 @@ def _group_matches(texts: list[str], group: dict[str, list[str]]) -> bool:
     )
 
 
+def _group_evidence(texts: list[str], group: dict[str, list[str]]) -> list[tuple[str, str]]:
+    safe_prefixes = tuple(group.get("allowed_prefixes") or [])
+    evidence: list[tuple[str, str]] = []
+    for text in texts:
+        for alias in group.get("aliases") or []:
+            if contains_positive_food_mention(text, alias, safe_prefixes=safe_prefixes):
+                evidence.append((str(text).strip(), str(alias).strip()))
+    return evidence
+
+
+def _finding(
+    *,
+    restriction_type: str,
+    restriction_identifier: str,
+    evidence_level: str,
+    evidence_source: str,
+    explanation: str,
+    matched_ingredient: str = "",
+    matched_catalog_entry: str = "",
+    input_span: str = "",
+    confidence: float = 0.0,
+) -> dict[str, Any]:
+    return SafetyFinding(
+        restriction_type=restriction_type,
+        restriction_identifier=restriction_identifier,
+        evidence_level=evidence_level,
+        evidence_source=evidence_source,
+        matched_ingredient=matched_ingredient,
+        matched_catalog_entry=matched_catalog_entry,
+        input_span=input_span,
+        explanation=explanation,
+        confidence=confidence,
+        new_evidence_this_turn=bool(
+            matched_ingredient
+            and evidence_source not in {"", "legacy_or_unspecified", "profile_review_policy"}
+        ),
+    ).persisted()
+
+
 def _catalog_condition_matches(
     ingredient: dict[str, Any],
     conditions: list[dict[str, Any]],
@@ -127,6 +167,7 @@ class RuleEngine:
         found_risks: list[str] = []
         found_warnings: list[str] = []
         matched_rules: list[str] = []
+        evidence_findings: list[dict[str, Any]] = []
         risk_score = 0.0
         texts = [meal or "", *(ingredients or [])]
 
@@ -135,46 +176,6 @@ class RuleEngine:
         catalog_matches = _positive_catalog_matches(catalog, texts)
         groups = registry["ingredient_groups"]
         configured_allergies: set[str] = set()
-
-        for rule in registry["profile_rules"]:
-            matching_profiles = [
-                str(value)
-                for value in profile.get(rule["profile_field"], [])
-                if _contains_profile_alias(str(value), rule["profile_aliases"])
-            ]
-            if not matching_profiles:
-                continue
-            if rule["profile_field"] == "alerjiler":
-                configured_allergies.update(matching_profiles)
-            ingredient_group = rule.get("ingredient_group")
-            triggered = bool(rule.get("always_review"))
-            catalog_conditions = rule.get("catalog_conditions") or []
-            if not triggered and catalog_conditions:
-                triggered = any(
-                    _catalog_condition_matches(match.ingredient, catalog_conditions)
-                    for match in catalog_matches
-                )
-            if not triggered and ingredient_group:
-                triggered = _group_matches(texts, groups[ingredient_group])
-            if not triggered:
-                continue
-
-            message = rule["message"].format(profile=matching_profiles[0])
-            matched_rules.append(rule["rule_id"])
-            if rule["outcome"] == "block":
-                found_risks.append(message)
-                risk_score = 1.0
-            else:
-                found_warnings.append(message)
-                risk_score = max(risk_score, 0.4)
-
-        for allergy in profile.get("alerjiler", []):
-            allergy_text = str(allergy).strip()
-            if not allergy_text or allergy_text in configured_allergies:
-                continue
-            if any(contains_positive_food_mention(text, allergy_text) for text in texts):
-                found_risks.append(f"Alerji riski (Kesin İhlal): {allergy_text}")
-                risk_score = 1.0
 
         unknown_ingredients: list[str] = []
         if structured_ingredients:
@@ -192,6 +193,119 @@ class RuleEngine:
                 )
                 risk_score = max(risk_score, 0.2)
 
+        for rule in registry["profile_rules"]:
+            matching_profiles = [
+                str(value)
+                for value in profile.get(rule["profile_field"], [])
+                if _contains_profile_alias(str(value), rule["profile_aliases"])
+            ]
+            if not matching_profiles:
+                continue
+            if rule["profile_field"] == "alerjiler":
+                configured_allergies.update(_normalize(item) for item in matching_profiles)
+            ingredient_group = rule.get("ingredient_group")
+            catalog_conditions = rule.get("catalog_conditions") or []
+            catalog_rule_matches = [
+                match for match in catalog_matches
+                if _catalog_condition_matches(match.ingredient, catalog_conditions)
+            ] if catalog_conditions else []
+            group_matches = _group_evidence(texts, groups[ingredient_group]) if ingredient_group else []
+            triggered = bool(rule.get("always_review") or catalog_rule_matches or group_matches)
+            if not triggered:
+                evidence_level = "CLEAR" if structured_ingredients and not unknown_ingredients else "UNKNOWN"
+                evidence_findings.extend(
+                    _finding(
+                        restriction_type="allergy" if rule["profile_field"] == "alerjiler" else "disease",
+                        restriction_identifier=profile_value,
+                        evidence_level=evidence_level,
+                        evidence_source="structured_ingredients" if evidence_level == "CLEAR" else "missing_or_unverified_ingredients",
+                        explanation=(
+                            "Yapılandırılmış içerikte bu kısıtla eşleşme bulunmadı."
+                            if evidence_level == "CLEAR"
+                            else "İçerik verisi bu kısıt için kesin eşleşme kararı vermeye yeterli değil."
+                        ),
+                        confidence=0.9 if evidence_level == "CLEAR" else 0.25,
+                    )
+                    for profile_value in matching_profiles
+                )
+                continue
+
+            message = rule["message"].format(profile=matching_profiles[0])
+            matched_rules.append(rule["rule_id"])
+            if catalog_rule_matches:
+                matched_ingredient = catalog_rule_matches[0].canonical_name
+                matched_catalog_entry = catalog_rule_matches[0].canonical_name
+                input_span = catalog_rule_matches[0].matched_alias
+                evidence_level = "CONFIRMED"
+                evidence_source = "ingredient_catalog"
+                confidence = 1.0
+            elif group_matches:
+                matched_ingredient = group_matches[0][1]
+                matched_catalog_entry = ""
+                input_span = group_matches[0][1]
+                evidence_level = "CONFIRMED"
+                evidence_source = "explicit_input"
+                confidence = 0.95
+            else:
+                matched_ingredient = matched_catalog_entry = input_span = ""
+                evidence_level = "UNKNOWN"
+                evidence_source = "profile_review_policy"
+                confidence = 0.25
+            evidence_findings.extend(
+                _finding(
+                    restriction_type="allergy" if rule["profile_field"] == "alerjiler" else "disease",
+                    restriction_identifier=profile_value,
+                    evidence_level=evidence_level,
+                    evidence_source=evidence_source,
+                    matched_ingredient=matched_ingredient,
+                    matched_catalog_entry=matched_catalog_entry,
+                    input_span=input_span,
+                    explanation=message,
+                    confidence=confidence,
+                )
+                for profile_value in matching_profiles
+            )
+            if rule["outcome"] == "block":
+                found_risks.append(message)
+                risk_score = 1.0
+            else:
+                found_warnings.append(message)
+                risk_score = max(risk_score, 0.4)
+
+        for allergy in profile.get("alerjiler", []):
+            allergy_text = str(allergy).strip()
+            allergy_key = _normalize(allergy_text)
+            if not allergy_text or allergy_key in configured_allergies:
+                continue
+            matches = [text for text in texts if contains_positive_food_mention(text, allergy_text)]
+            if matches:
+                found_risks.append(f"Alerji riski (Kesin İhlal): {allergy_text}")
+                risk_score = 1.0
+                evidence_findings.append(_finding(
+                    restriction_type="allergy",
+                    restriction_identifier=allergy_text,
+                    evidence_level="CONFIRMED",
+                    evidence_source="explicit_input",
+                    matched_ingredient=allergy_text,
+                    input_span=allergy_text,
+                    explanation=f"Alerji riski (Kesin İhlal): {allergy_text}",
+                    confidence=0.95,
+                ))
+            else:
+                evidence_level = "CLEAR" if structured_ingredients and not unknown_ingredients else "UNKNOWN"
+                evidence_findings.append(_finding(
+                    restriction_type="allergy",
+                    restriction_identifier=allergy_text,
+                    evidence_level=evidence_level,
+                    evidence_source="structured_ingredients" if evidence_level == "CLEAR" else "missing_or_unverified_ingredients",
+                    explanation=(
+                        "Yapılandırılmış içerikte bu alerjenle eşleşme bulunmadı."
+                        if evidence_level == "CLEAR"
+                        else "Alerjen profilde kayıtlı, ancak incelenen içerikte bulunduğuna dair kanıt yok. Etiket doğrulaması gerekebilir."
+                    ),
+                    confidence=0.9 if evidence_level == "CLEAR" else 0.2,
+                ))
+
         return {
             "found_risks": list(dict.fromkeys(found_risks)),
             "found_warnings": list(dict.fromkeys(found_warnings)),
@@ -203,4 +317,10 @@ class RuleEngine:
                 dict.fromkeys(match.canonical_name for match in catalog_matches)
             ),
             "unknown_ingredients": list(dict.fromkeys(unknown_ingredients)),
+            "evidence_findings": evidence_findings,
+            "confirmed_conflicts": [
+                finding for finding in evidence_findings
+                if finding["evidence_level"] == "CONFIRMED"
+                and finding["explanation"] in found_risks
+            ],
         }

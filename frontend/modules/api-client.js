@@ -124,6 +124,7 @@ function formatMarkdownSafe(text) {
 window.API = API;
 window.safeFetchJson = safeFetchJson;
 window.safeFetchStream = safeFetchStream;
+window.fetchHistoryRecords = fetchHistoryRecords;
 window.apiHataMesaji = apiHataMesaji;
 window.baglantiHatasi = baglantiHatasi;
 window.renderTextState = renderTextState;

@@ -85,3 +85,46 @@ def test_weekly_plan_missing_one_detail_falls_back_to_text_validation():
 
     assert result.has_structured_ingredients is False
     assert "Yoğurtlu makarna" in result.display_text
+
+
+def test_weekly_plan_ingredients_strip_quantity_unit_descriptors_and_dedupe():
+    plan = WeeklyPlan(
+        days=[
+            WeeklyPlanDay(
+                day="Pazartesi",
+                breakfast="Yulaf kasesi",
+                lunch="Tavuklu salata",
+                dinner="Fıstıklı sebze tabağı",
+                meal_details={
+                    "breakfast": {
+                        "name": "Yulaf kasesi",
+                        "ingredients": ["1 su bardağı glutensiz yulaf", "glutensiz yulaf"],
+                    },
+                    "lunch": {
+                        "name": "Tavuklu salata",
+                        "ingredients": ["200 g derisiz tavuk göğsü, küp doğranmış", "tavuk göğsü"],
+                    },
+                    "dinner": {
+                        "name": "Fıstıklı sebze tabağı",
+                        "ingredients": ["2 yemek kaşığı yer fıstığı", "yer fıstığı", "1 adet orta boy havuç, rendelenmiş"],
+                    },
+                },
+            )
+        ],
+        summary="Özet",
+    )
+
+    result = extract_recommendation_safety_input(plan)
+
+    assert result.ingredients == (
+        "glutensiz yulaf",
+        "tavuk",
+        "yer fıstığı",
+        "havuç",
+    )
+    assert result.has_structured_ingredients is True
+    assert result.raw_ingredients[0] == "1 su bardağı glutensiz yulaf"
+    assert result.ingredient_records[0].quantity == "1"
+    assert result.ingredient_records[0].unit == "su bardağı"
+    assert result.ingredient_records[0].safety_descriptors == ("glutensiz",)
+    assert result.ingredient_records[1].preparation_descriptors == ("derisiz", "küp doğranmış")

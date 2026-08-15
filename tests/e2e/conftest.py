@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 import itertools
 import json
 import os
@@ -7,6 +8,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -35,11 +37,24 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def _wait_for_server(url: str, process: subprocess.Popen[str], timeout: float = 150.0) -> None:
+def _drain_server_output(stream, output_lines: deque[str]) -> None:
+    try:
+        for line in iter(stream.readline, ""):
+            output_lines.append(line)
+    except (OSError, ValueError):
+        return
+
+
+def _wait_for_server(
+    url: str,
+    process: subprocess.Popen[str],
+    output_lines: deque[str],
+    timeout: float = 150.0,
+) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            output = process.stdout.read() if process.stdout else ""
+            output = "".join(output_lines)
             pytest.fail(f"E2E server exited during startup.\n{output}")
         try:
             with urllib.request.urlopen(url, timeout=1.0) as response:
@@ -53,7 +68,7 @@ def _wait_for_server(url: str, process: subprocess.Popen[str], timeout: float = 
     except subprocess.TimeoutExpired:
         process.kill()
         process.wait(timeout=5)
-    output = process.stdout.read() if process.stdout else ""
+    output = "".join(output_lines)
     pytest.fail(f"E2E server did not become ready in {timeout:.0f}s.\n{output}")
 
 
@@ -109,7 +124,15 @@ def e2e_base_url() -> str:
             text=True,
             creationflags=creation_flags,
         )
-        _wait_for_server(f"{base_url}/live", process)
+        output_lines: deque[str] = deque(maxlen=2000)
+        assert process.stdout is not None
+        output_thread = threading.Thread(
+            target=_drain_server_output,
+            args=(process.stdout, output_lines),
+            daemon=True,
+        )
+        output_thread.start()
+        _wait_for_server(f"{base_url}/live", process, output_lines)
         yield base_url
 
         if process.poll() is None:
@@ -119,6 +142,8 @@ def e2e_base_url() -> str:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=5)
+        output_thread.join(timeout=2)
+        process.stdout.close()
 
 
 @pytest.fixture(scope="session")

@@ -2,6 +2,7 @@ import json
 from unittest.mock import patch
 import pytest
 from src.auth import create_tokens
+from src.routers.chat import ResponseDecision
 
 
 class FakeBlockingRails:
@@ -756,7 +757,8 @@ def test_weekly_plan_avoid_ilac_besin_riskini_bloklar(mock_plan, mock_hafiza, cl
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["code"] == "PLAN_SAFETY_BLOCKED"
-    assert "kayıtlı alerji veya beslenme kısıtlarınızla uyuşmuyor" in body["error"]["message"]
+    assert "Linezolid/MAOI" in body["error"]["message"]
+    assert "tiramin" in body["error"]["message"]
     assert "tekrar deneyebilir" in body["error"]["message"]
 
 
@@ -1098,10 +1100,10 @@ def test_chat_explicit_allergy_conflict_returns_without_model(client, monkeypatc
 
     monkeypatch.setattr(
         "src.routers.chat._explicit_input_safety_answer",
-        lambda _snapshot, _message: (
+        lambda _context: ResponseDecision(answer=(
             "Bu seçeneği mevcut haliyle önermiyorum. Profilinizde kayıtlı İnek sütü proteini, "
             "yumurta ve yer fıstığı ile açık çakışmalar bulundu."
-        ),
+        )),
     )
     monkeypatch.setattr("src.routers.chat.plan_requires_safety_gate", lambda _plan: True)
     monkeypatch.setattr("src.routers.chat.langgraph_app.astream", should_not_run)
@@ -1572,7 +1574,7 @@ def test_chat_family_followup_and_nutrition_overwhelm_use_structured_context(cli
 
     generated_calls = []
 
-    def natural_answer(plan, _snapshot, _message, _safety_context="", conversation_context=None):
+    def natural_answer(plan, _snapshot, _message, _safety_context="", conversation_context=None, resolved_turn=None):
         generated_calls.append((plan, conversation_context))
         if plan.intent == "meal_followup":
             return "Önceki akşam öğününü tamamlayalım.\n\n- **Ekmek:** İçeriği net, ölçülü bir seçenek kullanabilirsiniz."
@@ -1896,6 +1898,28 @@ def test_specific_medication_review_is_appended_as_short_note():
     assert "düzenli ve tutarlı" in answer
 
 
+def test_blocked_food_rule_keeps_specific_finding_instead_of_generic_disclaimer():
+    from src.chat_response import final_response_text
+
+    answer = final_response_text({
+        "istek": "Alerjen içeren tatlı uygun mu?",
+        "uzman_onerisi": "Bu tatlıyı deneyebilirsiniz.",
+        "uyari_mesaji": "Alerji riski (Kesin İhlal): yer fıstığı",
+        "guvenli_mi": False,
+        "risk_score": 1.0,
+        "resolved_profile_snapshot": {"allergies": ["yer fıstığı"]},
+        "governance_events": [{
+            "event_type": "RuleTriggered",
+            "status": "blocked",
+            "metadata": {"risks": ["Alerji riski (Kesin İhlal): yer fıstığı"]},
+        }],
+    })
+
+    assert "yer fıstığı" in answer
+    assert "açık çakışmalar" in answer
+    assert "Kayıtlı alerjenlerinizi içermeyen" not in answer
+
+
 def test_chat_intent_diabetes_snack_returns_concrete_options(client, monkeypatch):
     login_with_profile(
         client,
@@ -2121,7 +2145,9 @@ def test_fridge_scan_alerjende_spesifik_blok_mesaji_doner(mock_scan, mock_recipe
 
     assert response.status_code == 422
     assert body["success"] is False
-    assert "kayıtlı alerji veya beslenme kısıtlarınızla uyuşmuyor" in body["detail"]
+    assert "yoğurt" in body["detail"].casefold()
+    assert "inek sütü proteini" in body["detail"].casefold()
+    assert "eşleşme bulundu" in body["detail"]
     assert "Neden:" not in body["detail"]
     assert "RuleEngine" not in body["detail"]
 
@@ -2174,6 +2200,13 @@ def test_menu_analizi_deterministik_ilac_riskini_ust_uyari_olarak_gosterir(mock_
     assert response.json()["success"] is True
     assert "Zorunlu Güvenlik Uyarıları" in response.json()["analiz"]
     assert "Warfarin" in response.json()["analiz"]
+    history = client.get("/api/history?limit=20").json()["loglar"]
+    menu_log = next(item for item in history if item["eylem"] == "Menü Analizi")
+    metadata = json.loads(menu_log["metadata"])
+    assert metadata["artifact_type"] == "menu_analysis"
+    assert metadata["artifact_schema_version"] == 3
+    assert any("Warfarin" in item for item in metadata["detected_risks"])
+    assert isinstance(metadata["clinical_safety_notices"], list)
 
 
 @patch("src.routers.tools.scrape_menu_from_url", side_effect=RuntimeError("internal network detail"))
