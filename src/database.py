@@ -366,6 +366,122 @@ def son_sayfa_kayitlari(telefon: str, sayfa: str, limit: int = 10, conn: sqlite3
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
+# --- Beta operations & quality dashboard (READ-ONLY) --------------------------
+# These helpers back the internal admin dashboard. They only ever SELECT; the
+# dashboard never mutates interaction_logs.
+
+
+def beta_modul_ozet(conn: sqlite3.Connection = None) -> list:
+    """Interactions and distinct users grouped by module (sayfa), busiest first."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        cursor = _conn.cursor()
+        cursor.execute(
+            """
+            SELECT sayfa, COUNT(*) AS interactions, COUNT(DISTINCT telefon) AS users
+            FROM interaction_logs
+            GROUP BY sayfa
+            ORDER BY interactions DESC
+            """
+        )
+        return [
+            {"module": row[0] or "(bilinmiyor)", "interactions": int(row[1]), "users": int(row[2])}
+            for row in cursor.fetchall()
+        ]
+
+
+def beta_zaman_serisi(days: int = 30, conn: sqlite3.Connection = None) -> list:
+    """Interaction counts per calendar day (newest first), capped to `days` rows."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        cursor = _conn.cursor()
+        cursor.execute(
+            """
+            SELECT substr(tarih, 1, 10) AS gun, COUNT(*) AS interactions
+            FROM interaction_logs
+            GROUP BY gun
+            ORDER BY gun DESC
+            LIMIT ?
+            """,
+            (int(days),),
+        )
+        return [{"date": row[0], "interactions": int(row[1])} for row in cursor.fetchall()]
+
+
+def beta_curebot_metadata(limit: int = 5000, conn: sqlite3.Connection = None) -> list:
+    """Most recent CureBot interaction metadata blobs for aggregate quality stats."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        cursor = _conn.cursor()
+        cursor.execute(
+            "SELECT metadata FROM interaction_logs WHERE sayfa = 'CureBot' ORDER BY id DESC LIMIT ?",
+            (int(limit),),
+        )
+        return [row[0] for row in cursor.fetchall()]
+
+
+def beta_distinct_telefonlar(conn: sqlite3.Connection = None) -> list:
+    """Distinct account keys, used only to resolve a pseudonym filter back to rows."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        cursor = _conn.cursor()
+        cursor.execute("SELECT DISTINCT telefon FROM interaction_logs WHERE telefon IS NOT NULL")
+        return [row[0] for row in cursor.fetchall()]
+
+
+def beta_interactions_ara(
+    *,
+    module: str = None,
+    date_from: str = None,
+    date_to: str = None,
+    search: str = None,
+    telefonlar: list = None,
+    limit: int = 50,
+    offset: int = 0,
+    conn: sqlite3.Connection = None,
+) -> tuple:
+    """READ-ONLY, filtered, paginated interaction_logs read.
+
+    Returns (rows, total). All user-supplied values are bound as SQL parameters;
+    only fixed placeholder strings are interpolated into the statement text.
+    """
+    _ensure_db()
+    where: list = []
+    params: list = []
+    if module:
+        where.append("sayfa = ?")
+        params.append(module)
+    if date_from:
+        where.append("substr(tarih, 1, 10) >= ?")
+        params.append(date_from)
+    if date_to:
+        where.append("substr(tarih, 1, 10) <= ?")
+        params.append(date_to)
+    if search:
+        where.append("(istek LIKE ? OR cevap LIKE ?)")
+        like = f"%{search}%"
+        params.extend([like, like])
+    if telefonlar is not None:
+        if not telefonlar:
+            return [], 0
+        placeholders = ",".join("?" for _ in telefonlar)
+        where.append(f"telefon IN ({placeholders})")
+        params.extend(telefonlar)
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+    with get_connection(conn) as _conn:
+        cursor = _conn.cursor()
+        cursor.execute(f"SELECT COUNT(*) FROM interaction_logs{clause}", params)
+        total = int(cursor.fetchone()[0])
+        cursor.execute(
+            f"SELECT id, telefon, sayfa, istek, cevap, metadata, tarih "
+            f"FROM interaction_logs{clause} ORDER BY id DESC LIMIT ? OFFSET ?",
+            params + [int(limit), int(offset)],
+        )
+        columns = [col[0] for col in cursor.description]
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    return rows, total
+
+
 def log_sayisi_getir_db(telefon: str, conn: sqlite3.Connection = None) -> int:
     """Kullanıcının toplam log sayısı (pagination için)."""
     _ensure_db()

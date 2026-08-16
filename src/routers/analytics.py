@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import hmac
 import sqlite3
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from src.admin_auth import require_admin as _require_admin
 from src.analytics import analytics_enabled, build_completion_rows, build_cta_rows, build_feature_rows, build_funnel, build_retention, build_screen_rows, build_summary, validate_event
 from src.auth import get_current_user, verify_token
-from src.config import settings
 from src.database import analytics_event_kaydet_db, get_db
 from src.logger import get_logger, log_failure
 from src.rate_limit import authenticated_user_or_ip, limiter
@@ -43,14 +42,6 @@ def _optional_account(request: Request) -> str | None:
         return str(verify_token(token).get("sub") or "") or None
     except HTTPException:
         return None
-
-
-def _require_admin(request: Request) -> None:
-    expected = settings.CUREMENU_ANALYTICS_ADMIN_TOKEN or ""
-    supplied = request.headers.get("Authorization", "")
-    token = supplied.removeprefix("Bearer ").strip() if supplied.startswith("Bearer ") else ""
-    if not expected or not hmac.compare_digest(token, expected):
-        raise HTTPException(status_code=403, detail="Yönetici erişimi gerekli.")
 
 
 def _all_events(db: sqlite3.Connection) -> list[dict[str, Any]]:

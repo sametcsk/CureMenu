@@ -21,7 +21,7 @@ from src.messages import (
     TIBBI_FERAGAT, TIBBI_FERAGAT_KISA, ONBOARDING_ORNEK_SORULAR
 )
 from src.ilac_etkilesim import YAYGIN_ILACLAR
-from src.routers import analytics, auth, profile, chat, tools, governance, grocery, privacy
+from src.routers import analytics, auth, profile, chat, tools, governance, grocery, privacy, beta_admin
 from src.logger import get_logger, log_failure
 from src.rate_limit import limiter
 from src.readiness import collect_readiness
@@ -53,7 +53,7 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("Permissions-Policy", "camera=(self), microphone=(), geolocation=()")
 
     path = request.url.path
-    if path.startswith("/api/") or path in {"/", "/dashboard", "/giris", "/kayit", "/guven", "/analytics", "/health", "/live", "/ready"}:
+    if path.startswith("/api/") or path in {"/", "/dashboard", "/giris", "/kayit", "/guven", "/analytics", "/internal/beta-admin", "/health", "/live", "/ready"}:
         response.headers.setdefault("Cache-Control", "no-store")
 
     forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip().lower()
@@ -113,6 +113,10 @@ async def serve_guven():
 async def serve_analytics():
     return FileResponse("frontend/analytics.html")
 
+@app.get("/internal/beta-admin")
+async def serve_beta_admin():
+    return FileResponse("frontend/beta-admin.html")
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "CureMenu API"}
@@ -156,3 +160,4 @@ app.include_router(governance.router)
 app.include_router(grocery.router)
 app.include_router(privacy.router)
 app.include_router(analytics.router)
+app.include_router(beta_admin.router)

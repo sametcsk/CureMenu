@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>CureMenu Beta Ops & Quality</title>
+<style>
+  :root{--bg:#f5f6f8;--card:#fff;--ink:#172033;--muted:#5b6472;--line:#dfe3e9;--brand:#075e54;--accent:#0b7a6d;--warn:#b5451b}
+  *{box-sizing:border-box}
+  body{font-family:system-ui,Segoe UI,Roboto,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
+  header{background:var(--brand);color:#fff;padding:1rem 1.25rem}
+  header h1{margin:0;font-size:1.15rem}
+  header p{margin:.25rem 0 0;font-size:.8rem;opacity:.85}
+  main{max-width:1080px;margin:0 auto;padding:1rem 1.25rem 3rem}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1rem;margin:1rem 0}
+  label{font-size:.85rem;color:var(--muted);display:block;margin-bottom:.25rem}
+  input,select,button{font:inherit;padding:.55rem .7rem;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink)}
+  button{background:var(--brand);color:#fff;border:0;cursor:pointer}
+  button.secondary{background:#eef1f4;color:var(--ink);border:1px solid var(--line)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .row{display:flex;flex-wrap:wrap;gap:.6rem;align-items:end}
+  .row>div{flex:1 1 150px;min-width:120px}
+  .tabs{display:flex;gap:.4rem;margin-top:1rem;flex-wrap:wrap}
+  .tabs button{background:#eef1f4;color:var(--ink);border:1px solid var(--line)}
+  .tabs button[aria-selected="true"]{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .status{font-size:.85rem;color:var(--muted);margin:.4rem 0 0}
+  .status.err{color:var(--warn)}
+  .hidden{display:none}
+  .ix{border:1px solid var(--line);border-radius:10px;padding:.6rem .75rem;margin:.55rem 0;background:#fbfcfd}
+  .ix .meta-line{font-size:.78rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:.5rem 1rem}
+  .ix .chip{background:#eef1f4;border-radius:20px;padding:.05rem .55rem;font-size:.72rem;color:#2c3644}
+  .ix pre{white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid var(--line);border-radius:8px;padding:.5rem;margin:.4rem 0 0;font-size:.82rem;max-height:12rem;overflow:auto}
+  .ix .toggle{background:none;border:0;color:var(--accent);cursor:pointer;padding:.2rem 0;font-size:.8rem}
+  pre.raw{white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid var(--line);border-radius:8px;padding:.6rem;font-size:.8rem;overflow:auto}
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  th,td{text-align:left;padding:.4rem .5rem;border-bottom:1px solid var(--line)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.8rem}
+  .kpi{background:#fbfcfd;border:1px solid var(--line);border-radius:10px;padding:.7rem}
+  .kpi b{display:block;font-size:1.4rem}
+  .kpi span{font-size:.78rem;color:var(--muted)}
+  .pager{display:flex;gap:.6rem;align-items:center;margin-top:.6rem}
+</style></head>
+<body>
+<header>
+  <h1>CureMenu · Beta Operations &amp; Quality</h1>
+  <p>Yalnız yetkili iç gözlem ekranı. Telefon, gerçek isim ve sağlık profili gösterilmez; içerik yazımda maskelenmiş haliyle görünür.</p>
+</header>
+<main>
+  <div class="card">
+    <div class="row">
+      <div style="flex:2 1 260px">
+        <label for="token">Yönetici erişim anahtarı</label>
+        <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Bearer token" style="width:100%">
+      </div>
+      <div style="flex:0 0 auto"><button id="connect">Bağlan</button></div>
+    </div>
+    <p id="conn-status" class="status" role="status">Anahtar yalnız bu oturumun belleğinde tutulur; kaydedilmez.</p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button id="tab-analytics" role="tab" aria-selected="true" aria-controls="panel-analytics">Ürün Analitiği</button>
+    <button id="tab-interactions" role="tab" aria-selected="false" aria-controls="panel-interactions">Etkileşimler</button>
+    <button id="tab-quality" role="tab" aria-selected="false" aria-controls="panel-quality">Kalite / Güvenlik</button>
+  </div>
+
+  <!-- TAB 1: PRODUCT ANALYTICS (anonymous aggregates) -->
+  <section id="panel-analytics" role="tabpanel" class="card">
+    <p class="status">Anonim/aggregate ürün kullanımı. Sağlık verisi, mesaj içeriği veya kişisel bilgi içermez.</p>
+    <div id="analytics-body"><p class="status">Bağlanınca yüklenecek.</p></div>
+  </section>
+
+  <!-- TAB 2: PRODUCT INTERACTIONS (redacted review) -->
+  <section id="panel-interactions" role="tabpanel" class="card hidden">
+    <div class="row">
+      <div><label for="f-module">Modül</label><select id="f-module"><option value="">Tümü</option></select></div>
+      <div><label for="f-from">Başlangıç</label><input id="f-from" type="date"></div>
+      <div><label for="f-to">Bitiş</label><input id="f-to" type="date"></div>
+      <div><label for="f-user">Kullanıcı (U-XXXXXX)</label><input id="f-user" type="text" placeholder="U-A1B2C3"></div>
+      <div style="flex:2 1 220px"><label for="f-search">Metin ara (girdi/çıktı)</label><input id="f-search" type="text" placeholder="ör. plan" style="width:100%"></div>
+      <div style="flex:0 0 auto"><label>&nbsp;</label><button id="f-apply">Filtrele</button></div>
+    </div>
+    <p id="ix-status" class="status" role="status">Bağlanınca yüklenecek.</p>
+    <div id="ix-list"></div>
+    <div class="pager">
+      <button id="ix-prev" class="secondary" disabled>&larr; Önceki</button>
+      <span id="ix-page" class="status"></span>
+      <button id="ix-next" class="secondary" disabled>Sonraki &rarr;</button>
+    </div>
+  </section>
+
+  <!-- TAB 3: QUALITY / SAFETY -->
+  <section id="panel-quality" role="tabpanel" class="card hidden">
+    <p class="status">Yalnız deterministik metadata'dan hesaplanan aggregate kalite görünümü. Doğruluk/skor uydurulmaz.</p>
+    <div id="quality-body"><p class="status">Bağlanınca yüklenecek.</p></div>
+  </section>
+</main>
+<script src="/static/modules/beta-admin.js?v=1"></script>
+</body></html>
