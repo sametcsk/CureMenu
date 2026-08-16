@@ -37,6 +37,16 @@
   .kpi b{display:block;font-size:1.4rem}
   .kpi span{font-size:.78rem;color:var(--muted)}
   .pager{display:flex;gap:.6rem;align-items:center;margin-top:.6rem}
+  .note{font-size:.74rem;color:#8a5a2b;margin:.3rem 0 0}
+  .badge-err{background:#fdece7;color:var(--warn);border-radius:20px;padding:.05rem .55rem;font-size:.72rem}
+  .overlay{position:fixed;inset:0;background:#0006;display:flex;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow:auto;z-index:50}
+  .overlay .sheet{background:var(--card);border-radius:12px;max-width:760px;width:100%;padding:1rem 1.25rem}
+  .overlay .sheet-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:.5rem}
+  .turn{border-left:3px solid var(--line);padding:.35rem 0 .35rem .7rem;margin:.6rem 0}
+  .turn .who{font-size:.74rem;color:var(--muted)}
+  .turn.user{border-color:#9bb}
+  .turn.bot{border-color:var(--accent)}
+  .turn pre{white-space:pre-wrap;word-break:break-word;background:#fbfcfd;border:1px solid var(--line);border-radius:8px;padding:.5rem;margin:.3rem 0 0;font-size:.82rem}
 </style></head>
 <body>
 <header>
@@ -91,6 +101,18 @@
     <p class="status">Yalnız deterministik metadata'dan hesaplanan aggregate kalite görünümü. Doğruluk/skor uydurulmaz.</p>
     <div id="quality-body"><p class="status">Bağlanınca yüklenecek.</p></div>
   </section>
+
+  <!-- Conversation thread overlay -->
+  <div id="thread-overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Konuşma akışı">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h3 id="thread-title" style="margin:0">Konuşma akışı</h3>
+        <button id="thread-close" class="secondary">Kapat</button>
+      </div>
+      <p id="thread-status" class="status"></p>
+      <div id="thread-body"></div>
+    </div>
+  </div>
 </main>
 <script src="/static/modules/beta-admin.js?v=1"></script>
 </body></html>

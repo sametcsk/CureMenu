@@ -31,11 +31,13 @@ from src.database import (
     beta_curebot_metadata,
     beta_distinct_telefonlar,
     beta_interactions_ara,
+    beta_konusma_kayitlari,
     beta_modul_ozet,
     beta_zaman_serisi,
     get_db,
 )
 from src.logger import get_logger
+from src.routers.chat import CHAT_HISTORY_RESPONSE_LIMIT
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -43,6 +45,13 @@ logger = get_logger(__name__)
 MAX_PAGE_SIZE = 100
 DEFAULT_PAGE_SIZE = 50
 QUALITY_SAMPLE_SIZE = 5000
+MAX_CONVERSATION_TURNS = 500
+
+# Response paths that mean the turn did NOT complete normally through the model
+# (surfaced as an honest error/anomaly status, derived from existing metadata —
+# no new logging). Deliberate safety behaviours (deterministic_safety,
+# off_topic, input_guardrail) are intended outcomes, not errors.
+ERROR_STATUS_PATHS = frozenset({"error_fallback", "runtime_guardrail"})
 
 # Metadata keys that are safe to surface for quality review. Deliberately
 # excludes identity/raw fields: target_name, target_key, target_id,
@@ -111,19 +120,38 @@ def _safe_metadata(raw: Any) -> dict[str, Any]:
     return {key: parsed[key] for key in SAFE_METADATA_KEYS if key in parsed}
 
 
+def _is_truncated(output: str, module: str) -> bool:
+    """Whether the stored answer is likely a truncated copy of the real answer.
+
+    CureBot answers are capped at CHAT_HISTORY_RESPONSE_LIMIT before logging;
+    redaction adds a trailing marker for anything over its own cap.
+    """
+    if output.endswith("...[TRUNCATED]"):
+        return True
+    return module == "CureBot" and len(output) >= CHAT_HISTORY_RESPONSE_LIMIT
+
+
 def _serialize_interaction(row: dict[str, Any]) -> dict[str, Any]:
     """Explicit, safe projection of a raw interaction_logs row.
 
     Note: `telefon` and `kullanici_adi` are intentionally never included.
     """
+    module = row.get("sayfa")
+    output = row.get("cevap") or ""
+    metadata = _safe_metadata(row.get("metadata"))
+    response_path = str(metadata.get("response_path") or "")
     return {
         "id": row.get("id"),
         "timestamp": row.get("tarih"),
         "pseudonymous_user_id": pseudonymous_user_label(row.get("telefon")),
-        "module": row.get("sayfa"),
+        "module": module,
         "input": row.get("istek") or "",
-        "output": row.get("cevap") or "",
-        "metadata": _safe_metadata(row.get("metadata")),
+        "output": output,
+        "output_truncated": _is_truncated(output, module),
+        "response_log_limit": CHAT_HISTORY_RESPONSE_LIMIT,
+        "error_status": response_path if response_path in ERROR_STATUS_PATHS else "",
+        "conversation_id": str(metadata.get("conversation_id") or ""),
+        "metadata": metadata,
     }
 
 
@@ -238,6 +266,42 @@ async def beta_interactions(
     )
     items = [_serialize_interaction(row) for row in rows]
     return _no_store({"success": True, "items": items, "total": total, "limit": limit, "offset": offset})
+
+
+@router.get("/api/admin/beta/conversation")
+async def beta_conversation(
+    request: Request,
+    conversation_id: str = "",
+    limit: int = 200,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """READ-ONLY CureBot thread: all turns of one conversation, chronological."""
+    require_admin(request)
+    conversation_id = (conversation_id or "").strip()
+    if not conversation_id:
+        return _no_store({"success": False, "detail": "conversation_id gerekli.", "turns": []})
+    try:
+        limit = max(1, min(int(limit), MAX_CONVERSATION_TURNS))
+    except (TypeError, ValueError):
+        limit = 200
+
+    rows = beta_konusma_kayitlari(conversation_id, limit=limit, conn=db)
+    turns: list[dict[str, Any]] = []
+    pseudonym: str | None = None
+    for row in rows:
+        # LIKE can over-match; keep only exact conversation_id rows.
+        if _safe_metadata(row.get("metadata")).get("conversation_id") != conversation_id:
+            continue
+        turns.append(_serialize_interaction(row))
+        if pseudonym is None:
+            pseudonym = pseudonymous_user_label(row.get("telefon"))
+    turns = turns[:limit]
+    return _no_store({
+        "success": True,
+        "conversation_id": conversation_id,
+        "pseudonymous_user_id": pseudonym,
+        "turns": turns,
+    })
 
 
 @router.get("/api/admin/beta/quality")

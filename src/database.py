@@ -482,6 +482,32 @@ def beta_interactions_ara(
     return rows, total
 
 
+def beta_konusma_kayitlari(conversation_id: str, limit: int = 200, conn: sqlite3.Connection = None) -> list:
+    """READ-ONLY CureBot turns for one conversation, oldest-first (chronological).
+
+    Prefilters on the metadata blob with LIKE (conversation_id lives inside the
+    JSON); the caller must still verify the exact conversation_id per row, since
+    LIKE can over-match. Over-fetches so the exact matches are not truncated away.
+    """
+    _ensure_db()
+    like = f"%{conversation_id}%"
+    fetch_cap = max(int(limit) * 3, 300)
+    with get_connection(conn) as _conn:
+        cursor = _conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, telefon, sayfa, istek, cevap, metadata, tarih
+            FROM interaction_logs
+            WHERE sayfa = 'CureBot' AND metadata LIKE ?
+            ORDER BY id ASC
+            LIMIT ?
+            """,
+            (like, fetch_cap),
+        )
+        columns = [col[0] for col in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
 def log_sayisi_getir_db(telefon: str, conn: sqlite3.Connection = None) -> int:
     """Kullanıcının toplam log sayısı (pagination için)."""
     _ensure_db()

@@ -214,6 +214,69 @@ def test_quality_metrics_are_metadata_derived(client, admin_on):
     assert "accuracy" not in cb and "safety_score" not in cb
 
 
+def _seed_conversation():
+    etkilesim_logla(
+        PHONE_A, SECRET_NAME, "CureBot", "merhaba ilk mesaj", "ilk cevap",
+        json.dumps({"conversation_id": "conv-x", "response_path": "natural"}, ensure_ascii=False),
+    )
+    etkilesim_logla(
+        PHONE_A, SECRET_NAME, "CureBot", "peki ikinci mesaj", "ikinci cevap",
+        json.dumps({"conversation_id": "conv-x", "response_path": "deterministic_intent"}, ensure_ascii=False),
+    )
+    etkilesim_logla(
+        PHONE_B, "Diger Kisi", "CureBot", "baska konusma", "baska cevap",
+        json.dumps({"conversation_id": "conv-y", "response_path": "natural"}, ensure_ascii=False),
+    )
+
+
+# ---- Conversation thread -----------------------------------------------------
+def test_conversation_requires_admin(client, admin_on):
+    assert client.get("/api/admin/beta/conversation?conversation_id=conv-x").status_code == 403
+
+
+def test_conversation_requires_id(client, admin_on):
+    res = client.get("/api/admin/beta/conversation", headers=ADMIN).json()
+    assert res["success"] is False and res["turns"] == []
+
+
+def test_conversation_groups_by_id_chronologically(client, admin_on):
+    _seed_conversation()
+    data = client.get("/api/admin/beta/conversation?conversation_id=conv-x", headers=ADMIN).json()
+    turns = data["turns"]
+    assert len(turns) == 2  # only conv-x, not conv-y
+    assert "merhaba" in turns[0]["input"] and "peki" in turns[1]["input"]  # chronological
+    assert turns[0]["id"] < turns[1]["id"]
+    assert data["pseudonymous_user_id"] == pseudonymous_user_label(PHONE_A)
+
+
+def test_conversation_never_leaks_identity(client, admin_on):
+    _seed_conversation()
+    blob = json.dumps(client.get("/api/admin/beta/conversation?conversation_id=conv-x", headers=ADMIN).json(), ensure_ascii=False)
+    assert PHONE_A not in blob and SECRET_NAME not in blob
+
+
+# ---- Truncation notice & error status ---------------------------------------
+def test_output_truncation_flag(client, admin_on):
+    etkilesim_logla(PHONE_A, "N", "CureBot", "uzun cevap istegi", "x" * 3000,
+                    json.dumps({"conversation_id": "conv-t"}, ensure_ascii=False))
+    etkilesim_logla(PHONE_A, "N", "CureBot", "kisa", "kisa cevap",
+                    json.dumps({"conversation_id": "conv-s"}, ensure_ascii=False))
+    items = {i["input"]: i for i in client.get("/api/admin/beta/interactions?limit=100", headers=ADMIN).json()["items"]}
+    assert items["uzun cevap istegi"]["output_truncated"] is True
+    assert items["uzun cevap istegi"]["response_log_limit"] == 3000
+    assert items["kisa"]["output_truncated"] is False
+
+
+def test_error_status_derived_from_metadata(client, admin_on):
+    etkilesim_logla(PHONE_B, "N", "CureBot", "hata ureten", "fallback cevap",
+                    json.dumps({"conversation_id": "conv-e", "response_path": "error_fallback"}, ensure_ascii=False))
+    etkilesim_logla(PHONE_B, "N", "CureBot", "normal", "normal cevap",
+                    json.dumps({"conversation_id": "conv-n", "response_path": "natural"}, ensure_ascii=False))
+    items = {i["input"]: i for i in client.get("/api/admin/beta/interactions?limit=100", headers=ADMIN).json()["items"]}
+    assert items["hata ureten"]["error_status"] == "error_fallback"
+    assert items["normal"]["error_status"] == ""
+
+
 def test_existing_analytics_admin_still_reachable(client, admin_on, monkeypatch):
     # Shared require_admin still guards the pre-existing analytics endpoints.
     from src.database import _ensure_db

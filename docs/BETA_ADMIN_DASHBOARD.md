@@ -15,6 +15,8 @@ business/growth review). It never edits, deletes, impersonates, or exports data.
 - APIs:
   - `GET /api/admin/beta/modules` — module (sayfa) values + counts
   - `GET /api/admin/beta/interactions` — filtered, paginated interaction review
+  - `GET /api/admin/beta/conversation?conversation_id=<id>` — one CureBot thread,
+    chronological (turns oldest-first)
   - `GET /api/admin/beta/quality` — aggregate usage + CureBot quality
   - Product Analytics tab reuses existing `GET /api/admin/analytics/*`
 
@@ -48,6 +50,10 @@ business/growth review). It never edits, deletes, impersonates, or exports data.
 ## 8. Data shown
 - Interactions: `id`, `timestamp`, `pseudonymous_user_id` (`U-XXXXXX`), `module`,
   redacted `input`, redacted `output`, and an allowlisted `metadata` subset.
+  Each row also carries `conversation_id` (for CureBot), `output_truncated` (with
+  `response_log_limit`, since CureBot answers are capped at 3000 chars in the log),
+  and `error_status` (derived only from `response_path`: `error_fallback` /
+  `runtime_guardrail`). CureBot rows can be opened as a chronological thread.
 - Quality: total interactions, module distribution (interactions + distinct
   users), daily interaction counts, and CureBot aggregates (response-path,
   evidence-level, target-resolution-source distributions; clarification,

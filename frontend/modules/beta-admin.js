@@ -127,21 +127,39 @@
     }
   }
 
+  function truncationNote(item) {
+    return item.output_truncated
+      ? `<p class="note">ℹ Bu cevap log kaydında ${esc(item.response_log_limit || 3000)} karakterle sınırlandırılmıştır.</p>`
+      : '';
+  }
+
+  function errorBadge(item) {
+    return item.error_status ? `<span class="badge-err">durum: ${esc(item.error_status)}</span>` : '';
+  }
+
   function renderInteraction(item) {
     const meta = item.metadata || {};
     const chips = Object.keys(meta).slice(0, 8)
       .map(k => `<span class="chip">${esc(k)}: ${esc(formatMeta(meta[k]))}</span>`).join('');
+    const convBtn = item.conversation_id
+      ? `<button class="toggle" data-conversation="${esc(item.conversation_id)}">Konuşmayı göster</button>`
+      : '';
     return `<div class="ix">
       <div class="meta-line">
         <span>${esc(item.timestamp || '')}</span>
         <span>${esc(item.pseudonymous_user_id || '')}</span>
         <span><b>${esc(item.module || '')}</b></span>
+        ${errorBadge(item)}
       </div>
       <div class="meta-line" style="margin-top:.3rem">${chips}</div>
-      <button class="toggle" data-toggle>İçeriği göster</button>
+      <div style="margin-top:.3rem">
+        <button class="toggle" data-toggle>İçeriği göster</button>
+        ${convBtn}
+      </div>
       <div class="ix-content hidden">
         <pre>${esc(item.input)}</pre>
         <pre>${esc(item.output)}</pre>
+        ${truncationNote(item)}
       </div>
     </div>`;
   }
@@ -155,13 +173,45 @@
   function bindToggles() {
     byId('ix-list').querySelectorAll('[data-toggle]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const content = btn.nextElementSibling;
+        const content = btn.closest('.ix').querySelector('.ix-content');
         const open = !content.classList.contains('hidden');
         content.classList.toggle('hidden', open);
         btn.textContent = open ? 'İçeriği göster' : 'İçeriği gizle';
       });
     });
+    byId('ix-list').querySelectorAll('[data-conversation]').forEach(btn => {
+      btn.addEventListener('click', () => loadConversation(btn.getAttribute('data-conversation')));
+    });
   }
+
+  // ---- Conversation thread overlay ----------------------------------------
+  async function loadConversation(conversationId) {
+    if (!conversationId) return;
+    byId('thread-overlay').classList.remove('hidden');
+    byId('thread-title').textContent = 'Konuşma akışı';
+    byId('thread-status').textContent = 'Yükleniyor...';
+    byId('thread-body').innerHTML = '';
+    try {
+      const data = await api('/api/admin/beta/conversation?conversation_id=' + encodeURIComponent(conversationId) + '&limit=500');
+      const turns = data.turns || [];
+      byId('thread-title').textContent = 'Konuşma · ' + (data.pseudonymous_user_id || '');
+      byId('thread-status').textContent = turns.length ? (turns.length + ' tur') : 'Bu konuşmada kayıt bulunamadı.';
+      byId('thread-body').innerHTML = turns.map(renderTurn).join('');
+    } catch (err) {
+      byId('thread-status').textContent = err.message;
+    }
+  }
+
+  function renderTurn(turn) {
+    return `<div class="turn user"><div class="who">${esc(turn.timestamp || '')} · kullanıcı</div><pre>${esc(turn.input)}</pre></div>
+      <div class="turn bot"><div class="who">CureMenu ${errorBadge(turn)}</div><pre>${esc(turn.output)}</pre>${truncationNote(turn)}</div>`;
+  }
+
+  function closeThread() { byId('thread-overlay').classList.add('hidden'); }
+  byId('thread-close').addEventListener('click', closeThread);
+  byId('thread-overlay').addEventListener('click', (event) => {
+    if (event.target === byId('thread-overlay')) closeThread();
+  });
 
   function updatePager(total) {
     const start = total ? ixOffset + 1 : 0;
