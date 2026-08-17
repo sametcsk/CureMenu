@@ -410,32 +410,51 @@ def _guardrail_block_state(initial_state: dict, content: str) -> dict:
     })
     return blocked_state
 
-_CONFLICT_NEGATIONS = {"yok", "yokmus", "degil", "kalmadi", "gecti", "gecmis"}
+_CONFLICT_NEGATION_TOKENS = {
+    "yok", "yokmus", "degil", "degilim", "kalmadi", "gecti", "gecmis",
+    "olmadigini", "olmadigi", "olmadi", "olmuyor",
+}
+_CONFLICT_NEGATION_PREFIXES = ("birak", "olmad", "yanlis", "kaldir", "cikar", "eklemis")
+
+
+def _conflict_notice(subject: str) -> str:
+    return (
+        f"Profilinde {subject} kayıtlı görünüyor. Güvenlik açısından, bu bilgi "
+        "profil sayfandan güncellenene kadar önerilerde dikkate almaya devam edeceğim. "
+        "Artık geçerli değilse ya da yanlış eklendiyse lütfen profilinden güncelle; "
+        "ona göre değerlendireyim."
+    )
 
 
 def _profile_conflict_answer(snapshot: ResolvedProfileSnapshot | None, message: str) -> str | None:
-    """When the message denies a *registered* allergy/disease, do not silently
-    drop it. The structured profile stays source-of-truth; ask the user to update
-    it from the profile page instead of overriding critical health data in chat.
+    """When the message denies / disowns a *registered* allergy or disease, do not
+    silently drop it. The structured profile stays source-of-truth; direct the user
+    to update it from the profile page instead of overriding critical health data
+    in chat. Covers "... yok", "artık ... olmadığını söyledi", "yanlışlıkla
+    eklemişim", and short terms like "süt".
     """
     if snapshot is None:
         return None
     text = _normalized_message(message)
     tokens = text.split()
-    has_negation = any(token in _CONFLICT_NEGATIONS for token in tokens) or any(
-        token.startswith("birak") for token in tokens
+    has_negation = any(token in _CONFLICT_NEGATION_TOKENS for token in tokens) or any(
+        token.startswith(prefix) for token in tokens for prefix in _CONFLICT_NEGATION_PREFIXES
     )
     if not has_negation:
         return None
     for term in (*snapshot.allergies, *snapshot.diseases):
         term_norm = _normalized_message(term)
-        stems = [word[:5] for word in term_norm.split() if len(word) >= 4]
-        if any(stem and stem in text for stem in stems):
-            return (
-                f"Profilinde “{term}” kayıtlı görünüyor. Güvenlik açısından, bu bilgi "
-                "profil sayfandan güncellenene kadar önerilerde dikkate almaya devam edeceğim. "
-                "Artık geçerli değilse lütfen profilinden güncelle; ona göre değerlendireyim."
-            )
+        for word in term_norm.split():
+            if len(word) < 3:
+                continue
+            if word in tokens or (len(word) >= 5 and word[:5] in text):
+                return _conflict_notice(f"“{term}”")
+    # Generic denial ("alerjim yok", "artık hastalığım olmadığını söyledi") while
+    # some allergy/disease is on file, without naming the specific one.
+    if snapshot.allergies and any(token.startswith("alerj") for token in tokens):
+        return _conflict_notice("kayıtlı bir alerji")
+    if snapshot.diseases and any(token.startswith("hastal") for token in tokens):
+        return _conflict_notice("kayıtlı bir sağlık durumu")
     return None
 
 

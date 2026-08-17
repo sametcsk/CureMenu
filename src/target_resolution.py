@@ -291,15 +291,39 @@ def _hint_resolution(profile: KullaniciProfili, hint: str, source: str) -> Targe
     )
 
 
-# ---- MULTI detection ---------------------------------------------------------
+# ---- Targeting vs. reference: dative / feedback / expansion ------------------
+# A member appearing as the *recipient* of a request ("anneme öner", dative
+# "-a/-e"; or "X için") is a TARGET REQUEST. The same member appearing as the
+# *subject* of a statement ("annem bunu sevmez") is a REFERENCE/feedback and must
+# not, on its own, change an existing family/multi conversation target.
+
+DATIVE_RELATION_STEMS: dict[str, tuple[str, ...]] = {
+    "son": ("ogluma", "ogluna"),
+    "daughter": ("kizima", "kizina"),
+    "spouse": ("esime", "esine", "hanimima", "kocama", "karima"),
+    "mother": ("anneme", "annene"),
+    "father": ("babama", "babana"),
+    "sibling": ("kardesime", "kardesine", "abime", "ablama"),
+}
+DATIVE_CHILD_STEMS = ("cocuguma", "cocuguna")
+DATIVE_CHILD_PLURAL_STEMS = ("cocuklarima", "cocuklarina")
+SELF_DATIVE = {"bana", "kendime"}
+
+# Preference / ability statements that mark a sentence as feedback, not a target
+# request ("sevmez", "sevmiyor", "yiyemez", "istemiyor", "kullanmıyor", ...).
+FEEDBACK_VERB_PREFIXES = (
+    "sevm", "begenm", "yemiy", "yemez", "yiyem", "icmiy", "icmez", "icem",
+    "istemi", "istem", "kullanmi", "kullanmaz", "yasak", "dokunuy",
+)
+CHILD_MAX_AGE = 18
+
 
 def _has_conjunction(tokens: list[str]) -> bool:
     if any(token in CONJUNCTION_TOKENS for token in tokens):
         return True
     if (tokens.count("de") + tokens.count("da")) >= 2:  # "ben de annem de"
         return True
-    # comitative suffix ("-le"/"-la") on a person-referencing token ("eşimle").
-    for token in tokens:
+    for token in tokens:  # comitative "-le"/"-la" on a person token ("eşimle").
         if (token.endswith("le") or token.endswith("la")) and _is_person_token(token):
             return True
     return False
@@ -316,18 +340,96 @@ def _is_person_token(token: str) -> bool:
     return False
 
 
-def _resolve_multi(
+def _child_candidates(members: list) -> list:
+    """Members who are the account's children: sons/daughters, plus a member with
+    an unspecified relationship but a child's age (so a member stored as "diğer"
+    is still reachable by "çocuğum" instead of silently failing)."""
+    kids = []
+    for member in members:
+        category = relation_category(member.yakinlik)
+        if category in CHILD_CATEGORIES:
+            kids.append(member)
+        elif category is None and (member.yas or 99) < CHILD_MAX_AGE:
+            kids.append(member)
+    return kids
+
+
+def _dative_categories(tokens: list[str]) -> set[str]:
+    detected: set[str] = set()
+    for category, stems in DATIVE_RELATION_STEMS.items():
+        if any(token.startswith(stem) for token in tokens for stem in stems):
+            detected.add(category)
+    return detected
+
+
+def _dative_child_singular(tokens: list[str]) -> bool:
+    return any(token.startswith(stem) for token in tokens for stem in DATIVE_CHILD_STEMS)
+
+
+def _dative_child_plural(tokens: list[str]) -> bool:
+    return any(token.startswith(stem) for token in tokens for stem in DATIVE_CHILD_PLURAL_STEMS)
+
+
+def _dative_present(tokens: list[str]) -> bool:
+    return bool(_dative_categories(tokens)) or _dative_child_singular(tokens) or _dative_child_plural(tokens) or any(
+        token in SELF_DATIVE for token in tokens
+    )
+
+
+def _explicit_target_request(tokens: list[str]) -> bool:
+    if "icin" in tokens or "gore" in tokens:
+        return True
+    if any(token in {"sadece", "yalniz", "yalnizca"} for token in tokens):
+        return True
+    return _dative_present(tokens)
+
+
+def _has_feedback_verb(tokens: list[str]) -> bool:
+    return any(token.startswith(prefix) for token in tokens for prefix in FEEDBACK_VERB_PREFIXES)
+
+
+def _is_expansion(tokens: list[str]) -> bool:
+    also = ("da" in tokens) or ("de" in tokens)
+    eats = any(token.startswith("yiy") for token in tokens) or any(
+        token in {"yesin", "yesek", "yiyecek"} for token in tokens
+    )
+    return also and eats
+
+
+def _scope_of(target: str | None) -> str:
+    target = str(target or "")
+    if not target:
+        return "none"
+    if target == "aile":
+        return "family"
+    if target.startswith(MULTI_PREFIX):
+        return "multi"
+    if target == "kendim":
+        return "self"
+    return "single"
+
+
+def _current_member_ids(profile: KullaniciProfili, target: str | None) -> list[str]:
+    target = str(target or "")
+    if target == "kendim":
+        return [SELF_CANONICAL]
+    if target.startswith(MULTI_PREFIX):
+        return parse_multi_key(target)
+    if any(member.id == target for member in (profile.aile_uyeleri or [])):
+        return [target]
+    return []
+
+
+def _collect_person_ids(
     profile: KullaniciProfili,
     tokens: list[str],
     text: str,
     detected: set[str],
     child_singular: bool,
     child_plural: bool,
-) -> TargetResolution | None:
-    """Return a MULTI/clarification resolution when the message explicitly names
-    2+ distinct persons joined by a conjunction; otherwise None (single logic)."""
-    if not _has_conjunction(tokens):
-        return None
+) -> tuple[list[str], bool, list[tuple[str, str]]]:
+    """Resolve every explicit person reference to canonical ids. Returns
+    (ids, ambiguous, candidates)."""
     members = list(profile.aile_uyeleri or [])
     ids: list[str] = []
     candidates: list[tuple[str, str]] = []
@@ -339,7 +441,6 @@ def _resolve_multi(
 
     if _has_self_reference(tokens):
         add(SELF_CANONICAL)
-
     for category in detected:
         matches = [member for member in members if relation_category(member.yakinlik) == category]
         if len(matches) == 1:
@@ -349,16 +450,15 @@ def _resolve_multi(
             candidates.extend((member.id, member.ad) for member in matches)
         else:
             ambiguous = True
-
     if child_plural:
-        kids = _children(members)
+        kids = _child_candidates(members)
         if kids:
             for kid in kids:
                 add(kid.id)
         else:
             ambiguous = True
     elif child_singular:
-        kids = _children(members)
+        kids = _child_candidates(members)
         if len(kids) == 1:
             add(kids[0].id)
         elif len(kids) > 1:
@@ -366,15 +466,48 @@ def _resolve_multi(
             candidates.extend((kid.id, kid.ad) for kid in kids)
         else:
             ambiguous = True
-
     for member in members:
         if _name_match(member.ad, tokens, text):
             add(member.id)
+    return ids, ambiguous, candidates
 
+
+def _resolve_multi(
+    profile: KullaniciProfili,
+    tokens: list[str],
+    text: str,
+    detected: set[str],
+    child_singular: bool,
+    child_plural: bool,
+) -> TargetResolution | None:
+    """MULTI/clarification when the message names 2+ persons joined by a
+    conjunction; otherwise None (single logic)."""
+    if not _has_conjunction(tokens):
+        return None
+    ids, ambiguous, candidates = _collect_person_ids(profile, tokens, text, detected, child_singular, child_plural)
     if len(ids) >= 2 and not ambiguous:
         return _multi(profile, ids, "message_multi")
     if ambiguous and (len(ids) >= 1 or candidates):
         return _clarify("message_multi", candidates, "multi_ambiguous_member")
+    return None
+
+
+def _expand_current_target(
+    profile: KullaniciProfili,
+    current_target: str,
+    tokens: list[str],
+    text: str,
+    detected: set[str],
+    child_singular: bool,
+    child_plural: bool,
+) -> TargetResolution | None:
+    """"X da yiyecek" while a single/self target is active -> add X to the set."""
+    ids, ambiguous, candidates = _collect_person_ids(profile, tokens, text, detected, child_singular, child_plural)
+    if ambiguous:
+        return _clarify("expansion", candidates, "multiple_children" if candidates else "ambiguous_group")
+    combined = list(dict.fromkeys([*_current_member_ids(profile, current_target), *ids]))
+    if len(combined) >= 2:
+        return _multi(profile, combined, "expansion")
     return None
 
 
@@ -394,14 +527,57 @@ def resolve_target_from_message(
     if members and any(term in text for term in FAMILY_TERMS):
         return _family()
 
-    detected = _detected_relation_categories(tokens)
-    child_singular = _mentions_child_singular(tokens)
-    child_plural = _mentions_child_plural(tokens)
+    detected_all = _detected_relation_categories(tokens)
+    child_singular_all = _mentions_child_singular(tokens)
+    child_plural_all = _mentions_child_plural(tokens)
+    name_hits = _name_matches(members, tokens, text)
+    owner_named = bool(main is not None and _name_match(main.ad, tokens, text))
+    member_ref_present = bool(detected_all) or child_singular_all or child_plural_all or bool(name_hits) or owner_named
 
-    # 2) Explicit MULTI set (2+ distinct persons joined by a conjunction).
+    current_target = previous_target or client_hint
+    current_scope = _scope_of(current_target)
+    explicit_request = _explicit_target_request(tokens)
+
+    # 1.5) MEMBER REFERENCE INSIDE THE CURRENT TARGET (not a switch). A feedback /
+    #      preference statement about a member ("çocuk bunu sevmez", "eşim tuzlu
+    #      sevmiyor") while a family/multi conversation is active keeps that target
+    #      instead of narrowing to the mentioned member. Only an explicit request
+    #      ("sadece çocuğuma", "... için") switches.
+    if (
+        current_scope in {"family", "multi"}
+        and member_ref_present
+        and _has_feedback_verb(tokens)
+        and not explicit_request
+    ):
+        kept = _hint_resolution(profile, current_target, "continuity")
+        if not kept.needs_clarification:
+            return kept
+
+    # When a sentence mixes feedback about one member with an explicit dative
+    # request for another ("annem sevmedi, sadece babama öner"), target only the
+    # dative-marked person and ignore the nominative feedback subject. Without a
+    # feedback verb, every reference (incl. comitative "eşimle") is a real target.
+    if _dative_present(tokens) and _has_feedback_verb(tokens):
+        detected = _dative_categories(tokens)
+        child_singular = _dative_child_singular(tokens)
+        child_plural = _dative_child_plural(tokens)
+    else:
+        detected = detected_all
+        child_singular = child_singular_all
+        child_plural = child_plural_all
+
+    # 2) Explicit MULTI set (2+ persons joined by a conjunction).
     multi = _resolve_multi(profile, tokens, text, detected, child_singular, child_plural)
     if multi is not None:
         return multi
+
+    # 2.5) Expansion of the active single/self target ("çocuk da yiyecek").
+    if current_scope in {"self", "single"} and member_ref_present and _is_expansion(tokens) and not explicit_request:
+        expanded = _expand_current_target(
+            profile, current_target, tokens, text, detected_all, child_singular_all, child_plural_all
+        )
+        if expanded is not None:
+            return expanded
 
     # 3) Explicit name match. All matches are collected: duplicates ask instead
     #    of silently picking the first. A name whose stored relationship disagrees
@@ -421,7 +597,7 @@ def resolve_target_from_message(
 
     # 4) Gender-neutral child reference ("çocuğum", "çocuklar").
     if child_singular or child_plural:
-        kids = _children(members)
+        kids = _child_candidates(members)
         if not kids:
             return _clarify(
                 "message_relationship",
