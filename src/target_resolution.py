@@ -1,17 +1,22 @@
 """Deterministic, fail-closed target-person resolution for CureBot turns.
 
-Resolves *which* profile a chat message is about, using only the account's own
+Resolves *which* profile(s) a chat message is about, using only the account's own
 family metadata (names, `yakinlik` relationship, Turkish possessive
-normalization). Design principles (see product spec):
+normalization). Design principles (see product spec / audit):
 
 - STRUCTURED BEFORE LLM: identity is resolved here, not by the language model.
-- FAIL CLOSED: when a message clearly refers to someone other than the account
-  owner but the target cannot be resolved with confidence, this NEVER silently
-  falls back to the owner. It returns ``needs_clarification=True`` with candidates.
+- FIVE SCOPES: a turn resolves to one of SELF, SINGLE (one member), MULTI (an
+  explicit set of 2+ members), FAMILY (everyone), or UNRESOLVED (clarification).
+- FAIL CLOSED: when a message clearly refers to people we cannot resolve with
+  confidence, this NEVER silently falls back to the owner or the active profile.
+  It returns ``needs_clarification=True`` with candidates.
+- MULTI is additive and conservative: it only fires when the message explicitly
+  names/relates 2+ distinct persons joined by a conjunction/comitative
+  ("ben ve annem", "eşimle bana", "annemle babam"). A bare plural pronoun
+  ("bize", "ikimize") with no explicit set is AMBIGUOUS -> clarification, unless
+  the conversation already carries an explicit group target.
 - CONTEXT CONTINUITY: when the message names nobody, the previously resolved
-  target (carried in conversation state) is kept, so a follow-up like
-  "peki ayran?" stays on the same person. Only an explicit self / other-person /
-  family reference switches the subject.
+  target (single OR multi OR family, carried in conversation state) is kept.
 - The client-provided dropdown hint is used only when there is neither a message
   reference nor a previous target.
 """
@@ -47,7 +52,7 @@ RELATION_CATEGORY_ALIASES: dict[str, tuple[str, ...]] = {
 
 # Token prefixes (stems) in the speaker's possessive forms, including the common
 # "-n" typo for "-m" ("oğlun" for "oğlum"). Matched with str.startswith so Turkish
-# suffixes ("oğlumunki", "oğluma", "oğlunun") still resolve.
+# suffixes ("oğlumunki", "oğluma", "oğlunun", comitative "annemle") still resolve.
 MESSAGE_RELATION_STEMS: dict[str, tuple[str, ...]] = {
     "son": ("oglum", "oglun", "oglan"),
     "daughter": ("kizim", "kizin"),
@@ -57,14 +62,19 @@ MESSAGE_RELATION_STEMS: dict[str, tuple[str, ...]] = {
     "sibling": ("kardesim", "kardesin", "abim", "ablam"),
 }
 
+# Gender-neutral child references ("çocuğum", "çocuğuma"...). A child is a member
+# whose relationship category is son or daughter. Plural forms select all
+# children; the singular selects the only child or asks which one.
+CHILD_PLURAL_STEMS = ("cocuklar",)
+CHILD_SINGULAR_STEMS = ("cocugum", "cocuguma", "cocugun", "cocuguna", "cocugu", "cocuguyla", "cocugumla")
+CHILD_BARE = {"cocuk"}
+CHILD_CATEGORIES = {"son", "daughter"}
+
 OTHER_PRONOUN_STEMS = ("onun", "ona", "onu", "ondan", "onunki")
 
 SELF_EXACT = {"ben", "bana", "beni", "kendim", "kendime", "kendi", "benimki"}
 SELF_PREFIXES = ("benim", "kendim")
 # Common Turkish first-person verb forms used in short nutrition questions.
-# These are message-local linguistic signals; they do not mutate or persist the
-# selected target. Relationship/name references still win earlier in the
-# resolver, and third-person pronouns are handled before this implicit signal.
 IMPLICIT_SELF_FORMS = {
     "aciktim", "yemeliyim", "yiyeyim", "yiyim", "yesem",
     "yiyebilirim", "icebilirim", "istiyorum", "istemiyorum",
@@ -77,16 +87,45 @@ IMPLICIT_SELF_POSSESSIVE_STEMS = (
 )
 FAMILY_TERMS = ("tum aile", "butun aile", "hepimiz", "ailecek", "hep birlikte", "tum ailem", "butun ailem")
 
+# First-person-plural pronouns that imply a GROUP but do not say which people.
+# These must never silently resolve to a single active profile. NOTE: bare
+# "beraber"/"birlikte" are intentionally excluded — in Turkish they usually mean
+# "together with [a food]" ("kahvaltıyla birlikte") and cause false positives;
+# a real group is expressed with "biz/ikimiz" or by naming the people (-> MULTI).
+AMBIGUOUS_GROUP_EXACT = {
+    "biz", "bize", "bizi", "bizde", "bizce", "bizler",
+    "ikimiz", "ikimize", "ikimizi", "ikimizde",
+}
+AMBIGUOUS_GROUP_PREFIXES = ("bizim", "ikimiz", "bizimle")
+
+# Conjunction / comitative markers that link two person references into a set.
+CONJUNCTION_TOKENS = {"ve", "ile", "hem", "ayrica"}
+
+SELF_CANONICAL = "kendim"
+MULTI_PREFIX = "multi:"
+
 
 @dataclass(frozen=True)
 class TargetResolution:
-    target: str | None          # "kendim" | "aile" | member_id when resolved; None when clarification needed
+    target: str | None          # "kendim" | "aile" | member_id | "multi:a+b" when resolved; None when clarification
     target_label: str
-    source: str                 # message_family | message_name | message_relationship | message_self | single_member | continuity | client_hint | default_self
+    source: str
     needs_clarification: bool = False
     candidates: tuple[tuple[str, str], ...] = ()  # (member_id, ad)
     referenced_someone_else: bool = False
     reason: str = ""
+    scope: str = ""             # self | single | multi | family | unresolved
+    member_ids: tuple[str, ...] = ()  # canonical ids ("kendim" for the owner)
+
+
+def multi_key(ids: list[str]) -> str:
+    return MULTI_PREFIX + "+".join(sorted(set(ids)))
+
+
+def parse_multi_key(key: str) -> list[str]:
+    if not str(key or "").startswith(MULTI_PREFIX):
+        return []
+    return [part for part in key[len(MULTI_PREFIX):].split("+") if part]
 
 
 def _word_present(needle: str, haystack_norm: str) -> bool:
@@ -101,8 +140,6 @@ def relation_category(yakinlik: str | None) -> str | None:
     if not yakinlik:
         return None
     value = _norm(yakinlik)
-    # Word-boundary matching only: a loose substring test would misclassify
-    # "kız kardeş" (sibling) as spouse because "es" is a substring of "kardes".
     for category, aliases in RELATION_CATEGORY_ALIASES.items():
         if any(_word_present(alias, value) for alias in aliases):
             return category
@@ -138,6 +175,30 @@ def _has_implicit_self_reference(tokens: list[str]) -> bool:
     )
 
 
+def _mentions_child_plural(tokens: list[str]) -> bool:
+    return any(token.startswith(stem) for token in tokens for stem in CHILD_PLURAL_STEMS)
+
+
+def _mentions_child_singular(tokens: list[str]) -> bool:
+    if _mentions_child_plural(tokens):
+        return False
+    return any(
+        token in CHILD_BARE or any(token.startswith(stem) for stem in CHILD_SINGULAR_STEMS)
+        for token in tokens
+    )
+
+
+def _mentions_ambiguous_group(tokens: list[str]) -> bool:
+    return any(
+        token in AMBIGUOUS_GROUP_EXACT or any(token.startswith(prefix) for prefix in AMBIGUOUS_GROUP_PREFIXES)
+        for token in tokens
+    )
+
+
+def _children(members: list) -> list:
+    return [member for member in members if relation_category(member.yakinlik) in CHILD_CATEGORIES]
+
+
 def _name_match(name: str, tokens: list[str], text_norm: str) -> bool:
     name_norm = _norm(name).strip()
     if len(name_norm) < 2:
@@ -147,8 +208,52 @@ def _name_match(name: str, tokens: list[str], text_norm: str) -> bool:
     return any(token == name_norm or (len(name_norm) >= 3 and token.startswith(name_norm)) for token in tokens)
 
 
+def _name_matches(members: list, tokens: list[str], text_norm: str) -> list:
+    return [member for member in members if _name_match(member.ad, tokens, text_norm)]
+
+
 def _self_label(profile: KullaniciProfili) -> str:
     return profile.ana_kullanici.ad if profile.ana_kullanici else "Kendim"
+
+
+def _label_for_id(profile: KullaniciProfili, canonical_id: str) -> str:
+    if canonical_id == SELF_CANONICAL:
+        return "Sen"
+    member = next((item for item in (profile.aile_uyeleri or []) if item.id == canonical_id), None)
+    return member.ad if member else canonical_id
+
+
+# ---- Scoped constructors -----------------------------------------------------
+
+def _self(profile: KullaniciProfili, source: str) -> TargetResolution:
+    return TargetResolution(SELF_CANONICAL, _self_label(profile), source, scope="self", member_ids=(SELF_CANONICAL,))
+
+
+def _single(member, source: str, referenced_other: bool = True) -> TargetResolution:
+    return TargetResolution(
+        member.id, member.ad, source, referenced_someone_else=referenced_other,
+        scope="single", member_ids=(member.id,),
+    )
+
+
+def _family(source: str = "message_family") -> TargetResolution:
+    return TargetResolution("aile", "Tüm aile", source, referenced_someone_else=True, scope="family")
+
+
+def _multi(profile: KullaniciProfili, ids: list[str], source: str) -> TargetResolution:
+    canonical = sorted(set(ids))
+    label = " + ".join(_label_for_id(profile, cid) for cid in canonical)
+    return TargetResolution(
+        multi_key(canonical), label, source, referenced_someone_else=True,
+        scope="multi", member_ids=tuple(canonical),
+    )
+
+
+def _clarify(source: str, candidates, reason: str) -> TargetResolution:
+    return TargetResolution(
+        None, "", source, needs_clarification=True,
+        candidates=tuple(candidates), referenced_someone_else=True, reason=reason, scope="unresolved",
+    )
 
 
 def _hint_resolution(profile: KullaniciProfili, hint: str, source: str) -> TargetResolution:
@@ -156,21 +261,121 @@ def _hint_resolution(profile: KullaniciProfili, hint: str, source: str) -> Targe
     main = profile.ana_kullanici
     hint = (str(hint or "").strip() or "kendim")
     if hint == "aile" and members:
-        return TargetResolution("aile", "Tüm aile", source)
+        return _family(source)
+    if hint.startswith(MULTI_PREFIX):
+        ids = parse_multi_key(hint)
+        valid: list[str] = []
+        for cid in ids:
+            if cid == SELF_CANONICAL and main is not None:
+                valid.append(SELF_CANONICAL)
+            elif any(member.id == cid for member in members):
+                valid.append(cid)
+        if valid and len(valid) == len(ids) and len(valid) >= 2:
+            return _multi(profile, valid, source)
+        return _clarify(
+            "stale_previous_target",
+            tuple((member.id, member.ad) for member in members),
+            "stale_previous_target",
+        )
     if hint == "kendim" or (main is not None and hint == main.id):
-        return TargetResolution("kendim", _self_label(profile), source)
+        if main is None:
+            return _clarify("unknown_hint", (), "unknown_hint")
+        return TargetResolution(SELF_CANONICAL, _self_label(profile), source, scope="self", member_ids=(SELF_CANONICAL,))
     for member in members:
         if member.id == hint:
-            return TargetResolution(member.id, member.ad, source)
-    return TargetResolution(
-        None,
-        "",
+            return _single(member, source)
+    return _clarify(
         "unknown_hint",
-        needs_clarification=True,
-        candidates=tuple((member.id, member.ad) for member in members),
-        referenced_someone_else=True,
-        reason="unknown_hint",
+        tuple((member.id, member.ad) for member in members),
+        "unknown_hint",
     )
+
+
+# ---- MULTI detection ---------------------------------------------------------
+
+def _has_conjunction(tokens: list[str]) -> bool:
+    if any(token in CONJUNCTION_TOKENS for token in tokens):
+        return True
+    if (tokens.count("de") + tokens.count("da")) >= 2:  # "ben de annem de"
+        return True
+    # comitative suffix ("-le"/"-la") on a person-referencing token ("eşimle").
+    for token in tokens:
+        if (token.endswith("le") or token.endswith("la")) and _is_person_token(token):
+            return True
+    return False
+
+
+def _is_person_token(token: str) -> bool:
+    if token in SELF_EXACT or any(token.startswith(prefix) for prefix in SELF_PREFIXES):
+        return True
+    for stems in MESSAGE_RELATION_STEMS.values():
+        if any(token.startswith(stem) for stem in stems):
+            return True
+    if token in CHILD_BARE or any(token.startswith(stem) for stem in (*CHILD_SINGULAR_STEMS, *CHILD_PLURAL_STEMS)):
+        return True
+    return False
+
+
+def _resolve_multi(
+    profile: KullaniciProfili,
+    tokens: list[str],
+    text: str,
+    detected: set[str],
+    child_singular: bool,
+    child_plural: bool,
+) -> TargetResolution | None:
+    """Return a MULTI/clarification resolution when the message explicitly names
+    2+ distinct persons joined by a conjunction; otherwise None (single logic)."""
+    if not _has_conjunction(tokens):
+        return None
+    members = list(profile.aile_uyeleri or [])
+    ids: list[str] = []
+    candidates: list[tuple[str, str]] = []
+    ambiguous = False
+
+    def add(cid: str) -> None:
+        if cid not in ids:
+            ids.append(cid)
+
+    if _has_self_reference(tokens):
+        add(SELF_CANONICAL)
+
+    for category in detected:
+        matches = [member for member in members if relation_category(member.yakinlik) == category]
+        if len(matches) == 1:
+            add(matches[0].id)
+        elif len(matches) > 1:
+            ambiguous = True
+            candidates.extend((member.id, member.ad) for member in matches)
+        else:
+            ambiguous = True
+
+    if child_plural:
+        kids = _children(members)
+        if kids:
+            for kid in kids:
+                add(kid.id)
+        else:
+            ambiguous = True
+    elif child_singular:
+        kids = _children(members)
+        if len(kids) == 1:
+            add(kids[0].id)
+        elif len(kids) > 1:
+            ambiguous = True
+            candidates.extend((kid.id, kid.ad) for kid in kids)
+        else:
+            ambiguous = True
+
+    for member in members:
+        if _name_match(member.ad, tokens, text):
+            add(member.id)
+
+    if len(ids) >= 2 and not ambiguous:
+        return _multi(profile, ids, "message_multi")
+    if ambiguous and (len(ids) >= 1 or candidates):
+        return _clarify("message_multi", candidates, "multi_ambiguous_member")
+    return None
 
 
 def resolve_target_from_message(
@@ -179,7 +384,7 @@ def resolve_target_from_message(
     client_hint: str = "kendim",
     previous_target: str | None = None,
 ) -> TargetResolution:
-    """Resolve the target profile for one chat turn. Fail-closed on ambiguity."""
+    """Resolve the target profile(s) for one chat turn. Fail-closed on ambiguity."""
     members = list(profile.aile_uyeleri or [])
     main = profile.ana_kullanici
     text = _norm(message)
@@ -187,98 +392,128 @@ def resolve_target_from_message(
 
     # 1) Explicit family-wide reference.
     if members and any(term in text for term in FAMILY_TERMS):
-        return TargetResolution("aile", "Tüm aile", "message_family")
+        return _family()
 
     detected = _detected_relation_categories(tokens)
+    child_singular = _mentions_child_singular(tokens)
+    child_plural = _mentions_child_plural(tokens)
 
-    # 2) Explicit name match (family member first, then the account owner). If the
-    #    message ALSO carries a relationship that disagrees with the named person's
-    #    stored yakinlik, do not guess — ask for clarification (NAME != RELATIONSHIP).
-    for member in members:
-        if _name_match(member.ad, tokens, text):
-            if detected and relation_category(member.yakinlik) not in detected:
-                return TargetResolution(
-                    None, "", "name_relationship_conflict", needs_clarification=True,
-                    candidates=((member.id, member.ad),), referenced_someone_else=True,
-                    reason="name_relationship_conflict",
-                )
-            return TargetResolution(member.id, member.ad, "message_name")
+    # 2) Explicit MULTI set (2+ distinct persons joined by a conjunction).
+    multi = _resolve_multi(profile, tokens, text, detected, child_singular, child_plural)
+    if multi is not None:
+        return multi
+
+    # 3) Explicit name match. All matches are collected: duplicates ask instead
+    #    of silently picking the first. A name whose stored relationship disagrees
+    #    with a relationship also present in the message asks (NAME != RELATIONSHIP).
+    name_matches = _name_matches(members, tokens, text)
+    if name_matches:
+        if len(name_matches) > 1:
+            return _clarify("message_name", ((m.id, m.ad) for m in name_matches), "duplicate_name")
+        member = name_matches[0]
+        if detected and relation_category(member.yakinlik) not in detected:
+            return _clarify("name_relationship_conflict", ((member.id, member.ad),), "name_relationship_conflict")
+        return _single(member, "message_name")
     if main is not None and _name_match(main.ad, tokens, text):
         if detected:
-            return TargetResolution(
-                None, "", "name_relationship_conflict", needs_clarification=True,
-                candidates=(), referenced_someone_else=True, reason="name_relationship_conflict_self",
-            )
-        return TargetResolution("kendim", main.ad, "message_name")
+            return _clarify("name_relationship_conflict", (), "name_relationship_conflict_self")
+        return TargetResolution("kendim", main.ad, "message_name", scope="self", member_ids=(SELF_CANONICAL,))
 
-    # 3) Relationship reference (before generic self so "oğluma ... bana"
+    # 4) Gender-neutral child reference ("çocuğum", "çocuklar").
+    if child_singular or child_plural:
+        kids = _children(members)
+        if not kids:
+            return _clarify(
+                "message_relationship",
+                ((m.id, m.ad) for m in members),
+                "child_without_metadata" if members else "child_without_family",
+            )
+        if child_plural:
+            if len(kids) == 1:
+                return _single(kids[0], "message_relationship")
+            return _multi(profile, [kid.id for kid in kids], "message_relationship")
+        if len(kids) == 1:
+            return _single(kids[0], "message_relationship")
+        return _clarify("message_relationship", ((k.id, k.ad) for k in kids), "multiple_children")
+
+    # 5) Relationship reference (before generic self so "oğluma ... bana"
     #    resolves to the son, not the owner).
     if detected:
         matches = [m for m in members if relation_category(m.yakinlik) in detected]
         if len(matches) == 1:
-            return TargetResolution(matches[0].id, matches[0].ad, "message_relationship", referenced_someone_else=True)
+            return _single(matches[0], "message_relationship")
         if len(matches) > 1:
-            return TargetResolution(
-                None, "", "message_relationship", needs_clarification=True,
-                candidates=tuple((m.id, m.ad) for m in matches),
-                referenced_someone_else=True, reason="multiple_relationship_matches",
-            )
-        return TargetResolution(
-            None, "", "message_relationship", needs_clarification=True,
-            candidates=tuple((m.id, m.ad) for m in members),
-            referenced_someone_else=True,
-            reason="relationship_without_metadata" if members else "relationship_without_family",
+            return _clarify("message_relationship", ((m.id, m.ad) for m in matches), "multiple_relationship_matches")
+        return _clarify(
+            "message_relationship",
+            ((m.id, m.ad) for m in members),
+            "relationship_without_metadata" if members else "relationship_without_family",
         )
 
-    # 4) Explicit self reference switches back to the owner.
+    # 6) Explicit self reference switches back to the owner.
     if _has_self_reference(tokens):
-        return TargetResolution("kendim", _self_label(profile), "message_self")
+        return _self(profile, "message_self")
 
-    # 5) A third-person pronoun inherits only a valid, previously resolved
-    #    non-owner target. Without such an antecedent we must ask instead of
-    #    guessing which family member the user meant.
+    # 7) A third-person pronoun inherits only a valid, previously resolved
+    #    non-owner target. Without such an antecedent we ask.
     if _has_other_pronoun(tokens):
         if previous_target and previous_target not in {"kendim", "aile"}:
             pronoun = _hint_resolution(profile, previous_target, "pronoun")
             if not pronoun.needs_clarification:
                 return pronoun
-        return TargetResolution(
-            None,
-            "",
-            "pronoun_ambiguous",
-            needs_clarification=True,
-            candidates=tuple((member.id, member.ad) for member in members),
-            referenced_someone_else=True,
-            reason="pronoun_without_antecedent",
-        )
+        return _clarify("pronoun_ambiguous", ((m.id, m.ad) for m in members), "pronoun_without_antecedent")
 
-    # 6) Turkish often omits the subject pronoun. A first-person verb such as
-    #    "acıktım" or "ne yemeliyim" is therefore an explicit semantic switch
-    #    to the speaker even when the previous turn concerned a family member.
+    # 8) Turkish often omits the subject pronoun; a first-person verb ("acıktım")
+    #    is an explicit switch to the speaker.
     if _has_implicit_self_reference(tokens):
-        return TargetResolution("kendim", _self_label(profile), "message_self_implicit")
+        return _self(profile, "message_self_implicit")
 
-    # 7) No person reference: keep the previous target (continuity), never a
-    #    silent owner fallback. Only fall to the client hint when there is no
-    #    conversation target yet.
+    # 9) Bare plural group ("bize", "ikimize") with no explicit set: honor an
+    #    explicit group already in context — a prior group target OR an explicit
+    #    group selection in the client hint ("aile"/multi). A single active profile
+    #    is NOT a group, so ASK rather than silently using it. Never a silent single.
+    if _mentions_ambiguous_group(tokens):
+        for candidate, candidate_source in ((previous_target, "continuity"), (client_hint, "client_hint")):
+            if candidate and (candidate == "aile" or candidate.startswith(MULTI_PREFIX)):
+                resolved = _hint_resolution(profile, candidate, candidate_source)
+                if not resolved.needs_clarification:
+                    return resolved
+        return _clarify("ambiguous_group", ((m.id, m.ad) for m in members), "ambiguous_group")
+
+    # 10) No person reference: keep the previous target (continuity), never a
+    #     silent owner fallback. Fall to the client hint only with no prior target.
     if previous_target:
         continuity = _hint_resolution(profile, previous_target, "continuity")
-        if not continuity.needs_clarification:  # previous target still valid
+        if not continuity.needs_clarification:
             return continuity
-        return TargetResolution(
-            None,
-            "",
-            "stale_previous_target",
-            needs_clarification=True,
-            candidates=tuple((member.id, member.ad) for member in members),
-            referenced_someone_else=True,
-            reason="stale_previous_target",
-        )
+        return _clarify("stale_previous_target", ((m.id, m.ad) for m in members), "stale_previous_target")
     return _hint_resolution(profile, client_hint, "client_hint")
 
 
 def clarification_prompt(resolution: TargetResolution) -> str:
     """User-facing, Turkish clarification when the target is ambiguous."""
+    if resolution.reason in {"ambiguous_group", "multi_ambiguous_member"}:
+        names = [name for _id, name in resolution.candidates if str(name or "").strip()]
+        if resolution.reason == "ambiguous_group":
+            return (
+                "Bunu kimler için değerlendireyim? Yalnız senin için mi, seçtiğin birkaç kişi için mi, "
+                "yoksa tüm aile için mi? Doğru kişileri seçmem sağlık bilgilerini karıştırmamam için önemli."
+            )
+        if names:
+            listed = ", ".join(names)
+            return f"Birden fazla profil eşleşiyor ({listed}). Hangi kişileri kastediyorsun?"
+        return "Kimleri kastettiğini tam çıkaramadım. İlgili profilleri tek tek söyler misin?"
+    if resolution.reason == "duplicate_name":
+        names = [name for _id, name in resolution.candidates if str(name or "").strip()]
+        listed = ", ".join(names) if names else "aynı isimli profiller"
+        return (
+            f"Aynı isimde birden fazla profil var ({listed}). Hangi profili kastediyorsun? "
+            "Doğru kişiyi seçmem sağlık bilgilerini karıştırmamam için önemli."
+        )
+    if resolution.reason == "multiple_children":
+        names = [name for _id, name in resolution.candidates if str(name or "").strip()]
+        listed = (", ".join(names[:-1]) + " mi, " + names[-1] + " mi") if len(names) > 1 else ((names[0] + " için mi") if names else "")
+        return f"Hangi çocuğun için değerlendireyim? {listed}?".strip()
     names = [name for _id, name in resolution.candidates if str(name or "").strip()]
     if names:
         listed = (", ".join(names[:-1]) + " mi, " + names[-1] + " mi") if len(names) > 1 else (names[0] + " için mi")

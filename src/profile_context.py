@@ -17,7 +17,7 @@ from src.messages import PROFIL_BULUNAMADI, PROFIL_GEREKLI
 from src.models import AileUyesi, KullaniciProfili
 from src.privacy.redaction import redact_text
 from src.profil_utils import aile_profil_ozeti_olustur, profil_ozeti_olustur
-from src.target_resolution import TargetResolution, resolve_target_from_message
+from src.target_resolution import TargetResolution, parse_multi_key, resolve_target_from_message
 
 
 def _dedupe(values: list[str]) -> tuple[str, ...]:
@@ -142,6 +142,29 @@ def _resolve_members(profile: KullaniciProfili, requested_target: str) -> tuple[
         return members, "family", "Tüm Aile", "family", "aile", None
 
     main = profile.ana_kullanici
+
+    if target.startswith("multi:"):
+        # An explicit set of two or more members. Canonical (sorted) order makes
+        # the member list, target key, and fingerprint independent of the order
+        # the people were mentioned in the message.
+        canonical = sorted(dict.fromkeys(parse_multi_key(target)))
+        selected: list[AileUyesi] = []
+        labels: list[str] = []
+        for cid in canonical:
+            if cid == "kendim":
+                if main is None:
+                    raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
+                selected.append(main)
+                labels.append("Sen")
+            else:
+                member = next((item for item in profile.aile_uyeleri if item.id == cid), None)
+                if member is None:
+                    raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
+                selected.append(member)
+                labels.append(member.ad)
+        if len(selected) < 2:
+            raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
+        return selected, target, " + ".join(labels), "multi", target, None
     if target == "kendim" or (main is not None and target == main.id):
         if main is None:
             raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
@@ -180,7 +203,23 @@ def resolve_profile_snapshot_from_profile(
         for member in members
         if member.notlar
     ])
-    summary = aile_profil_ozeti_olustur(profile) if target_scope == "family" else profil_ozeti_olustur(members[0])
+    if target_scope == "family":
+        summary = aile_profil_ozeti_olustur(profile)
+    elif target_scope == "multi":
+        # Per-person breakdown (each member's own constraints) plus a combined
+        # safety directive. The union above (diseases/allergies/...) still drives
+        # the deterministic RuleEngine; this text lets the model word per-person
+        # adaptations without losing anyone's restriction.
+        lines = ["SEÇİLİ KİŞİLER ORTAK İSTEĞİ:"]
+        lines.extend(f"- {profil_ozeti_olustur(member)}" for member in members)
+        lines.append(
+            "Öneri, seçili kişilerin TÜM alerji/hastalık/ilaç kısıtlarına AYNI ANDA uymalı. "
+            "Ortak güvenli bir taban seçenek öner; gerekiyorsa kişi bazlı küçük uyarlama belirt. "
+            "Hepsine aynı anda güvenli tek bir seçenek yoksa bunu söyle ve ayrı uyarlamalar öner."
+        )
+        summary = "\n".join(lines)
+    else:
+        summary = profil_ozeti_olustur(members[0])
     return ResolvedProfileSnapshot(
         account_id=account_id,
         target_id=target_id,

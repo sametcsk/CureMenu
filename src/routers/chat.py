@@ -373,6 +373,9 @@ def _chat_stream_response(
 ) -> StreamingResponse:
     headers: dict[str, str] = {}
     if snapshot is not None:
+        # Header values must be latin-1 safe; the target key/scope are ASCII. The
+        # human label (which may contain Turkish characters and member names) is
+        # built on the client from currentProfile, never sent in a header.
         headers["X-CureMenu-Resolved-Target"] = str(snapshot.target_key)
         headers["X-CureMenu-Target-Scope"] = str(snapshot.target_scope)
     if resolution is not None:
@@ -406,6 +409,35 @@ def _guardrail_block_state(initial_state: dict, content: str) -> dict:
         "uzman_onerisi": None, "risk_score": confidence["medical_risk"], "confidence": confidence, "citations": []
     })
     return blocked_state
+
+_CONFLICT_NEGATIONS = {"yok", "yokmus", "degil", "kalmadi", "gecti", "gecmis"}
+
+
+def _profile_conflict_answer(snapshot: ResolvedProfileSnapshot | None, message: str) -> str | None:
+    """When the message denies a *registered* allergy/disease, do not silently
+    drop it. The structured profile stays source-of-truth; ask the user to update
+    it from the profile page instead of overriding critical health data in chat.
+    """
+    if snapshot is None:
+        return None
+    text = _normalized_message(message)
+    tokens = text.split()
+    has_negation = any(token in _CONFLICT_NEGATIONS for token in tokens) or any(
+        token.startswith("birak") for token in tokens
+    )
+    if not has_negation:
+        return None
+    for term in (*snapshot.allergies, *snapshot.diseases):
+        term_norm = _normalized_message(term)
+        stems = [word[:5] for word in term_norm.split() if len(word) >= 4]
+        if any(stem and stem in text for stem in stems):
+            return (
+                f"Profilinde “{term}” kayıtlı görünüyor. Güvenlik açısından, bu bilgi "
+                "profil sayfandan güncellenene kadar önerilerde dikkate almaya devam edeceğim. "
+                "Artık geçerli değilse lütfen profilinden güncelle; ona göre değerlendireyim."
+            )
+    return None
+
 
 def _is_small_talk(message: str) -> bool:
     text = _normalized_message(message)
@@ -1115,6 +1147,26 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
             yield _sse("done")
 
         return _chat_stream_response(artifact_stream(), snapshot, target_resolution)
+
+    # Registered health data is source-of-truth: if the message denies a recorded
+    # allergy/disease, surface a notice and keep applying it, rather than silently
+    # honoring the chat message. (Audit P2-a.)
+    conflict_answer = _profile_conflict_answer(snapshot, req.mesaj)
+    if conflict_answer:
+        conflict_state = _simple_chat_state(initial_state, conflict_answer)
+        decision_record = build_decision_record(conflict_state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=conflict_answer)
+        bg_tasks.add_task(klinik_karar_kaydet, decision_record)
+        _schedule_turn_commit(
+            bg_tasks, telefon=telefon, snapshot=snapshot, user_message=req.mesaj,
+            answer_text=conflict_answer, turn=resolved_turn, response_path="profile_conflict",
+            plan=local_intent_plan,
+        )
+
+        async def conflict_stream():
+            yield _sse("message", {"chunk": conflict_answer})
+            yield _sse("done")
+
+        return _chat_stream_response(conflict_stream(), snapshot, target_resolution)
 
     # Everyday conversation must be resolved before generic input/rule safety.
     # Risky food questions return None here and continue to the explicit safety gate below.

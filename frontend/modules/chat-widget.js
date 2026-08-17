@@ -61,12 +61,27 @@ window.ChatWidget = {
         const canonicalTarget = String(target || "").trim();
         if (!canonicalTarget) return;
         this.activeTarget = canonicalTarget;
+        // The backend resolves the target (self/single/multi/family); the human
+        // label is built here from currentProfile so member names never travel in
+        // an HTTP header. Multi keys look like "multi:kendim+<memberId>".
         const main = window.currentProfile?.ana_kullanici;
-        const member = (window.currentProfile?.aile_uyeleri || [])
-            .find(item => String(item?.id) === canonicalTarget);
-        const label = canonicalTarget === "kendim" || canonicalTarget === String(main?.id || "")
-            ? `${main?.ad || window.AuthManager?.getUser?.()?.kullanici_adi || "Ben"} için`
-            : (canonicalTarget === "aile" ? "Tüm aile için" : `${member?.ad || "Seçili kişi"} için`);
+        const members = window.currentProfile?.aile_uyeleri || [];
+        const nameFor = id => {
+            if (id === "kendim" || id === String(main?.id || "")) {
+                return main?.ad || window.AuthManager?.getUser?.()?.kullanici_adi || "Ben";
+            }
+            const found = members.find(item => String(item?.id) === id);
+            return found?.ad || "Seçili kişi";
+        };
+        let label;
+        if (canonicalTarget.startsWith("multi:")) {
+            const parts = canonicalTarget.slice("multi:".length).split("+").filter(Boolean).map(nameFor);
+            label = `${parts.join(" + ")} için`;
+        } else if (canonicalTarget === "aile") {
+            label = "Tüm aile için";
+        } else {
+            label = `${nameFor(canonicalTarget)} için`;
+        }
         const headerChip = this.root?.querySelector('[data-cm-header-context]');
         if (headerChip) headerChip.textContent = label;
     },
