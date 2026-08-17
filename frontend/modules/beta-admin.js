@@ -207,10 +207,17 @@
       <div class="turn bot"><div class="who">CureMenu ${errorBadge(turn)}</div><pre>${esc(turn.output)}</pre>${truncationNote(turn)}</div>`;
   }
 
-  function closeThread() { byId('thread-overlay').classList.add('hidden'); }
+  function closeThread() {
+    byId('thread-overlay').classList.add('hidden');
+    byId('thread-body').innerHTML = '';  // don't keep a closed conversation around
+    byId('thread-status').textContent = '';
+  }
   byId('thread-close').addEventListener('click', closeThread);
   byId('thread-overlay').addEventListener('click', (event) => {
     if (event.target === byId('thread-overlay')) closeThread();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !byId('thread-overlay').classList.contains('hidden')) closeThread();
   });
 
   function updatePager(total) {

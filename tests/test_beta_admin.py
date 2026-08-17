@@ -239,6 +239,12 @@ def test_conversation_requires_id(client, admin_on):
     assert res["success"] is False and res["turns"] == []
 
 
+def test_conversation_unknown_id_returns_empty_not_error(client, admin_on):
+    res = client.get("/api/admin/beta/conversation?conversation_id=does-not-exist-xyz", headers=ADMIN).json()
+    assert res["success"] is True
+    assert res["turns"] == []  # UI shows "kayıt bulunamadı", never a silent blank
+
+
 def test_conversation_groups_by_id_chronologically(client, admin_on):
     _seed_conversation()
     data = client.get("/api/admin/beta/conversation?conversation_id=conv-x", headers=ADMIN).json()
