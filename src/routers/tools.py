@@ -30,7 +30,7 @@ from src.grocery.profile import grocery_profile_facts
 from src.profile_context import ResolvedProfileSnapshot, resolve_profile_snapshot
 from src.medical_knowledge.safety_checker import check_medication_food_safety, medication_safety_events
 from src.quality.rule_engine import RuleEngine
-from src.quality.food_constraints import resolve_food_constraints_from_snapshot, generate_with_safety_repair
+from src.quality.food_constraints import resolve_food_constraints_from_snapshot
 from src.quality.evidence import SafetyFinding, coerce_finding, render_finding
 from src.quality.recommendation_contract import extract_recommendation_safety_input
 from src.quality.scope_policy import profile_scope_review_reasons
@@ -1117,7 +1117,21 @@ async def plan_action(request: Request, req: PlanActionRequest, bg_tasks: Backgr
         profil_ozeti = snapshot.profile_summary
     except HTTPException:
         return JSONResponse(status_code=400, content={"success": False, "detail": "Profil bulunamadı."})
-    
+
+    # Central food constraints for every generation branch here (recipe /
+    # alternative / snack). Same contract as weekly plan & fridge.
+    plan_hard_avoid = list(resolve_food_constraints_from_snapshot(snapshot).hard_avoid_ingredients)
+
+    def _constrained_instruction(base: str, repair_reasons=None) -> str:
+        extra = ""
+        if plan_hard_avoid:
+            extra += ("\nABSOLUTE FORBIDDEN — do NOT use these deterministically verified food "
+                      "terms or foods derived from them: " + ", ".join(plan_hard_avoid))
+        if repair_reasons:
+            extra += ("\nThe previous draft failed a deterministic safety check. "
+                      "Do NOT use: " + "; ".join(repair_reasons))
+        return base + extra
+
     if req.action_type == "recipe":
         instruction = """The user is requesting a detailed recipe for the meal given in the untrusted user data.
 Write a healthy, delicious, and detailed recipe for that meal, calculated specifically for this user's profile. Include estimated macronutrient values.
@@ -1132,23 +1146,29 @@ List every ingredient that will actually be used, including sauces, oils, garnis
   "portion": "Porsiyon ve yaklaşık makro bilgisi",
   "why_it_fits": "Profil açısından kısa ve temkinli açıklama"
 }"""
-        messages = _plan_action_messages(
-            instruction,
-            profile_context=profil_ozeti,
-            action_data={"meal_text": req.meal_text},
-        )
-        
         try:
-            tarif_cevap_obj = await _run_model_with_timeout(messages)
-            raw_recipe = parse_llm_response(tarif_cevap_obj)
-            try:
-                recipe = _parse_json_model(raw_recipe, RecipeRecommendation)
-            except (json.JSONDecodeError, ValueError):
-                return JSONResponse(
-                    status_code=502,
-                    content={"success": False, "detail": "Tarif güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin."},
+            recipe = None
+            safety = None
+            repair_reasons = None
+            for _attempt in range(3):  # GENERATE + bounded REPAIR (initial + 2)
+                messages = _plan_action_messages(
+                    _constrained_instruction(instruction, repair_reasons),
+                    profile_context=profil_ozeti,
+                    action_data={"meal_text": req.meal_text},
                 )
-            safety = _check_tool_output_safety(snapshot, recipe)
+                tarif_cevap_obj = await _run_model_with_timeout(messages)
+                raw_recipe = parse_llm_response(tarif_cevap_obj)
+                try:
+                    recipe = _parse_json_model(raw_recipe, RecipeRecommendation)
+                except (json.JSONDecodeError, ValueError):
+                    return JSONResponse(
+                        status_code=502,
+                        content={"success": False, "detail": "Tarif güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin."},
+                    )
+                safety = _check_tool_output_safety(snapshot, recipe)
+                if not safety["blocked"]:
+                    break
+                repair_reasons = safety["reasons"]
             if safety["blocked"]:
                 return JSONResponse(
                     status_code=422,
@@ -1180,26 +1200,33 @@ WARNING: Provide your response ONLY in the following JSON format. Do not use mar
     {{"eski": "Mercimek Çorbası (300 kcal...)", "yeni": "Ezogelin Çorbası (300 kcal...)", "ingredients": ["kırmızı mercimek", "bulgur", "zeytinyağı"]}}
   ]
 }}"""
-        messages = _plan_action_messages(
-            instruction,
-            profile_context=profil_ozeti,
-            action_data={"meal_text": req.meal_text, "plan_text": req.plan_text},
-        )
         try:
-            cevap_obj = await _run_model_with_timeout(messages)
-            cevap = parse_llm_response(cevap_obj)
-            try:
-                payload = _parse_json_model(cevap, AlternativeMealsPayload)
-            except (json.JSONDecodeError, ValueError):
-                return JSONResponse(
-                    status_code=502,
-                    content={
-                        "success": False,
-                        "detail": "Alternatif öğün güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin.",
-                    },
+            payload = None
+            safety = None
+            repair_reasons = None
+            for _attempt in range(3):  # GENERATE + bounded REPAIR (initial + 2)
+                messages = _plan_action_messages(
+                    _constrained_instruction(instruction, repair_reasons),
+                    profile_context=profil_ozeti,
+                    action_data={"meal_text": req.meal_text, "plan_text": req.plan_text},
                 )
+                cevap_obj = await _run_model_with_timeout(messages)
+                cevap = parse_llm_response(cevap_obj)
+                try:
+                    payload = _parse_json_model(cevap, AlternativeMealsPayload)
+                except (json.JSONDecodeError, ValueError):
+                    return JSONResponse(
+                        status_code=502,
+                        content={
+                            "success": False,
+                            "detail": "Alternatif öğün güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin.",
+                        },
+                    )
+                safety = _check_tool_output_safety(snapshot, payload)
+                if not safety["blocked"]:
+                    break
+                repair_reasons = safety["reasons"]
             data = payload.model_dump()
-            safety = _check_tool_output_safety(snapshot, payload)
             if safety["blocked"]:
                 return JSONResponse(
                     status_code=422,
@@ -1242,30 +1269,39 @@ Put only foods that will actually be used under ingredients. Keep safety explana
     }}
   ]
 }}"""
-        messages = _plan_action_messages(
-            instruction,
-            profile_context=profil_ozeti,
-            action_data={"plan_text": req.plan_text},
-        )
         try:
-            snack_cevap_obj = await _run_model_with_timeout(messages)
-            snack_metni = parse_llm_response(snack_cevap_obj)
-            json_match = re.search(r'\{.*\}', snack_metni, re.DOTALL)
-            if not json_match:
-                return JSONResponse(
-                    status_code=502,
-                    content={"success": False, "detail": "Atıştırmalık önerileri güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin."},
+            payload = None
+            data = None
+            safety = None
+            snack_metni = ""
+            repair_reasons = None
+            for _attempt in range(3):  # GENERATE + bounded REPAIR (initial + 2)
+                messages = _plan_action_messages(
+                    _constrained_instruction(instruction, repair_reasons),
+                    profile_context=profil_ozeti,
+                    action_data={"plan_text": req.plan_text},
                 )
-            try:
-                raw_data = json.loads(json_match.group(0))
-                payload = SnackSuggestionsPayload.model_validate(raw_data)
-            except (json.JSONDecodeError, ValueError):
-                return JSONResponse(
-                    status_code=502,
-                    content={"success": False, "detail": "Atıştırmalık önerileri güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin."},
-                )
-            data = payload.model_dump()
-            safety = _check_tool_output_safety(snapshot, data)
+                snack_cevap_obj = await _run_model_with_timeout(messages)
+                snack_metni = parse_llm_response(snack_cevap_obj)
+                json_match = re.search(r'\{.*\}', snack_metni, re.DOTALL)
+                if not json_match:
+                    return JSONResponse(
+                        status_code=502,
+                        content={"success": False, "detail": "Atıştırmalık önerileri güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin."},
+                    )
+                try:
+                    raw_data = json.loads(json_match.group(0))
+                    payload = SnackSuggestionsPayload.model_validate(raw_data)
+                except (json.JSONDecodeError, ValueError):
+                    return JSONResponse(
+                        status_code=502,
+                        content={"success": False, "detail": "Atıştırmalık önerileri güvenli ve düzenli bir biçimde oluşturulamadı. Lütfen tekrar deneyin."},
+                    )
+                data = payload.model_dump()
+                safety = _check_tool_output_safety(snapshot, data)
+                if not safety["blocked"]:
+                    break
+                repair_reasons = safety["reasons"]
             if safety["blocked"]:
                 return JSONResponse(
                     status_code=422,

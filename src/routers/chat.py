@@ -28,6 +28,7 @@ from src.graph import app as langgraph_app
 from src.nodes import _quality_profile_from_snapshot
 from src.quality.policy_engine import PolicyEngine
 from src.quality.rule_engine import RuleEngine
+from src.quality.food_constraints import resolve_food_constraints_from_snapshot
 from src.quality.evidence import (
     SafetyFinding,
     carry_findings_without_new_evidence,
@@ -1303,29 +1304,59 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
         "meal_recommendation", "meal_followup", "dessert_craving", "coffee_habit",
         "explanation_followup", "emotional_support", "product_question",
     } and not plan_requires_safety_gate(intent_plan):
+        # Central food constraints for the generative food intents: the
+        # generator is TOLD which deterministically-verified foods to avoid
+        # (food terms only, never raw disease/allergy names), then an unsafe
+        # draft is REPAIRED (bounded) rather than immediately dropped to a
+        # template. The deterministic safety gate itself is unchanged.
+        food_constraints = resolve_food_constraints_from_snapshot(snapshot)
+
+        async def _generate_natural(feedback):
+            return await asyncio.wait_for(
+                run_in_threadpool(
+                    generate_curebot_natural_answer,
+                    intent_plan,
+                    snapshot,
+                    req.mesaj,
+                    "Önceki konuşma bağlamı yerel etiketlerle mevcut." if conversation_context.has_previous_turn else "",
+                    conversation_context,
+                    resolved_turn,
+                    food_constraints,
+                    feedback,
+                ),
+                timeout=6,
+            )
+
         if normalized_message(req.mesaj).strip() in {"öner", "oner", "alternatif", "başka", "baska", "detay", "tarif"} and not sohbet_gecmisi:
             natural_answer = "Neye alternatif istediğini tam çıkaramadım. İstersen tatlı, kahvaltı ya da akşam yemeği olarak uyarlayabilirim."
         else:
             natural_answer = None
         try:
             if natural_answer is None:
-                natural_answer = await asyncio.wait_for(
-                    run_in_threadpool(
-                        generate_curebot_natural_answer,
-                        intent_plan,
-                        snapshot,
-                        req.mesaj,
-                        "Önceki konuşma bağlamı yerel etiketlerle mevcut." if conversation_context.has_previous_turn else "",
-                        conversation_context,
-                        resolved_turn,
-                    ),
-                    timeout=6,
-                )
+                natural_answer = await _generate_natural(None)
         except Exception:
             natural_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context, resolved_turn)
         if natural_answer:
             natural_state = _simple_chat_state(initial_state, natural_answer)
+            # GENERATE -> SAFETY -> bounded REPAIR (<=2). Feed the deterministic
+            # rejection reasons back as food-only repair feedback so the model
+            # produces a genuinely safe alternative instead of "you can't eat this".
+            repair_count = 0
+            while natural_state.get("guvenli_mi") is False and repair_count < 2:
+                repair_count += 1
+                repair_feedback = [
+                    r for r in (natural_state.get("uyari_mesaji") or "").split("\n") if r.strip()
+                ] or [str(natural_state.get("uyari_mesaji") or "")]
+                try:
+                    repaired = await _generate_natural(repair_feedback)
+                except Exception:
+                    break
+                if not repaired:
+                    break
+                natural_answer = repaired
+                natural_state = _simple_chat_state(initial_state, natural_answer)
             if natural_state.get("guvenli_mi") is False:
+                # Never leave the user with a bare refusal: deterministic safe template.
                 natural_answer = natural_fallback_answer(intent_plan, snapshot, conversation_context, resolved_turn)
                 natural_state = _simple_chat_state(initial_state, natural_answer)
                 if natural_state.get("guvenli_mi") is False:

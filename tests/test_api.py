@@ -1574,7 +1574,7 @@ def test_chat_family_followup_and_nutrition_overwhelm_use_structured_context(cli
 
     generated_calls = []
 
-    def natural_answer(plan, _snapshot, _message, _safety_context="", conversation_context=None, resolved_turn=None):
+    def natural_answer(plan, _snapshot, _message, _safety_context="", conversation_context=None, resolved_turn=None, food_constraints=None, repair_feedback=None):
         generated_calls.append((plan, conversation_context))
         if plan.intent == "meal_followup":
             return "Önceki akşam öğününü tamamlayalım.\n\n- **Ekmek:** İçeriği net, ölçülü bir seçenek kullanabilirsiniz."

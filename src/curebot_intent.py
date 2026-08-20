@@ -814,6 +814,8 @@ def generate_curebot_natural_answer(
     safety_context: str = "",
     conversation_context: CureBotConversationContext | dict | None = None,
     resolved_turn: ResolvedTurn | None = None,
+    food_constraints=None,
+    repair_feedback=None,
 ) -> str:
     previous_context = _coerce_conversation_context(conversation_context)
     flags = {
@@ -837,6 +839,31 @@ def generate_curebot_natural_answer(
         if resolved_turn is not None
         else {}
     )
+    # Central, deterministic food constraints (food terms only — never raw
+    # disease/allergy names). Same contract as the weekly plan / fridge / plan
+    # actions: the generator is TOLD which verified foods to avoid; it is never
+    # asked to do clinical reasoning.
+    forbidden_terms = list(getattr(food_constraints, "hard_avoid_ingredients", ()) or ())
+    caution_terms = list(getattr(food_constraints, "caution_ingredients", ()) or ())
+    constraint_block = ""
+    if forbidden_terms:
+        constraint_block += (
+            "\nABSOLUTE FORBIDDEN INGREDIENTS (deterministically verified from the profile; "
+            "never suggest these foods or anything derived from them): "
+            + ", ".join(str(t) for t in forbidden_terms)
+        )
+    if caution_terms:
+        constraint_block += (
+            "\nUSE WITH CAUTION (prefer safe alternatives; only mention with an explicit caution): "
+            + ", ".join(str(t) for t in caution_terms)
+        )
+    repair_reasons = [str(r) for r in (repair_feedback or []) if str(r or "").strip()]
+    if repair_reasons:
+        constraint_block += (
+            "\nYOUR PREVIOUS DRAFT WAS BLOCKED by the deterministic safety check. "
+            "Do NOT repeat these foods; suggest a genuinely DIFFERENT and safe option instead: "
+            + "; ".join(repair_reasons)
+        )
     prompt = f"""You are CureBot, a warm Turkish nutrition decision-support assistant.
 Return only the final Turkish answer to the user.
 USER MESSAGE: {safe_message}
@@ -845,6 +872,7 @@ LOCAL CONVERSATION LABELS: {json.dumps(context_labels, ensure_ascii=False)}
 CANONICAL CURRENT TURN: {json.dumps(resolved_labels, ensure_ascii=False)}
 MINIMAL PROFILE FACTS: {json.dumps(flags, ensure_ascii=False)}
 SAFETY CONTEXT: {safety_context[:500]}
+STRUCTURED FOOD CONSTRAINTS (deterministic; obey exactly, do not reason clinically about them):{constraint_block or " none"}
 RESPONSE VARIATION SEED: {datetime.now().minute}-{secrets.randbelow(10000)}
 
 Rules: sound natural and varied. Default to 60-110 words; only use 120-180 words if the user asks for detail, a recipe, or an explanation. Never write one long paragraph.

@@ -129,6 +129,25 @@ def _quality_profile_from_snapshot(snapshot: dict | None) -> dict:
     }
 
 
+def _central_hard_avoid_terms(snapshot: dict | None) -> list[str]:
+    """Deterministic hard-avoid FOOD terms for the graph generators, from the
+    same central resolver used by weekly plan / fridge / plan actions. Returns
+    verified food terms only — never raw disease/allergy names."""
+    from src.quality.food_constraints import resolve_food_constraints
+    profile = _quality_profile_from_snapshot(snapshot)
+    return list(resolve_food_constraints(profile).hard_avoid_ingredients)
+
+
+def _central_forbidden_note(snapshot: dict | None) -> str:
+    terms = _central_hard_avoid_terms(snapshot)
+    if not terms:
+        return ""
+    return (
+        "\nABSOLUTE FORBIDDEN foods (deterministically verified from the profile; "
+        "never suggest these or foods derived from them): " + ", ".join(terms)
+    )
+
+
 def supervisor_node(state: AgentState) -> dict:
     """
     Dinamik Medical Supervisor Agent.
@@ -213,7 +232,10 @@ def beslenme_uzmani(state: AgentState) -> dict:
     Buradan sadece tek bir net yemek önerisi dönmesini bekliyoruz.
     """
     hata_notu = f"Previous error to avoid: {state.get('uyari_mesaji')}. Do NOT suggest this meal again!" if state.get('uyari_mesaji') else ""
-    
+    # Central deterministic food constraints (food terms only, no clinical reasoning
+    # asked of the model) — same source as weekly plan / fridge / plan actions.
+    hata_notu += _central_forbidden_note(state.get("resolved_profile_snapshot"))
+
     hafiza_metni = _hafiza_metni_olustur(state, "No past negative feedback or lab records.")
     sohbet_gecmisi_str = _sohbet_gecmisi_metni(state, son_n=5)
             
@@ -789,8 +811,9 @@ def mutfak_sefi_node(state: AgentState) -> dict:
     If they have diabetes, remove added sugar.
     
     IMPORTANT: Write the entire recipe in Turkish language.
+    {_central_forbidden_note(state.get("resolved_profile_snapshot"))}
     """
-    
+
     cevap = invoke_with_model_fallback(prompt)
     tarif = parse_llm_response(cevap)
     return _governance_update(
