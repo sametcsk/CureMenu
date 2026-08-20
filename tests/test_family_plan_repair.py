@@ -60,6 +60,30 @@ def _add_member(client, ad, yakinlik, alerjiler=None):
     })
 
 
+@patch("src.routers.tools.extract_ingredients_from_image_base64", return_value="süt, domates, ekmek, zeytin")
+@patch("src.routers.tools.mutfak_asistani")
+def test_fridge_recipe_repairs_unsafe_then_safe(mock_recipe, mock_extract, client):
+    import json as _json
+    login_with_profile(client, "5556000010", "Fridge Repair", alerjiler=["inek sütü proteini"])
+    unsafe = _json.dumps({"name": "Peynirli tost", "ingredients": ["peynir", "ekmek"], "preparation": "Hazırla."})
+    safe = _json.dumps({"name": "Domates salatası", "ingredients": ["domates", "zeytin"], "preparation": "Karıştır."})
+    mock_recipe.side_effect = [unsafe, safe]  # first uses cheese -> blocked, repair -> safe
+    res = client.post("/api/fridge-scan", json={"kimin_icin": "kendim", "image_base64": "data:image/jpeg;base64,abc"})
+    assert res.status_code == 200 and res.json()["success"] is True
+    assert mock_recipe.call_count == 2
+
+
+@patch("src.routers.tools.extract_ingredients_from_image_base64", return_value="süt, peynir")
+@patch("src.routers.tools.mutfak_asistani")
+def test_fridge_recipe_all_repairs_unsafe_blocks(mock_recipe, mock_extract, client):
+    import json as _json
+    login_with_profile(client, "5556000011", "Fridge Block", alerjiler=["inek sütü proteini"])
+    mock_recipe.return_value = _json.dumps({"name": "Peynirli tabak", "ingredients": ["peynir", "ekmek"], "preparation": "Hazırla ve servis et."})
+    res = client.post("/api/fridge-scan", json={"kimin_icin": "kendim", "image_base64": "data:image/jpeg;base64,abc"})
+    assert res.status_code == 422  # never-safe -> fail-closed, gate unchanged
+    assert mock_recipe.call_count == 3  # initial + 2 bounded repairs
+
+
 def test_hard_avoid_terms_are_foods_not_disease_names():
     from src.quality.rule_engine import profile_hard_avoid_ingredients
     terms = profile_hard_avoid_ingredients({"alerjiler": [], "hastaliklar": ["diyabet", "hipertansiyon"]})

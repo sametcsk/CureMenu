@@ -29,7 +29,8 @@ from src.grocery.health import assess_item_health
 from src.grocery.profile import grocery_profile_facts
 from src.profile_context import ResolvedProfileSnapshot, resolve_profile_snapshot
 from src.medical_knowledge.safety_checker import check_medication_food_safety, medication_safety_events
-from src.quality.rule_engine import RuleEngine, profile_hard_avoid_ingredients
+from src.quality.rule_engine import RuleEngine
+from src.quality.food_constraints import resolve_food_constraints_from_snapshot, generate_with_safety_repair
 from src.quality.evidence import SafetyFinding, coerce_finding, render_finding
 from src.quality.recommendation_contract import extract_recommendation_safety_input
 from src.quality.scope_policy import profile_scope_review_reasons
@@ -604,13 +605,11 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
     gecmis = await run_in_threadpool(hafizadakini_getir, snapshot.memory_namespace, "yemek", 10)
     hafiza_metni = " ".join(gecmis) if gecmis else "Kayıtlı geri bildirim yok."
     
-    # Hard-avoid FOOD terms come only from the deterministic food-constraint
-    # registry (the same layer that blocks unsafe drafts), for the profile's union
-    # allergies/diseases. Raw disease names are NOT forbidden foods — they stay as
-    # personalization context in the profile summary. No clinical rule is invented.
-    hard_avoid = profile_hard_avoid_ingredients(
-        {"alerjiler": list(snapshot.allergies), "hastaliklar": list(snapshot.diseases)}
-    )
+    # Central food-constraint layer: PROFILE DATA -> STRUCTURED FOOD CONSTRAINTS.
+    # hard_avoid holds only registry/catalog-verified food terms; raw disease names
+    # stay as health labels/context, never forbidden foods.
+    food_constraints = resolve_food_constraints_from_snapshot(snapshot)
+    hard_avoid = list(food_constraints.hard_avoid_ingredients)
     try:
         plan = await asyncio.wait_for(
             run_in_threadpool(
@@ -904,12 +903,29 @@ async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: Backgr
         if not malzemeler or len(malzemeler) < 3:
             return {"success": False, "detail": BUZDOLABI_FOTO_OKUNAMADI}
             
-        raw_recipe = await asyncio.wait_for(
-            run_in_threadpool(mutfak_asistani, profil_ozeti, malzemeler),
-            timeout=MODEL_CALL_TIMEOUT_SECONDS,
-        )
+        # Central food constraints drive a constraint-aware GENERATE + bounded REPAIR
+        # loop (same contract as weekly plan). Deterministic safety is unchanged.
+        food_constraints = resolve_food_constraints_from_snapshot(snapshot)
+        hard_avoid = list(food_constraints.hard_avoid_ingredients)
+
+        async def _generate_recipe(extra_avoid):
+            avoid = list(dict.fromkeys([*hard_avoid, *(extra_avoid or [])]))
+            raw = await asyncio.wait_for(
+                run_in_threadpool(mutfak_asistani, profil_ozeti, malzemeler, avoid),
+                timeout=MODEL_CALL_TIMEOUT_SECONDS,
+            )
+            return _parse_json_model(raw, RecipeRecommendation)
+
         try:
-            recipe = _parse_json_model(raw_recipe, RecipeRecommendation)
+            # Detected fridge items are context, not ingredients used by the generated
+            # recipe; safety checks the recipe, not what merely sits in the fridge.
+            recipe = await _generate_recipe(None)
+            safety = _check_tool_output_safety(snapshot, recipe)
+            repair = 0
+            while safety["blocked"] and repair < 2:
+                repair += 1
+                recipe = await _generate_recipe(safety["reasons"])
+                safety = _check_tool_output_safety(snapshot, recipe)
         except (json.JSONDecodeError, ValueError):
             return JSONResponse(
                 status_code=502,
@@ -921,13 +937,6 @@ async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: Backgr
             for item in str(malzemeler).replace("\n", ",").split(",")
             if item.strip(" .;:-")
         ]
-        safety = _check_tool_output_safety(
-            snapshot,
-            # Detected fridge items are context, not ingredients used by the
-            # generated recipe. Checking them here falsely blocks a safe recipe
-            # whenever an unsafe item is merely present in the fridge.
-            recipe,
-        )
         if safety["blocked"]:
             return JSONResponse(
                 status_code=422,
