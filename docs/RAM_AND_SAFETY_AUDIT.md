@@ -16,10 +16,10 @@ Bu doküman **analiz/rapordur**; üretim davranışı değiştirilmedi (ilke: ö
 | image pipeline peak | +24 | transient |
 | image ref bırak + gc | −8 | RSS tam düşmüyor |
 
-### Kök neden (leak DEĞİL)
-1. **Baseline ~390MB:** eager import maliyeti (langchain + chromadb + google-genai + PIL + fastapi). Sabit.
-2. **+~628MB ilk RAG'de:** **lokal HuggingFace embedding modeli** (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`) + **torch runtime** + **Chroma koleksiyonu** belleğe yükleniyor (lazy singleton `_get_embeddings`, [src/memory.py:64](../src/memory.py); process ömrü boyunca kalıcı). "restart→~0.4GB, zamanla ~1.8–2.4GB'a yükselir" gözleminin **doğrudan kaynağı** budur.
-3. **4–4.5GB spike'lar:** eşzamanlı LLM/RAG/görsel isteklerinin transient allocation'ları + **Python/glibc allocator high-water RSS** — objeler GC ile serbest kalır ama RSS OS'e geri dönmez. Bu **memory leak değildir**.
+### Kök neden (lokal ölçümle DOĞRULANAN + KESİNLEŞMEYEN)
+1. **Baseline ~390MB (doğrulandı):** eager import maliyeti (langchain + chromadb + google-genai + PIL + fastapi). Sabit.
+2. **+~628MB ilk RAG'de (DOĞRULANDI):** **lokal HuggingFace embedding modeli** (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`) + **torch runtime** + **Chroma koleksiyonu** belleğe yükleniyor (lazy singleton `_get_embeddings`, [src/memory.py:64](../src/memory.py); process ömrü boyunca kalıcı). Lokal ölçümde **kalıcı baseline artışının ana nedeni** olarak doğrulandı; "restart→~0.4GB, zamanla ~1.8–2.4GB'a yükselir" gözlemiyle tutarlı.
+3. **4–4.5GB Railway spike'ları (KESİNLEŞMEDİ):** Bu spike'ların gerçek bir **leak** mi, **allocator high-water RSS** mi, yoksa **concurrency** transient'i mi olduğu **canlı Railway probe olmadan kesinleştirilemez**. Lokal image-pipeline ölçümü bitmap'in transient olduğunu ve gc sonrası RSS'in tam düşmediğini gösterdi (allocator davranışına işaret) — fakat kesin ayrım için Railway'de `memory_probe` çalıştırılmalı. Bu belirsizlik nedeniyle **RAM için kod optimizasyonu yapılmadı**.
 
 ### Doğrulanan yapı
 - **Tek Uvicorn worker** (`--workers 1`, [scripts/start_railway.py](../scripts/start_railway.py)) → RAM **worker duplikasyonundan değil**.

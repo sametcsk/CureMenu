@@ -121,9 +121,14 @@ async function openSmartGrocery() {
     // new device, regardless of the volatile fingerprint. localStorage below is
     // only a fast display cache.
     try {
-        const { res: savedRes, data: savedData } = await safeFetchJson(
-            API + '/api/smart-grocery/saved?kimin_icin=' + encodeURIComponent(target)
-        );
+        let planRef = '';
+        try {
+            const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(window.currentPlanText || ''));
+            planRef = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+        } catch (e) { /* plan_ref optional */ }
+        const savedUrl = API + '/api/smart-grocery/saved?kimin_icin=' + encodeURIComponent(target)
+            + (planRef ? '&plan_ref=' + planRef : '');
+        const { res: savedRes, data: savedData } = await safeFetchJson(savedUrl);
         if (savedRes.ok && savedData?.saved) {
             renderSmartGrocery(savedData.saved);
             return;

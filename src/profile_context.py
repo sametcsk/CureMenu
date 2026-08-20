@@ -148,6 +148,9 @@ def _resolve_members(profile: KullaniciProfili, requested_target: str) -> tuple[
         # the member list, target key, and fingerprint independent of the order
         # the people were mentioned in the message.
         canonical = sorted(dict.fromkeys(parse_multi_key(target)))
+        # Canonical, order-independent key so "multi:A+B" and "multi:B+A" resolve to
+        # the same target_key (and therefore the same saved artifact / history bucket).
+        canonical_key = "multi:" + "+".join(canonical)
         selected: list[AileUyesi] = []
         labels: list[str] = []
         for cid in canonical:
@@ -164,7 +167,7 @@ def _resolve_members(profile: KullaniciProfili, requested_target: str) -> tuple[
                 labels.append(member.ad)
         if len(selected) < 2:
             raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)
-        return selected, target, " + ".join(labels), "multi", target, None
+        return selected, canonical_key, " + ".join(labels), "multi", canonical_key, None
     if target == "kendim" or (main is not None and target == main.id):
         if main is None:
             raise HTTPException(status_code=400, detail=PROFIL_GEREKLI)

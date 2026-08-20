@@ -1,3 +1,4 @@
+import hashlib
 import json
 import sqlite3
 
@@ -16,6 +17,12 @@ from src.grocery.schemas import SmartGroceryRequest, SmartGroceryResponse
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+
+def _plan_ref(weekly_plan: str) -> str:
+    """Stable fingerprint of the weekly plan a shopping list was built from, so a
+    saved list is not shown against a different plan."""
+    return hashlib.sha256((weekly_plan or "").encode("utf-8")).hexdigest()[:16]
 
 
 @router.post("/api/smart-grocery", response_model=SmartGroceryResponse)
@@ -70,6 +77,7 @@ async def smart_grocery(
             telefon, snapshot.target_key, "shopping_list",
             json.dumps({**basket, "decision_id": decision_record["decision_id"],
                         "target_scope": snapshot.target_scope}, ensure_ascii=False),
+            ref_id=_plan_ref(req.weekly_plan or ""),
             conn=db,
         )
     except Exception as exc:
@@ -80,16 +88,23 @@ async def smart_grocery(
 @router.get("/api/smart-grocery/saved")
 async def smart_grocery_saved(
     kimin_icin: str = "kendim",
+    plan_ref: str = "",
     telefon: str = Depends(get_current_user),
     db: sqlite3.Connection = Depends(get_db),
 ):
-    """Restore the persisted shopping list for the resolved target (source-of-truth)."""
+    """Restore the persisted shopping list for the resolved target (source-of-truth).
+
+    When the caller passes the current plan's `plan_ref`, a saved list built from a
+    different plan is reported as stale instead of shown, mirroring the client's
+    existing freshness check."""
     snapshot = resolve_profile_snapshot(telefon, kimin_icin, db=db)
     saved = artifact_getir(telefon, snapshot.target_key, "shopping_list", conn=db)
     if not saved:
         return {"success": True, "saved": None}
+    if plan_ref and saved.get("ref_id") and saved["ref_id"] != plan_ref:
+        return {"success": True, "saved": None, "stale": True}
     try:
         payload = json.loads(saved["data_json"])
     except (TypeError, ValueError):
         payload = None
-    return {"success": True, "saved": payload, "updated_at": saved["updated_at"]}
+    return {"success": True, "saved": payload, "updated_at": saved["updated_at"], "plan_ref": saved.get("ref_id")}

@@ -128,6 +128,15 @@ def test_media_validation(client):
     assert client.get("/api/media?media_type=menu&kimin_icin=kendim").json()["media"] is None
 
 
+def test_media_size_cap_rejects_oversized_preview(client):
+    from src.routers.media import MAX_MEDIA_BYTES
+    login_with_profile(client, "5557000016", "Media Cap")
+    big = "data:image/jpeg;base64," + base64.b64encode(b"x" * (MAX_MEDIA_BYTES + 1000)).decode()
+    assert client.post("/api/media", json={"media_type": "menu", "kimin_icin": "kendim", "image_base64": big}).status_code == 413
+    # nothing stored for an oversized upload
+    assert client.get("/api/media?media_type=menu&kimin_icin=kendim").json()["media"] is None
+
+
 # ---- Weekly plan multi-target (tools resolver, single common family plan) -----
 def test_weekly_multi_target_unions_only_selected_members(client):
     from src.database import get_connection
@@ -145,3 +154,31 @@ def test_weekly_multi_target_unions_only_selected_members(client):
     assert "süt" not in subset.allergies                                 # child NOT in the subset
     assert subset.target_scope == "multi" and subset.target_key.startswith("multi:")
     assert set(single.allergies) == {"süt"}                              # single member isolated
+
+
+def test_multi_target_key_is_canonical_order_independent(client):
+    from src.database import get_connection
+    from src.profile_context import resolve_profile_snapshot
+
+    login_with_profile(client, "5557000021", "Plan Canon")
+    spouse = _add_member(client, ad="Es", yakinlik="es")
+    child = _add_member(client, ad="Cocuk", yakinlik="ogul", alerjiler=["süt"])
+    with get_connection(None) as db:
+        forward = resolve_profile_snapshot("5557000021", f"multi:{spouse}+{child}", db=db)
+        reverse = resolve_profile_snapshot("5557000021", f"multi:{child}+{spouse}", db=db)
+    # Same semantic set -> one canonical key/bucket (no duplicate saved artifact).
+    assert forward.target_key == reverse.target_key
+    assert forward.profile_fingerprint == reverse.profile_fingerprint
+
+
+def test_member_with_minimal_fields_resolves_without_crash(client):
+    from src.database import get_connection
+    from src.profile_context import resolve_profile_snapshot
+
+    login_with_profile(client, "5557000022", "Plan Minimal")
+    # Member with only the required fields (no diseases/allergies/meds).
+    minimal = _add_member(client, ad="Sade", yakinlik="kardes")
+    with get_connection(None) as db:
+        snap = resolve_profile_snapshot("5557000022", minimal, db=db)
+    assert snap.target_scope == "member" and snap.target_key == minimal
+    assert snap.allergies == () and snap.diseases == ()
