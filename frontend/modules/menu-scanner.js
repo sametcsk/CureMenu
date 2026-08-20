@@ -254,12 +254,18 @@ function _renderMenuSections({ warningText, sections, note, raw }) {
     return warningHtml + `<div class="grid gap-3">${sectionsHtml}</div>` + noteHtml;
 }
 
-function renderMenuAnalysis(data) {
+async function renderMenuAnalysis(data) {
     const result = document.getElementById('menuScanResult');
     const context = document.getElementById('menuTargetContext');
     if (context) context.innerHTML = `<div class="rounded-lg bg-primary-container/30 px-4 py-3 text-on-surface"><strong>${escapeHtml(data.analysis_title || 'Menü analizi')}</strong> · ${escapeHtml(data.target_name || 'Seçili kişi')} için değerlendirildi</div>`;
+    // Uploaded menu photo (fresh scan via inline preview, history via media_uid).
+    const preview = await resolveHistoryPreview({
+        image_preview_base64: data.image_preview_base64,
+        media_uid: data.media_uid,
+        media_type: data.media_type || 'menu',
+    });
     const parsed = _parseMenuSections(data.analiz || '');
-    result.innerHTML = `<div class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-6 shadow-sm">${_renderMenuSections(parsed)}</div>`;
+    result.innerHTML = `<div class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-6 shadow-sm">${preview ? `<img src="${preview}" alt="Yüklenen menü fotoğrafı" class="mb-4 aspect-video w-full max-w-md rounded-lg object-cover"/>` : ''}${_renderMenuSections(parsed)}</div>`;
 }
 
 function _menuPreviewText(raw) {
@@ -289,12 +295,17 @@ async function loadMenuHistory(delayMs = 0) {
             const preview = _menuPreviewText(log.asistan_ciktisi || '');
             return `<article class="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4"><div class="flex items-start justify-between gap-3"><div><strong>${escapeHtml(meta.restaurant_name || 'Menü analizi')}</strong><p class="text-sm text-on-surface-variant">${escapeHtml(meta.target_label || log.kullanici_adi || 'Hedef belirtilmemiş')} · ${new Date(log.tarih).toLocaleDateString('tr-TR')}</p></div><button class="btn-secondary px-3 py-2 text-sm" data-menu-history-index="${index}">Detayı aç</button></div><p class="mt-2 line-clamp-2 text-sm text-on-surface-variant">${escapeHtml(preview)}</p></article>`;
         }).join('') : '<p class="text-sm text-on-surface-variant">Henüz kayıtlı menü analizi yok.</p>';
-        list.querySelectorAll('[data-menu-history-index]').forEach(button => button.addEventListener('click', () => renderMenuAnalysis({ analysis_title: parseHistoryMetadata(rows[button.dataset.menuHistoryIndex].metadata).restaurant_name, target_name: parseHistoryMetadata(rows[button.dataset.menuHistoryIndex].metadata).target_label, analiz: rows[button.dataset.menuHistoryIndex].asistan_ciktisi || '' })));
+        list.querySelectorAll('[data-menu-history-index]').forEach(button => button.addEventListener('click', () => {
+            const row = rows[button.dataset.menuHistoryIndex];
+            const meta = parseHistoryMetadata(row.metadata);
+            renderMenuAnalysis({ analysis_title: meta.restaurant_name, target_name: meta.target_label, analiz: row.asistan_ciktisi || '', media_uid: meta.media_uid, media_type: meta.media_type || 'menu' });
+        }));
         if (delayMs === 0) { // target switch
             const resultDiv = document.getElementById('menuScanResult');
             if (resultDiv) {
                 if (rows.length > 0) {
-                    renderMenuAnalysis({ analysis_title: parseHistoryMetadata(rows[0].metadata).restaurant_name, target_name: parseHistoryMetadata(rows[0].metadata).target_label, analiz: rows[0].asistan_ciktisi || '' });
+                    const meta0 = parseHistoryMetadata(rows[0].metadata);
+                    renderMenuAnalysis({ analysis_title: meta0.restaurant_name, target_name: meta0.target_label, analiz: rows[0].asistan_ciktisi || '', media_uid: meta0.media_uid, media_type: meta0.media_type || 'menu' });
                 } else {
                     resultDiv.innerHTML = '<div class="p-8 text-center text-on-surface-variant"><span class="material-symbols-outlined text-5xl mb-3 opacity-50">restaurant_menu</span><p>Hedef için henüz menü analizi yok.</p></div>';
                 }
@@ -372,11 +383,13 @@ async function scanMenuImage(inputEl) {
     };
     reader.onload = async () => {
         try {
-            const base64 = String(reader.result).split(',')[1] || reader.result;
+            const fullDataUrl = String(reader.result);
+            const base64 = fullDataUrl.split(',')[1] || fullDataUrl;
+            const previewDataUrl = await createImagePreview(fullDataUrl);  // capped downscaled preview
             const { res, data } = await safeFetchJson(API + '/api/scan-menu-image', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ kimin_icin, image_base64: base64, restoran_adi }),
+                body: JSON.stringify({ kimin_icin, image_base64: base64, image_preview_base64: previewDataUrl || null, restoran_adi }),
             });
             if (data && data.success) {
                 window.CureMenuAnalytics?.track?.('menu_analysis_completed', { feature: 'menu_analysis', metadata: { method: 'photo', result: 'success' } });

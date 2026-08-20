@@ -205,6 +205,34 @@ def test_fridge_scan_stores_preview_by_uid_not_base64_in_log(mock_scan, mock_rec
     assert got and got["image_base64"].startswith("data:image/")
 
 
+@patch("src.routers.tools.menu_danismani", return_value="🟢 Daha uygun: Salata\n🔴 Kaçın: -")
+@patch("src.routers.tools.extract_text_from_image_base64", return_value="Menu: Salata, Corba, Izgara Tavuk")
+def test_menu_scan_stores_preview_by_uid_not_base64(mock_extract, mock_advisor, client):
+    from io import BytesIO
+    from PIL import Image
+    login_with_profile(client, "5557000040", "Menu Media")
+    buf = BytesIO(); Image.new("RGB", (48, 32), (9, 9, 9)).save(buf, "JPEG")
+    preview = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    resp = client.post("/api/scan-menu-image", json={"kimin_icin": "kendim", "image_base64": preview, "image_preview_base64": preview})
+    assert resp.status_code == 200 and resp.json()["success"] is True and resp.json()["media_uid"]
+    import json as _json
+    record = next(log for log in client.get("/api/history?page=1&limit=10").json()["loglar"] if log["eylem"] == "Menü Analizi")
+    metadata = _json.loads(record["metadata"])
+    assert metadata.get("media_uid") and metadata.get("media_type") == "menu"
+    assert "image_preview_base64" not in metadata  # no truncated base64 in the log
+    got = client.get(f"/api/media?media_type=menu&media_uid={metadata['media_uid']}").json()["media"]
+    assert got and got["image_base64"].startswith("data:image/")
+
+
+@patch("src.routers.tools.menu_danismani", return_value="Metin menü analizi")
+@patch("src.routers.tools.extract_text_from_image_base64", return_value="Menu text")
+def test_menu_scan_without_preview_needs_no_media(mock_extract, mock_advisor, client):
+    login_with_profile(client, "5557000041", "Menu No Media")
+    resp = client.post("/api/scan-menu-image", json={"kimin_icin": "kendim", "image_base64": "data:image/jpeg;base64,abc"})
+    assert resp.status_code == 200
+    assert resp.json().get("media_uid") is None  # no preview -> no media asset
+
+
 def test_media_size_cap_rejects_oversized_preview(client):
     from src.routers.media import MAX_MEDIA_BYTES
     login_with_profile(client, "5557000016", "Media Cap")

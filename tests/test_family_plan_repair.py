@@ -60,6 +60,37 @@ def _add_member(client, ad, yakinlik, alerjiler=None):
     })
 
 
+def test_hard_avoid_terms_are_foods_not_disease_names():
+    from src.quality.rule_engine import profile_hard_avoid_ingredients
+    terms = profile_hard_avoid_ingredients({"alerjiler": [], "hastaliklar": ["diyabet", "hipertansiyon"]})
+    # Raw disease names must NEVER be treated as forbidden ingredients.
+    assert "diyabet" not in terms and "hipertansiyon" not in terms
+
+
+def test_lactose_intolerance_yields_dairy_food_terms():
+    from src.quality.rule_engine import profile_hard_avoid_ingredients
+    # The deterministic registry classifies lactose intolerance under the allergy
+    # check field; the helper faithfully mirrors that (no new mapping invented).
+    terms = " ".join(profile_hard_avoid_ingredients({"alerjiler": ["laktoz intoleransı"], "hastaliklar": []}))
+    assert "peynir" in terms and "süt" in terms  # cheese/milk come from the deterministic catalog
+
+
+@patch("src.routers.tools.hafizadakini_getir", return_value=[])
+@patch("src.routers.tools.haftalik_plan_olustur")
+def test_lactose_family_plan_repairs_cheese_then_safe(mock_plan, mock_hafiza, client):
+    # Real user scenario: a family member is lactose-intolerant; a draft with cheese
+    # is blocked, then a bounded repair returns a safe plan (200). Safety unchanged.
+    # Lactose intolerance is recorded in the allergy-check field (registry classifies
+    # it there); the deterministic layer then blocks cheese/dairy.
+    login_with_profile(client, "5556000005", "Lactose Owner", alerjiler=["laktoz intoleransı"])
+    cheese = _plan("Peynirli taslak", ["peynir", "domates"])
+    safe = _plan("Sütsüz taslak", ["zeytin", "domates", "salatalık"])
+    mock_plan.side_effect = [cheese, safe]
+    res = client.post("/api/weekly-plan", json={"kimin_icin": "kendim"})
+    assert res.status_code == 200
+    assert res.json()["plan"]["summary"] == "Sütsüz taslak"
+
+
 @patch("src.routers.tools.hafizadakini_getir", return_value=[])
 @patch("src.routers.tools.haftalik_plan_olustur")
 def test_family_plan_enforces_union_restriction_of_selected_members(mock_plan, mock_hafiza, client):

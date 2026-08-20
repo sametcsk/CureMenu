@@ -163,6 +163,7 @@ class ScanMenuRequest(BaseModel):
 class ScanMenuImageRequest(BaseModel):
     kimin_icin: str = Field(default="kendim", min_length=1, max_length=128)
     image_base64: str = Field(..., min_length=1, max_length=8_000_100)
+    image_preview_base64: Optional[str] = Field(default=None, max_length=2_000_100)
     restoran_adi: Optional[str] = Field(default=None, max_length=120)
 
 class ShoppingListRequest(BaseModel):

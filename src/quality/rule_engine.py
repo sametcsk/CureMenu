@@ -324,3 +324,32 @@ class RuleEngine:
                 and finding["explanation"] in found_risks
             ],
         }
+
+
+def profile_hard_avoid_ingredients(profile: Dict[str, Any]) -> List[str]:
+    """Deterministic hard-avoid FOOD/ingredient terms for a profile.
+
+    Sourced only from the food-constraint registry: for each BLOCK rule whose
+    profile aliases match the profile's allergies/diseases, the offending
+    ingredient group's food aliases are collected, plus the literal allergy terms.
+    Raw disease names (e.g. "diyabet") are NEVER added — they are not foods; they
+    remain personalization context in the profile summary, not a forbidden list.
+    No new clinical mapping is invented here.
+    """
+    registry = load_food_constraint_registry()
+    groups = registry["ingredient_groups"]
+    avoid: list[str] = []
+    for rule in registry["profile_rules"]:
+        if rule.get("outcome") != "block":
+            continue
+        field = rule.get("profile_field")
+        profile_values = profile.get(field) or []
+        if not any(_contains_profile_alias(str(value), rule["profile_aliases"]) for value in profile_values):
+            continue
+        group_name = rule.get("ingredient_group")
+        group = groups.get(group_name) if group_name else None
+        if group:
+            avoid.extend(str(alias) for alias in (group.get("aliases") or []))
+    # Literal allergy values are themselves food/allergen terms.
+    avoid.extend(str(term) for term in (profile.get("alerjiler") or []))
+    return list(dict.fromkeys(term.strip() for term in avoid if str(term or "").strip()))

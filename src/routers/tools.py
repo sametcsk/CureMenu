@@ -29,7 +29,7 @@ from src.grocery.health import assess_item_health
 from src.grocery.profile import grocery_profile_facts
 from src.profile_context import ResolvedProfileSnapshot, resolve_profile_snapshot
 from src.medical_knowledge.safety_checker import check_medication_food_safety, medication_safety_events
-from src.quality.rule_engine import RuleEngine
+from src.quality.rule_engine import RuleEngine, profile_hard_avoid_ingredients
 from src.quality.evidence import SafetyFinding, coerce_finding, render_finding
 from src.quality.recommendation_contract import extract_recommendation_safety_input
 from src.quality.scope_policy import profile_scope_review_reasons
@@ -604,13 +604,13 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
     gecmis = await run_in_threadpool(hafizadakini_getir, snapshot.memory_namespace, "yemek", 10)
     hafiza_metni = " ".join(gecmis) if gecmis else "Kayıtlı geri bildirim yok."
     
-    # Hard-avoid terms come from the profile's own recorded restrictions (union of
-    # allergies + diseases for multi/family). Passed as explicit constraints to the
-    # FIRST prompt so the generator treats them as hard, not as notes. No clinical
-    # rule is invented here; the deterministic RuleEngine still verifies every draft.
-    hard_avoid = list(dict.fromkeys(
-        str(term) for term in (*snapshot.allergies, *snapshot.diseases) if str(term or "").strip()
-    ))
+    # Hard-avoid FOOD terms come only from the deterministic food-constraint
+    # registry (the same layer that blocks unsafe drafts), for the profile's union
+    # allergies/diseases. Raw disease names are NOT forbidden foods — they stay as
+    # personalization context in the profile summary. No clinical rule is invented.
+    hard_avoid = profile_hard_avoid_ingredients(
+        {"alerjiler": list(snapshot.allergies), "hastaliklar": list(snapshot.diseases)}
+    )
     try:
         plan = await asyncio.wait_for(
             run_in_threadpool(
@@ -831,7 +831,13 @@ async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks:
             analysis=analiz_sonucu,
             safety=safety,
         )
-        
+        # Same canonical media path as fridge: capped preview in the media store,
+        # referenced by uid in metadata (no base64 in the log -> no truncation).
+        media_uid, preview_data_url = _persist_preview_media(telefon, "menu", req.image_preview_base64)
+        if media_uid:
+            history_metadata["media_uid"] = media_uid
+            history_metadata["media_type"] = "menu"
+
         initial_state = create_initial_state(
             istek="Menü Fotoğrafı Tarama",
             profil_ozeti=profil_ozeti,
@@ -848,7 +854,7 @@ async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks:
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
         bg_tasks.add_task(etkilesim_logla, telefon, snapshot.target_name, "Menü Analizi", "Fotoğraf yüklendi", analiz_sonucu, json.dumps(history_metadata, ensure_ascii=False))
         
-        return {"success": True, "analiz": analiz_sonucu, "analysis_title": history_metadata["analysis_title"], "target_name": snapshot.target_name, "target_key": snapshot.target_key, "source": "photo"}
+        return {"success": True, "analiz": analiz_sonucu, "analysis_title": history_metadata["analysis_title"], "target_name": snapshot.target_name, "target_key": snapshot.target_key, "source": "photo", "image_preview_base64": preview_data_url or None, "media_uid": media_uid, "media_type": "menu" if media_uid else None}
     except ImageValidationError:
         return JSONResponse(
             status_code=422,
@@ -857,6 +863,9 @@ async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks:
     except Exception as e:
         log_failure(logger, "menu_image_scan", e, component="tools")
         return JSONResponse(status_code=503, content={"success": False, "detail": "Menü fotoğrafı şu anda okunamadı. Lütfen daha net bir görsel ile tekrar deneyin."})
+
+MAX_PREVIEW_MEDIA_BYTES = 900_000  # a downscaled preview, never the full upload
+
 
 def _persist_preview_media(telefon: str, media_type: str, preview_base64: str) -> tuple:
     """Store an uploaded preview in the media store (BLOB) and return
@@ -870,8 +879,12 @@ def _persist_preview_media(telefon: str, media_type: str, preview_base64: str) -
         return None, ""
     data_url = f"data:{mime};base64,{payload}"
     try:
+        data = base64.b64decode(payload)
+        if len(data) > MAX_PREVIEW_MEDIA_BYTES:
+            # Oversized preview: do not store the blob (still shown inline this turn).
+            return None, data_url
         media_uid = uuid.uuid4().hex
-        media_kaydet(telefon, media_uid, media_type, base64.b64decode(payload), content_type=mime)
+        media_kaydet(telefon, media_uid, media_type, data, content_type=mime)
         return media_uid, data_url
     except Exception as exc:
         log_failure(logger, "preview_media_persist", exc, component="tools")
