@@ -11,6 +11,19 @@ import pytest
 
 from test_api import login_with_profile
 
+_SAFE_PLAN = {
+    "days": [{
+        "day": "Pazartesi", "breakfast": "Yulaf", "lunch": "Salata", "dinner": "Izgara",
+        "snacks": [], "notes": [],
+        "meal_details": {
+            "breakfast": {"name": "Yulaf", "ingredients": ["yulaf", "elma"]},
+            "lunch": {"name": "Salata", "ingredients": ["marul", "domates"]},
+            "dinner": {"name": "Izgara", "ingredients": ["tavuk", "brokoli"]},
+        },
+    }],
+    "summary": "Haftalik plan hazir", "warnings": [], "confidence": {},
+}
+
 MENU_IMG = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff\xe0menu-bytes").decode()
 FRIDGE_IMG = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff\xe0fridge-bytes").decode()
 
@@ -89,6 +102,40 @@ def test_shopping_list_update_replaces(mock_g, mock_d, client):
     assert saved["recommendation_summary"] == "ikinci"
 
 
+# ---- Weekly plan persistence (backend source-of-truth; survives logout/login) ---
+@patch("src.routers.tools.hafizadakini_getir", return_value=[])
+@patch("src.routers.tools.haftalik_plan_olustur")
+def test_weekly_plan_persists_and_reloads(mock_plan, mock_hafiza, client):
+    login_with_profile(client, "5557000030", "WP Save")
+    mock_plan.return_value = _SAFE_PLAN
+    assert client.post("/api/weekly-plan", json={"kimin_icin": "kendim"}).status_code == 200
+    saved = client.get("/api/weekly-plan/saved?kimin_icin=kendim").json()
+    assert saved["saved"] and saved["saved"]["plan"]["summary"] == "Haftalik plan hazir"
+    assert saved["profile_changed"] is False
+
+
+@patch("src.routers.tools.hafizadakini_getir", return_value=[])
+@patch("src.routers.tools.haftalik_plan_olustur")
+def test_weekly_plan_account_isolation(mock_plan, mock_hafiza, client):
+    login_with_profile(client, "5557000031", "WP A")
+    mock_plan.return_value = _SAFE_PLAN
+    client.post("/api/weekly-plan", json={"kimin_icin": "kendim"})
+    login_with_profile(client, "5557000032", "WP B")  # different account
+    assert client.get("/api/weekly-plan/saved?kimin_icin=kendim").json()["saved"] is None
+
+
+@patch("src.routers.tools.hafizadakini_getir", return_value=[])
+@patch("src.routers.tools.haftalik_plan_olustur")
+def test_weekly_plan_survives_logout_login(mock_plan, mock_hafiza, client):
+    mock_plan.return_value = _SAFE_PLAN
+    login_with_profile(client, "5557000033", "WP Logout")
+    client.post("/api/weekly-plan", json={"kimin_icin": "kendim"})
+    client.post("/api/logout")  # logout clears client caches only
+    login_with_profile(client, "5557000033", "WP Logout")  # log back in
+    saved = client.get("/api/weekly-plan/saved?kimin_icin=kendim").json()
+    assert saved["saved"] and saved["saved"]["plan"]["summary"] == "Haftalik plan hazir"
+
+
 # ---- Media -------------------------------------------------------------------
 def test_media_save_load_roundtrip(client):
     login_with_profile(client, "5557000010", "Media Save")
@@ -126,6 +173,36 @@ def test_media_validation(client):
     assert client.post("/api/media", json={"media_type": "xxx", "kimin_icin": "kendim", "image_base64": MENU_IMG}).status_code == 400
     assert client.post("/api/media", json={"media_type": "menu", "kimin_icin": "kendim", "image_base64": "not-base64!!"}).status_code == 422
     assert client.get("/api/media?media_type=menu&kimin_icin=kendim").json()["media"] is None
+
+
+def test_media_by_uid_roundtrip_and_owner_isolation(client):
+    from src.database import media_kaydet
+    login_with_profile(client, "5557000017", "Media Uid")
+    media_kaydet("5557000017", "uid-abc", "fridge", b"\xff\xd8\xff\xe0blob", content_type="image/jpeg")
+    got = client.get("/api/media?media_type=fridge&media_uid=uid-abc").json()["media"]
+    assert got and base64.b64decode(got["image_base64"].split(",", 1)[1]) == b"\xff\xd8\xff\xe0blob"
+    login_with_profile(client, "5557000018", "Media Uid Other")  # different account
+    assert client.get("/api/media?media_type=fridge&media_uid=uid-abc").json()["media"] is None
+
+
+@patch("src.routers.tools.mutfak_asistani", return_value='{"name":"Salata","ingredients":["marul","domates"],"preparation":"Karıştır."}')
+@patch("src.routers.tools.extract_ingredients_from_image_base64", return_value="marul, domates")
+def test_fridge_scan_stores_preview_by_uid_not_base64_in_log(mock_scan, mock_recipe, client):
+    from io import BytesIO
+    from PIL import Image
+    login_with_profile(client, "5557000019", "Fridge Media")
+    buf = BytesIO(); Image.new("RGB", (48, 32), (10, 20, 30)).save(buf, "JPEG")
+    preview = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    resp = client.post("/api/fridge-scan", json={"kimin_icin": "kendim", "image_base64": preview, "image_preview_base64": preview})
+    assert resp.status_code == 200
+    import json as _json
+    record = next(log for log in client.get("/api/history?page=1&limit=10").json()["loglar"] if log["eylem"] == "Buzdolabı")
+    metadata = _json.loads(record["metadata"])
+    # Canonical path: reference by uid, and NO truncated base64 in the log.
+    assert metadata.get("media_uid") and metadata.get("media_type") == "fridge"
+    assert "image_preview_base64" not in metadata
+    got = client.get(f"/api/media?media_type=fridge&media_uid={metadata['media_uid']}").json()["media"]
+    assert got and got["image_base64"].startswith("data:image/")
 
 
 def test_media_size_cap_rejects_oversized_preview(client):

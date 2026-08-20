@@ -595,14 +595,29 @@ async function scanQRImage(inputEl) {
     }
 }
 
+// Resolve a history record's preview. Newer records reference the media store by
+// uid (the base64 is no longer stored in the log, where redaction truncated it);
+// older records may still carry an inline base64.
+async function resolveHistoryPreview(metadata) {
+    const inline = safePreviewDataUrl(metadata.image_preview_base64);
+    if (inline) return inline;
+    if (metadata.media_uid) {
+        try {
+            const url = API + '/api/media?media_type=' + encodeURIComponent(metadata.media_type || 'fridge')
+                + '&media_uid=' + encodeURIComponent(metadata.media_uid);
+            const { res, data } = await safeFetchJson(url);
+            if (res.ok && data?.media?.image_base64) return safePreviewDataUrl(data.media.image_base64);
+        } catch (e) { /* no preview */ }
+    }
+    return '';
+}
+
 function renderFridgeHistoryRecords(root, records) {
     fridgeHistoryRecords = records.slice(0, 3);
     root.innerHTML = fridgeHistoryRecords.map((log, index) => {
-        const metadata = parseHistoryMetadata(log.metadata);
-        const preview = safePreviewDataUrl(metadata.image_preview_base64);
         return `
         <button type="button" data-fridge-history-index="${index}" class="w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-4 text-left hover:bg-surface-container-low">
-            ${preview ? `<img src="${preview}" alt="Geçmiş buzdolabı fotoğrafı" class="mb-3 aspect-video w-full max-w-xs rounded-lg object-cover"/>` : ''}
+            <img data-fridge-thumb="${index}" alt="Geçmiş buzdolabı fotoğrafı" class="mb-3 aspect-video w-full max-w-xs rounded-lg object-cover hidden"/>
             <p class="text-xs text-on-surface-variant mb-2"><span class="font-medium text-primary">${escapeHtml(historyTargetName(log))} İçin</span> • ${escapeHtml(formatDecisionDate(log.tarih))}</p>
             <p class="font-medium text-on-surface">${escapeHtml(log.kullanici_girdisi || 'Buzdolabı analizi')}</p>
             <p class="mt-2 text-sm text-primary">Fotoğrafı ve tarifi aç</p>
@@ -610,6 +625,12 @@ function renderFridgeHistoryRecords(root, records) {
     }).join('');
     root.querySelectorAll('[data-fridge-history-index]').forEach(button => {
         button.addEventListener('click', () => showFridgeHistoryDetail(fridgeHistoryRecords[Number(button.dataset.fridgeHistoryIndex)]));
+    });
+    // Lazy-load each thumbnail from the media store (or inline legacy base64).
+    root.querySelectorAll('img[data-fridge-thumb]').forEach(async img => {
+        const log = fridgeHistoryRecords[Number(img.dataset.fridgeThumb)];
+        const url = await resolveHistoryPreview(parseHistoryMetadata(log?.metadata));
+        if (url) { img.src = url; img.classList.remove('hidden'); }
     });
 }
 
@@ -672,12 +693,12 @@ async function loadFridgeHistory(fallbackRecord = null) {
     }
 }
 
-function showFridgeHistoryDetail(log) {
+async function showFridgeHistoryDetail(log) {
     if (!log) return;
     const result = document.getElementById('fridgeScanResult');
     if (!result) return;
     const metadata = parseHistoryMetadata(log.metadata);
-    const preview = safePreviewDataUrl(metadata.image_preview_base64);
+    const preview = await resolveHistoryPreview(metadata);
     const detected = Array.isArray(metadata.detected_ingredients) ? metadata.detected_ingredients.join(', ') : (log.kullanici_girdisi || '');
     result.innerHTML = `<div class="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
         <section class="card p-5">${preview ? `<img src="${preview}" alt="Geçmiş buzdolabı fotoğrafı" class="mb-4 aspect-video w-full rounded-lg object-cover"/>` : ''}<h3 class="font-display text-xl font-bold">Gördüğüm malzemeler</h3><p class="mt-3 leading-7 text-on-surface-variant">${escapeHtml(detected)}</p></section>

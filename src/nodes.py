@@ -644,6 +644,7 @@ def haftalik_plan_olustur(
     is_regeneration: bool = False,
     plan_style: str = "balanced",
     plan_preferences: list[str] | None = None,
+    hard_avoid_terms: list[str] | None = None,
 ) -> str:
     """
     Tıbbi profil ve hafızadaki negatif geri bildirimleri (sevmediklerini) birleştirip,
@@ -659,11 +660,13 @@ def haftalik_plan_olustur(
     }
     current_season = season_by_month[date.today().month]
     preference_text = ", ".join(plan_preferences or []) or "none"
+    forbidden_text = ", ".join(dict.fromkeys(t for t in (hard_avoid_terms or []) if str(t or "").strip())) or "none"
     prompt = f"""
     You are an expert Clinical Dietitian.
-    
+
     PATIENT PROFILE (Diseases, Allergies): {profil_ozeti}
     PATIENT'S NEGATIVE FEEDBACK (Do not suggest these): {hafiza_metni}
+    ABSOLUTE FORBIDDEN — these recorded restrictions are HARD CONSTRAINTS, not notes. Do NOT use, in ANY meal/snack/dessert, these items or foods containing/derived from them: {forbidden_text}
     USER PLAN STYLE: {plan_style}
     USER GENERAL PREFERENCES: {preference_text}
     

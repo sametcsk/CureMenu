@@ -2,14 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks,
 from fastapi.responses import JSONResponse
 from fastapi.concurrency import run_in_threadpool
 import asyncio
+import base64
 import sqlite3
 import json
 import re
 import time
 import unicodedata
+import uuid
 
 from src.models import AlternativeMealsPayload, ComplianceRequest, FridgeScanRequest, GeriBildirimRequest, HaftalikPlanRequest, PlanActionRequest, RecipeRecommendation, ScanMenuImageRequest, ScanMenuRequest, SnackSuggestionsPayload
-from src.database import get_db, etkilesim_logla, klinik_karar_kaydet
+from src.database import get_db, etkilesim_logla, klinik_karar_kaydet, artifact_kaydet, artifact_getir, media_kaydet
 from src.auth import get_current_user
 from src.messages import PLAN_OLUSTURULAMADI, MENU_BOS, MENU_FOTO_OKUNAMADI, BUZDOLABI_FOTO_OKUNAMADI, PROFIL_GEREKLI, PROFIL_BULUNAMADI
 from src.nodes import haftalik_plan_olustur, mutfak_asistani
@@ -602,38 +604,50 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
     gecmis = await run_in_threadpool(hafizadakini_getir, snapshot.memory_namespace, "yemek", 10)
     hafiza_metni = " ".join(gecmis) if gecmis else "Kayıtlı geri bildirim yok."
     
+    # Hard-avoid terms come from the profile's own recorded restrictions (union of
+    # allergies + diseases for multi/family). Passed as explicit constraints to the
+    # FIRST prompt so the generator treats them as hard, not as notes. No clinical
+    # rule is invented here; the deterministic RuleEngine still verifies every draft.
+    hard_avoid = list(dict.fromkeys(
+        str(term) for term in (*snapshot.allergies, *snapshot.diseases) if str(term or "").strip()
+    ))
     try:
         plan = await asyncio.wait_for(
             run_in_threadpool(
-            haftalik_plan_olustur,
-            profil_ozeti,
-            hafiza_metni,
-            req.is_regeneration,
-            req.plan_style,
-            req.plan_preferences,
+                haftalik_plan_olustur,
+                profil_ozeti,
+                hafiza_metni,
+                req.is_regeneration,
+                req.plan_style,
+                req.plan_preferences,
+                hard_avoid,
             ),
             timeout=MODEL_CALL_TIMEOUT_SECONDS,
         )
         safety = _check_tool_output_safety(snapshot, plan)
-        if safety["blocked"]:
-            # A model draft can occasionally contain an allergen despite the
-            # profile prompt. Retry once with the concrete rejection reasons;
-            # never show the unsafe draft and never weaken the deterministic
-            # safety gate.
-            retry_feedback = (
+        # Bounded, constraint-aware repair loop: at most 2 repair attempts, each fed
+        # the concrete deterministic rejection reasons. Never shows an unsafe draft
+        # and never weakens the safety gate. Each attempt is a real model call, so it
+        # shows up in telemetry / retry cost.
+        max_repairs = 2
+        repair = 0
+        while safety["blocked"] and repair < max_repairs:
+            repair += 1
+            repair_feedback = (
                 f"{hafiza_metni}\n"
                 "Önceki taslak güvenlik kontrolünden geçmedi. "
-                "Aşağıdaki içerikleri yeni planda kesinlikle kullanma: "
+                "Aşağıdaki içerikleri yeni planda KESİNLİKLE kullanma: "
                 + "; ".join(safety["reasons"])
             )
             plan = await asyncio.wait_for(
                 run_in_threadpool(
-                haftalik_plan_olustur,
-                profil_ozeti,
-                retry_feedback,
-                True,
-                req.plan_style,
-                req.plan_preferences,
+                    haftalik_plan_olustur,
+                    profil_ozeti,
+                    repair_feedback,
+                    True,
+                    req.plan_style,
+                    req.plan_preferences,
+                    hard_avoid,
                 ),
                 timeout=MODEL_CALL_TIMEOUT_SECONDS,
             )
@@ -680,7 +694,25 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
             json.dumps(persisted_plan, ensure_ascii=False),
             json.dumps(plan_metadata, ensure_ascii=False),
         )
-        
+        # Backend source-of-truth: a safety-passed plan survives logout/login,
+        # F5, and route change (account + canonical target key). ref_id carries the
+        # profile fingerprint so a later profile change can be flagged, not lost.
+        try:
+            artifact_kaydet(
+                telefon, snapshot.target_key, "weekly_plan",
+                json.dumps({
+                    "plan": persisted_plan,
+                    "compatibility": compatibility,
+                    "target_scope": snapshot.target_scope,
+                    "target_key": snapshot.target_key,
+                    "profile_fingerprint": snapshot.profile_fingerprint,
+                }, ensure_ascii=False),
+                ref_id=snapshot.profile_fingerprint,
+                conn=db,
+            )
+        except Exception as persist_error:
+            log_failure(logger, "weekly_plan_persist", persist_error, component="tools")
+
         return {"ok": True, "plan": plan, "compatibility": compatibility}
     except Exception as e:
         log_failure(logger, "weekly_plan", e, component="tools")
@@ -691,6 +723,32 @@ async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: Back
                 "message": "Plan oluşturma servisi şu anda yanıt vermedi. Birazdan tekrar deneyebilirsiniz."
             }
         })
+
+@router.get("/api/weekly-plan/saved")
+async def weekly_plan_saved(
+    kimin_icin: str = "kendim",
+    telefon: str = Depends(get_current_user),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Restore the persisted weekly plan for the resolved target (source-of-truth).
+
+    A profile change after the plan was made does not delete it: the plan is
+    returned with `profile_changed=true` so the client can show the existing
+    caution instead of losing the data."""
+    try:
+        snapshot = resolve_profile_snapshot(telefon, kimin_icin, db=db)
+    except HTTPException:
+        return {"ok": True, "saved": None}
+    saved = artifact_getir(telefon, snapshot.target_key, "weekly_plan", conn=db)
+    if not saved:
+        return {"ok": True, "saved": None}
+    try:
+        payload = json.loads(saved["data_json"])
+    except (TypeError, ValueError):
+        return {"ok": True, "saved": None}
+    profile_changed = bool(saved.get("ref_id") and saved["ref_id"] != snapshot.profile_fingerprint)
+    return {"ok": True, "saved": payload, "updated_at": saved["updated_at"], "profile_changed": profile_changed}
+
 
 @router.post("/api/shopping-list")
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
@@ -800,6 +858,26 @@ async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks:
         log_failure(logger, "menu_image_scan", e, component="tools")
         return JSONResponse(status_code=503, content={"success": False, "detail": "Menü fotoğrafı şu anda okunamadı. Lütfen daha net bir görsel ile tekrar deneyin."})
 
+def _persist_preview_media(telefon: str, media_type: str, preview_base64: str) -> tuple:
+    """Store an uploaded preview in the media store (BLOB) and return
+    (media_uid, data_url). The uid is referenced from history metadata; the base64
+    is NEVER written to interaction_logs, where redaction would truncate it."""
+    if not preview_base64:
+        return None, ""
+    try:
+        payload, mime = _validate_base64_image(preview_base64)
+    except ImageValidationError:
+        return None, ""
+    data_url = f"data:{mime};base64,{payload}"
+    try:
+        media_uid = uuid.uuid4().hex
+        media_kaydet(telefon, media_uid, media_type, base64.b64decode(payload), content_type=mime)
+        return media_uid, data_url
+    except Exception as exc:
+        log_failure(logger, "preview_media_persist", exc, component="tools")
+        return None, data_url
+
+
 @router.post("/api/fridge-scan")
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
 async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
@@ -861,12 +939,12 @@ async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: Backgr
         decision_record = build_decision_record(state, telefon=telefon, kimin_icin=snapshot.target_key, final_answer=tarif)
         bg_tasks.add_task(klinik_karar_kaydet, decision_record)
         history_metadata = snapshot.history_metadata()
-        if req.image_preview_base64:
-            try:
-                preview_payload, preview_mime = _validate_base64_image(req.image_preview_base64)
-                history_metadata["image_preview_base64"] = f"data:{preview_mime};base64,{preview_payload}"
-            except ImageValidationError:
-                pass
+        # Preview is persisted in the media store and referenced by uid; the base64
+        # is NOT written to the log (redaction would truncate and break it).
+        media_uid, preview_data_url = _persist_preview_media(telefon, "fridge", req.image_preview_base64)
+        if media_uid:
+            history_metadata["media_uid"] = media_uid
+            history_metadata["media_type"] = "fridge"
         history_metadata["detected_ingredients"] = detected_ingredients
         history_metadata["recipe_ingredients"] = list(recipe.ingredients)
         etkilesim_logla(
@@ -878,14 +956,18 @@ async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: Backgr
             json.dumps(history_metadata, ensure_ascii=False),
             conn=db,
         )
-        
+
+        # The inline response carries the full preview for immediate display.
+        response_metadata = dict(history_metadata)
+        if preview_data_url:
+            response_metadata["image_preview_base64"] = preview_data_url
         history_record = {
             "eylem": "Buzdolabı",
             "kullanici_adi": snapshot.target_name,
             "kullanici_girdisi": malzemeler[:100],
             "asistan_ciktisi": tarif,
             "ai_yanit": tarif,
-            "metadata": history_metadata,
+            "metadata": response_metadata,
             "tarih": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
         return {
@@ -893,7 +975,7 @@ async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: Backgr
             "malzemeler": malzemeler,
             "tarif": tarif,
             "recipe_ingredients": list(recipe.ingredients),
-            "image_preview_base64": history_metadata.get("image_preview_base64"),
+            "image_preview_base64": preview_data_url or None,
             "history_record": history_record,
         }
     except ImageValidationError:

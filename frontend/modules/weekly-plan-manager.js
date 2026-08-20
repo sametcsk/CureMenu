@@ -139,6 +139,21 @@ window.WeeklyPlanManager = {
         const loadVersion = (this.planLoadVersion || 0) + 1;
         this.planLoadVersion = loadVersion;
 
+        // Backend source-of-truth first: a safety-passed plan survives logout/login
+        // (client caches are intentionally cleared on logout), F5, and route change,
+        // independent of localStorage. Never shows another account's/profile's plan.
+        try {
+            const { res: savedRes, data: savedData } = await safeFetchJson(
+                API + '/api/weekly-plan/saved?kimin_icin=' + encodeURIComponent(target)
+            );
+            if (savedRes.ok && savedData?.saved?.plan && loadVersion === this.planLoadVersion) {
+                const cacheKey0 = this.getPlanCacheKey(user, target);
+                localStorage.setItem(cacheKey0, JSON.stringify(savedData.saved.plan));
+                this.renderPlan(savedData.saved.plan);
+                return;
+            }
+        } catch (e) { /* fall through to cache/history */ }
+
         const cacheKey = this.getPlanCacheKey(user, target);
         const savedPlanStr = localStorage.getItem(cacheKey);
         if (savedPlanStr) {

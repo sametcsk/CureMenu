@@ -77,13 +77,19 @@ async def save_media(
 async def load_media(
     media_type: str,
     kimin_icin: str = "kendim",
+    media_uid: str = "",
     telefon: str = Depends(get_current_user),
     db: sqlite3.Connection = Depends(get_db),
 ):
     if media_type not in MEDIA_TYPES:
         raise HTTPException(status_code=400, detail="Geçersiz medya türü.")
-    snapshot = resolve_profile_snapshot(telefon, kimin_icin, db=db)
-    asset = media_getir(telefon, snapshot.target_key, media_type, conn=db)
+    if media_uid:
+        # Per-record lookup (history detail). Owner-scoped by telefon -> a user can
+        # only load their own media; no cross-account access.
+        asset = media_getir(telefon, media_uid, media_type, conn=db)
+    else:
+        snapshot = resolve_profile_snapshot(telefon, kimin_icin, db=db)
+        asset = media_getir(telefon, snapshot.target_key, media_type, conn=db)
     if not asset:
         return {"success": True, "media": None}
     encoded = base64.b64encode(asset["data"]).decode("ascii")
