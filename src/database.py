@@ -233,6 +233,38 @@ def _ensure_db():
         ON llm_usage (anon_user_id, ts)
     """)
 
+    # Backend source-of-truth for generated domain data (shopping list, etc.).
+    # One current artifact per (account, resolved target, type); the frontend keeps
+    # only a display cache. Scoped by account+target so nothing leaks across them.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS saved_artifacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telefon TEXT NOT NULL,
+            target_key TEXT NOT NULL,
+            artifact_type TEXT NOT NULL,
+            ref_id TEXT,
+            data_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE (telefon, target_key, artifact_type)
+        )
+    """)
+
+    # Dedicated media store (last/active image per account+target+type). Bytes live
+    # in a BLOB column here — NOT base64 in a TEXT log and NOT in localStorage.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS media_assets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telefon TEXT NOT NULL,
+            target_key TEXT NOT NULL,
+            media_type TEXT NOT NULL,
+            content_type TEXT,
+            data BLOB NOT NULL,
+            byte_size INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            UNIQUE (telefon, target_key, media_type)
+        )
+    """)
+
     conn.commit()
     conn.close()
     _db_initialized = True
@@ -595,6 +627,83 @@ def llm_usage_ozet(date_from: str = None, conn: sqlite3.Connection = None) -> di
         cursor.execute(f"SELECT COUNT(*), COUNT(DISTINCT anon_user_id) FROM llm_usage{where}", params)
         total_calls, total_users = cursor.fetchone()
     return {"by_feature": by_feature, "total_calls": int(total_calls or 0), "total_users": int(total_users or 0)}
+
+
+def artifact_kaydet(telefon: str, target_key: str, artifact_type: str, data_json: str,
+                    ref_id: str = None, conn: sqlite3.Connection = None) -> None:
+    """Upsert the current saved artifact for one (account, target, type)."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        _conn.execute(
+            """
+            INSERT INTO saved_artifacts (telefon, target_key, artifact_type, ref_id, data_json, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(telefon, target_key, artifact_type)
+            DO UPDATE SET ref_id = excluded.ref_id, data_json = excluded.data_json, updated_at = excluded.updated_at
+            """,
+            (telefon, target_key, artifact_type, ref_id, data_json, datetime.now().isoformat()),
+        )
+        _conn.commit()
+
+
+def artifact_getir(telefon: str, target_key: str, artifact_type: str, conn: sqlite3.Connection = None) -> dict:
+    """Return the saved artifact for (account, target, type), or None."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        cursor = _conn.cursor()
+        cursor.execute(
+            "SELECT ref_id, data_json, updated_at FROM saved_artifacts "
+            "WHERE telefon = ? AND target_key = ? AND artifact_type = ?",
+            (telefon, target_key, artifact_type),
+        )
+        row = cursor.fetchone()
+    if not row:
+        return None
+    return {"ref_id": row[0], "data_json": row[1], "updated_at": row[2]}
+
+
+def artifact_sil(telefon: str, target_key: str, artifact_type: str, conn: sqlite3.Connection = None) -> None:
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        _conn.execute(
+            "DELETE FROM saved_artifacts WHERE telefon = ? AND target_key = ? AND artifact_type = ?",
+            (telefon, target_key, artifact_type),
+        )
+        _conn.commit()
+
+
+def media_kaydet(telefon: str, target_key: str, media_type: str, data: bytes,
+                 content_type: str = "image/jpeg", conn: sqlite3.Connection = None) -> None:
+    """Upsert the last/active media asset for one (account, target, media_type)."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        _conn.execute(
+            """
+            INSERT INTO media_assets (telefon, target_key, media_type, content_type, data, byte_size, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(telefon, target_key, media_type)
+            DO UPDATE SET content_type = excluded.content_type, data = excluded.data,
+                          byte_size = excluded.byte_size, created_at = excluded.created_at
+            """,
+            (telefon, target_key, media_type, content_type, sqlite3.Binary(data), len(data), datetime.now().isoformat()),
+        )
+        _conn.commit()
+
+
+def media_getir(telefon: str, target_key: str, media_type: str, conn: sqlite3.Connection = None) -> dict:
+    """Return the active media asset for (account, target, media_type), or None."""
+    _ensure_db()
+    with get_connection(conn) as _conn:
+        cursor = _conn.cursor()
+        cursor.execute(
+            "SELECT content_type, data, byte_size, created_at FROM media_assets "
+            "WHERE telefon = ? AND target_key = ? AND media_type = ?",
+            (telefon, target_key, media_type),
+        )
+        row = cursor.fetchone()
+    if not row:
+        return None
+    return {"content_type": row[0], "data": bytes(row[1]), "byte_size": int(row[2] or 0), "created_at": row[3]}
 
 
 def log_sayisi_getir_db(telefon: str, conn: sqlite3.Connection = None) -> int:

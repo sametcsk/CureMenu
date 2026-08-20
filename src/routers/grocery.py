@@ -4,7 +4,8 @@ import sqlite3
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from src.auth import get_current_user
-from src.database import etkilesim_logla, get_db, klinik_karar_kaydet
+from src.database import artifact_getir, artifact_kaydet, etkilesim_logla, get_db, klinik_karar_kaydet
+from src.logger import get_logger, log_failure
 from src.governance.decision import build_decision_record
 from src.grocery.capability import build_smart_grocery
 from src.grocery.profile import grocery_profile_facts
@@ -14,6 +15,7 @@ from src.grocery.schemas import SmartGroceryRequest, SmartGroceryResponse
 
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 @router.post("/api/smart-grocery", response_model=SmartGroceryResponse)
@@ -56,8 +58,38 @@ async def smart_grocery(
         json.dumps(snapshot.history_metadata(), ensure_ascii=False),
     )
 
-    return {
+    result = {
         "success": True,
         "decision_id": decision_record["decision_id"],
         **basket,
     }
+    # Persist as backend source-of-truth (account + resolved target). The frontend
+    # keeps only a display cache; this survives F5 / route change / re-open.
+    try:
+        artifact_kaydet(
+            telefon, snapshot.target_key, "shopping_list",
+            json.dumps({**basket, "decision_id": decision_record["decision_id"],
+                        "target_scope": snapshot.target_scope}, ensure_ascii=False),
+            conn=db,
+        )
+    except Exception as exc:
+        log_failure(logger, "shopping_list_persist", exc, component="grocery")
+    return result
+
+
+@router.get("/api/smart-grocery/saved")
+async def smart_grocery_saved(
+    kimin_icin: str = "kendim",
+    telefon: str = Depends(get_current_user),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Restore the persisted shopping list for the resolved target (source-of-truth)."""
+    snapshot = resolve_profile_snapshot(telefon, kimin_icin, db=db)
+    saved = artifact_getir(telefon, snapshot.target_key, "shopping_list", conn=db)
+    if not saved:
+        return {"success": True, "saved": None}
+    try:
+        payload = json.loads(saved["data_json"])
+    except (TypeError, ValueError):
+        payload = None
+    return {"success": True, "saved": payload, "updated_at": saved["updated_at"]}

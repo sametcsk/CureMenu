@@ -76,6 +76,21 @@ function safePreviewDataUrl(value) {
     return /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(text) ? text : '';
 }
 
+// Fire-and-forget: persist the (downscaled) preview to the generic media store so
+// it survives F5 / route change independent of component state. Never blocks or
+// breaks the scan flow. Sends the preview, not the full-resolution upload.
+function persistMediaPreview(mediaType, kiminIcin, previewBase64) {
+    const preview = safePreviewDataUrl(previewBase64);
+    if (!preview) return;
+    try {
+        safeFetchJson(API + '/api/media', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ media_type: mediaType, kimin_icin: kiminIcin || 'kendim', image_base64: preview }),
+        }).catch(() => {});
+    } catch (e) { /* non-critical */ }
+}
+
 function createImagePreview(dataUrl) {
     return new Promise(resolve => {
         const image = new Image();
@@ -380,6 +395,7 @@ async function scanMenuImage(inputEl) {
             });
             if (data && data.success) {
                 window.CureMenuAnalytics?.track?.('menu_analysis_completed', { feature: 'menu_analysis', metadata: { method: 'photo', result: 'success' } });
+                persistMediaPreview('menu', kimin_icin, data.image_preview_base64 || base64);
                 renderMenuAnalysis(data);
                 loadMenuHistory(800);
             } else if (result) {
@@ -516,6 +532,7 @@ async function scanFridge(imageBase64, imagePreviewBase64 = '') {
         window.CureMenuAnalytics?.track?.('fridge_analysis_completed', { feature: 'fridge', metadata: { result: 'success' } });
         const tarif = data.tarif || data.analiz?.tarif_metni || data.sonuc?.tarif_metni || data.analiz?.uyari_mesaji || '';
         const preview = safePreviewDataUrl(data.image_preview_base64 || imagePreviewBase64);
+        persistMediaPreview('fridge', kimin_icin, preview);
         result.innerHTML = `
             <div class="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
                 <section class="card p-5">

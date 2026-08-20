@@ -117,9 +117,22 @@ async function openSmartGrocery() {
         content.innerHTML = emptyState('shopping_cart', 'Plan bulunamadı', 'Akıllı sepet için önce haftalık plan oluşturman gerekiyor.');
         return;
     }
+    // Backend source-of-truth first: survives F5 / route change / cleared cache /
+    // new device, regardless of the volatile fingerprint. localStorage below is
+    // only a fast display cache.
+    try {
+        const { res: savedRes, data: savedData } = await safeFetchJson(
+            API + '/api/smart-grocery/saved?kimin_icin=' + encodeURIComponent(target)
+        );
+        if (savedRes.ok && savedData?.saved) {
+            renderSmartGrocery(savedData.saved);
+            return;
+        }
+    } catch (e) { /* fall through to cache/generate */ }
+
     const context = window.ProfileManager?.getTargetCacheContext?.(target);
-    const cacheKey = context 
-        ? `cm_grocery_${context.accountKey}_${context.targetScope}_${context.targetId}_${context.profileFingerprint}` 
+    const cacheKey = context
+        ? `cm_grocery_${context.accountKey}_${context.targetScope}_${context.targetId}_${context.profileFingerprint}`
         : `cm_grocery_${target}`;
 
     const cachedStr = localStorage.getItem(cacheKey);

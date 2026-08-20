@@ -21,7 +21,7 @@ from src.messages import (
     TIBBI_FERAGAT, TIBBI_FERAGAT_KISA, ONBOARDING_ORNEK_SORULAR
 )
 from src.ilac_etkilesim import YAYGIN_ILACLAR
-from src.routers import analytics, auth, profile, chat, tools, governance, grocery, privacy, beta_admin
+from src.routers import analytics, auth, profile, chat, tools, governance, grocery, privacy, beta_admin, media
 from src.logger import get_logger, log_failure
 from src.rate_limit import limiter
 from src.readiness import collect_readiness
@@ -161,3 +161,4 @@ app.include_router(grocery.router)
 app.include_router(privacy.router)
 app.include_router(analytics.router)
 app.include_router(beta_admin.router)
+app.include_router(media.router)

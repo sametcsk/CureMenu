@@ -149,19 +149,19 @@ class HaftalikPlanRequest(BaseModel):
 
 class GeriBildirimRequest(BaseModel):
     yemek_adi: str = Field(..., min_length=1, max_length=500)
-    kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
+    kimin_icin: str = Field(default="kendim", min_length=1, max_length=128)
 
 class ComplianceRequest(BaseModel):
     meal: str = Field(..., min_length=1, max_length=500)
     status: Literal["consumed"]
 
 class ScanMenuRequest(BaseModel):
-    kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
+    kimin_icin: str = Field(default="kendim", min_length=1, max_length=128)
     url: str = Field(..., min_length=4, max_length=2048)
     restoran_adi: Optional[str] = Field(default=None, max_length=120)
 
 class ScanMenuImageRequest(BaseModel):
-    kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
+    kimin_icin: str = Field(default="kendim", min_length=1, max_length=128)
     image_base64: str = Field(..., min_length=1, max_length=8_000_100)
     restoran_adi: Optional[str] = Field(default=None, max_length=120)
 
@@ -170,7 +170,7 @@ class ShoppingListRequest(BaseModel):
     location_info: Optional[str] = None
 
 class FridgeScanRequest(BaseModel):
-    kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
+    kimin_icin: str = Field(default="kendim", min_length=1, max_length=128)
     image_base64: str = Field(..., min_length=1, max_length=8_000_100)
     image_preview_base64: str | None = Field(default=None, max_length=500_000)
 
@@ -204,7 +204,7 @@ class PlanActionRequest(BaseModel):
     action_type: Literal["recipe", "alternative", "snack"] = Field(..., description="'recipe', 'alternative' veya 'snack'")
     meal_text: str = Field(..., min_length=1, max_length=500, description="Aksiyon alınacak öğünün adı")
     plan_text: Optional[str] = Field(None, max_length=50_000, description="Mevcut haftalık plan metni (alternatif için)")
-    kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
+    kimin_icin: str = Field(default="kendim", min_length=1, max_length=128)
 
 
 IngredientText = Annotated[str, Field(min_length=1, max_length=200)]

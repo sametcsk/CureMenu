@@ -27,7 +27,7 @@ class SmartGroceryRequest(BaseModel):
     weekly_plan: str | None = Field(default=None, max_length=30000)
     shopping_items: list[ShoppingItemInput] | None = None
     location_context: str | None = Field(default=None, max_length=120)
-    kimin_icin: str = Field(default="kendim", min_length=1, max_length=40)
+    kimin_icin: str = Field(default="kendim", min_length=1, max_length=128)
 
 
 class GroceryItem(BaseModel):
