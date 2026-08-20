@@ -8,6 +8,7 @@ from src.database import etkilesim_logla, get_db, klinik_karar_kaydet
 from src.governance.decision import build_decision_record
 from src.grocery.capability import build_smart_grocery
 from src.grocery.profile import grocery_profile_facts
+from src.llm_telemetry import set_llm_context
 from src.profile_context import resolve_profile_snapshot
 from src.grocery.schemas import SmartGroceryRequest, SmartGroceryResponse
 
@@ -22,6 +23,7 @@ async def smart_grocery(
     telefon: str = Depends(get_current_user),
     db: sqlite3.Connection = Depends(get_db),
 ):
+    set_llm_context(feature="shopping_list", account_id=telefon)
     if not req.weekly_plan and not req.shopping_items:
         raise HTTPException(status_code=400, detail="weekly_plan veya shopping_items gerekli")
 

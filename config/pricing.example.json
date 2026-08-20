@@ -1,0 +1,22 @@
+{
+  "_comment": "Copy to config/pricing.json and fill VERIFIED prices from the provider's official pricing page. Prices are per 1,000,000 tokens; image_price is per image. Leave a field null when unknown — cost is then reported as null (never fabricated). Set CUREMENU_PRICING_PATH to use a different path.",
+  "currency": "USD",
+  "models": {
+    "gemini-2.5-flash": {
+      "input_price": null,
+      "output_price": null,
+      "cached_input_price": null,
+      "image_price": null,
+      "currency": "USD",
+      "effective_date": "YYYY-MM-DD"
+    },
+    "gemini-2.5-pro": {
+      "input_price": null,
+      "output_price": null,
+      "cached_input_price": null,
+      "image_price": null,
+      "currency": "USD",
+      "effective_date": "YYYY-MM-DD"
+    }
+  }
+}

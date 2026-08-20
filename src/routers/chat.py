@@ -18,6 +18,7 @@ from src.database import (
     son_sayfa_kayitlari,
 )
 from src.auth import get_current_user
+from src.llm_telemetry import set_llm_context, update_llm_context
 from src.messages import PROFIL_GEREKLI
 from src.governance.decision import build_decision_record, calculate_confidence
 from src.agent_state import create_initial_state
@@ -949,6 +950,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
     # reference to someone we cannot resolve asks for clarification instead of
     # silently using the account owner's health profile. Profile is read only via
     # the canonical snapshot layer (never a direct profile read in this router).
+    set_llm_context(feature="curebot", conversation_id=req.conversation_id or "", account_id=telefon)
     recent_logs = loglari_getir_db(telefon, limit=50, conn=db)
     conversation_logs = _conversation_curebot_logs(recent_logs, req.conversation_id)
     previous_target = _previous_curebot_target(conversation_logs)
@@ -1437,6 +1439,7 @@ async def chat(request: Request, req: ChatRequest, bg_tasks: BackgroundTasks, te
 
     async def event_generator():
         yield _sse("status", {"status": "Profil bilgilerin kontrol ediliyor..."})
+        update_llm_context(graph_used=True)
         final_state = dict(initial_state)
         try:
             async with asyncio.timeout(75):

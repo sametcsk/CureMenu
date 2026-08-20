@@ -196,6 +196,43 @@ def _ensure_db():
         ON revoked_refresh_tokens(expires_at)
     """)
 
+    # Anonymized AI usage telemetry — operational cost metadata only. No prompt,
+    # chat, or health content is ever stored here (see src/llm_telemetry.py).
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS llm_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            request_id TEXT,
+            conversation_id TEXT,
+            anon_user_id TEXT,
+            feature TEXT,
+            provider TEXT,
+            model TEXT,
+            graph_used INTEGER DEFAULT 0,
+            node TEXT,
+            input_tokens INTEGER DEFAULT 0,
+            output_tokens INTEGER DEFAULT 0,
+            total_tokens INTEGER DEFAULT 0,
+            cached_tokens INTEGER DEFAULT 0,
+            image_input INTEGER DEFAULT 0,
+            image_count INTEGER DEFAULT 0,
+            call_count INTEGER DEFAULT 1,
+            latency_ms INTEGER DEFAULT 0,
+            success INTEGER DEFAULT 1,
+            retry_count INTEGER DEFAULT 0,
+            estimated_cost REAL,
+            currency TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_llm_usage_feature_ts
+        ON llm_usage (feature, ts)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_llm_usage_user_ts
+        ON llm_usage (anon_user_id, ts)
+    """)
+
     conn.commit()
     conn.close()
     _db_initialized = True
@@ -506,6 +543,58 @@ def beta_konusma_kayitlari(conversation_id: str, limit: int = 200, conn: sqlite3
         )
         columns = [col[0] for col in cursor.description]
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+def llm_usage_kaydet(record: dict, conn: sqlite3.Connection = None) -> None:
+    """Insert one anonymized AI-usage row. Callers use best-effort telemetry."""
+    _ensure_db()
+    columns = [
+        "ts", "request_id", "conversation_id", "anon_user_id", "feature", "provider",
+        "model", "graph_used", "node", "input_tokens", "output_tokens", "total_tokens",
+        "cached_tokens", "image_input", "image_count", "call_count", "latency_ms",
+        "success", "retry_count", "estimated_cost", "currency",
+    ]
+    values = [record.get("ts") or datetime.now().isoformat()] + [record.get(col) for col in columns[1:]]
+    placeholders = ", ".join("?" for _ in columns)
+    with get_connection(conn) as _conn:
+        _conn.execute(
+            f"INSERT INTO llm_usage ({', '.join(columns)}) VALUES ({placeholders})",
+            values,
+        )
+        _conn.commit()
+
+
+def llm_usage_ozet(date_from: str = None, conn: sqlite3.Connection = None) -> dict:
+    """Aggregate AI usage by feature (read-only) for cost reporting."""
+    _ensure_db()
+    where = " WHERE ts >= ?" if date_from else ""
+    params = [date_from] if date_from else []
+    with get_connection(conn) as _conn:
+        cursor = _conn.cursor()
+        cursor.execute(
+            f"""
+            SELECT feature,
+                   COUNT(*) AS calls,
+                   COUNT(DISTINCT anon_user_id) AS users,
+                   SUM(input_tokens) AS input_tokens,
+                   SUM(output_tokens) AS output_tokens,
+                   SUM(total_tokens) AS total_tokens,
+                   SUM(image_count) AS images,
+                   SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS failures,
+                   SUM(retry_count) AS retries,
+                   AVG(latency_ms) AS avg_latency_ms,
+                   SUM(estimated_cost) AS estimated_cost
+            FROM llm_usage{where}
+            GROUP BY feature
+            ORDER BY calls DESC
+            """,
+            params,
+        )
+        columns = [col[0] for col in cursor.description]
+        by_feature = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        cursor.execute(f"SELECT COUNT(*), COUNT(DISTINCT anon_user_id) FROM llm_usage{where}", params)
+        total_calls, total_users = cursor.fetchone()
+    return {"by_feature": by_feature, "total_calls": int(total_calls or 0), "total_users": int(total_users or 0)}
 
 
 def log_sayisi_getir_db(telefon: str, conn: sqlite3.Connection = None) -> int:

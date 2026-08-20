@@ -18,6 +18,7 @@ from src.menu_agent import menu_danismani
 from src.economist_agent import alisveris_ve_butce_hesapla
 from src.memory import hafizadakini_getir, geri_bildirim_ekle
 from src.llm import invoke_with_model_fallback, parse_llm_response
+from src.llm_telemetry import set_llm_context
 import fitz
 from src.governance.decision import build_decision_record, calculate_confidence
 from src.agent_state import create_initial_state
@@ -588,6 +589,7 @@ async def meal_compliance(
 @router.post("/api/weekly-plan")
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
 async def weekly_plan(request: Request, req: HaftalikPlanRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+    set_llm_context(feature="weekly_plan", account_id=telefon)
     try:
         snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
     except HTTPException as e:
@@ -703,6 +705,7 @@ async def shopping_list(request: Request, req: ShoppingListRequest, telefon: str
 @router.post("/api/scan-menu")
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
 async def scan_menu(request: Request, req: ScanMenuRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+    set_llm_context(feature="menu_analysis", account_id=telefon)
     snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
     profil_ozeti = snapshot.profile_summary
     try:
@@ -751,6 +754,7 @@ async def scan_menu(request: Request, req: ScanMenuRequest, bg_tasks: Background
 @router.post("/api/scan-menu-image")
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
 async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+    set_llm_context(feature="menu_analysis", account_id=telefon)
     snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
     profil_ozeti = snapshot.profile_summary
     
@@ -799,6 +803,7 @@ async def scan_menu_image(request: Request, req: ScanMenuImageRequest, bg_tasks:
 @router.post("/api/fridge-scan")
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
 async def fridge_scan(request: Request, req: FridgeScanRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+    set_llm_context(feature="fridge_analysis", account_id=telefon)
     snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
     # The recipe model needs constraints, not names or family narratives.
     profil_ozeti = json.dumps(snapshot.quality_profile(), ensure_ascii=False)
@@ -999,6 +1004,7 @@ async def upload_health_record(
 @router.post("/api/plan-action")
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
 async def plan_action(request: Request, req: PlanActionRequest, bg_tasks: BackgroundTasks, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+    set_llm_context(feature="recipe_generation", account_id=telefon)
     import json
     import re
     
