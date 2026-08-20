@@ -102,6 +102,68 @@ def test_shopping_list_update_replaces(mock_g, mock_d, client):
     assert saved["recommendation_summary"] == "ikinci"
 
 
+# ---- Budget/shopping report persistence (primary "Alışveriş ve Bütçeyi Hesapla") --
+# The primary plan-tab action posts to /api/shopping-list; its report must survive
+# F5 / logout-login for the SAME account + target + weekly plan, and must NOT be
+# shown against a different plan (stale) or leak across accounts/targets.
+import hashlib as _hashlib
+
+
+def _budget_ref(plan_metni: str) -> str:
+    return _hashlib.sha256((plan_metni or "").encode("utf-8")).hexdigest()[:16]
+
+
+def test_budget_report_empty_before_save(client):
+    login_with_profile(client, "5557000040", "Budget Empty")
+    res = client.get("/api/shopping-list/saved?kimin_icin=kendim")
+    assert res.status_code == 200 and res.json()["saved"] is None
+
+
+@patch("src.routers.tools.alisveris_ve_butce_hesapla", return_value="**Bütçe:** 100-140 TL")
+def test_budget_report_persists_and_reloads(mock_budget, client):
+    # (A) same account + target + plan: create -> F5 -> report comes back.
+    login_with_profile(client, "5557000041", "Budget Save")
+    plan = "Pazartesi: mercimek çorbası"
+    post = client.post("/api/shopping-list", json={"plan_metni": plan, "kimin_icin": "kendim"})
+    assert post.status_code == 200 and post.json()["success"] is True
+    saved = client.get(
+        f"/api/shopping-list/saved?kimin_icin=kendim&plan_ref={_budget_ref(plan)}"
+    ).json()
+    assert saved["saved"] and saved["saved"]["rapor"] == "**Bütçe:** 100-140 TL"
+
+
+@patch("src.routers.tools.alisveris_ve_butce_hesapla", return_value="**Bütçe:** eski")
+def test_budget_report_stale_for_different_plan(mock_budget, client):
+    # (C / #8) a different weekly plan must NOT show the old report: stale guard.
+    login_with_profile(client, "5557000042", "Budget Stale")
+    client.post("/api/shopping-list", json={"plan_metni": "eski plan", "kimin_icin": "kendim"})
+    stale = client.get(
+        f"/api/shopping-list/saved?kimin_icin=kendim&plan_ref={_budget_ref('yeni plan')}"
+    ).json()
+    assert stale["saved"] is None and stale.get("stale") is True
+    # No plan_ref -> latest report is returned (freshness check is opt-in).
+    assert client.get("/api/shopping-list/saved?kimin_icin=kendim").json()["saved"]["rapor"] == "**Bütçe:** eski"
+
+
+@patch("src.routers.tools.alisveris_ve_butce_hesapla", return_value="**Bütçe:** A")
+def test_budget_report_account_isolation(mock_budget, client):
+    # (D) another account never sees this report.
+    login_with_profile(client, "5557000043", "Budget AccA")
+    client.post("/api/shopping-list", json={"plan_metni": "p", "kimin_icin": "kendim"})
+    login_with_profile(client, "5557000044", "Budget AccB")  # switch account
+    assert client.get("/api/shopping-list/saved?kimin_icin=kendim").json()["saved"] is None
+
+
+@patch("src.routers.tools.alisveris_ve_butce_hesapla", return_value="**Bütçe:** self")
+def test_budget_report_target_isolation(mock_budget, client):
+    # (E) another target/profile does not show this target's report.
+    login_with_profile(client, "5557000045", "Budget Target")
+    member_id = _add_member(client)
+    client.post("/api/shopping-list", json={"plan_metni": "self-plan", "kimin_icin": "kendim"})
+    assert client.get(f"/api/shopping-list/saved?kimin_icin={member_id}").json()["saved"] is None
+    assert client.get("/api/shopping-list/saved?kimin_icin=kendim").json()["saved"] is not None
+
+
 # ---- Weekly plan persistence (backend source-of-truth; survives logout/login) ---
 @patch("src.routers.tools.hafizadakini_getir", return_value=[])
 @patch("src.routers.tools.haftalik_plan_olustur")

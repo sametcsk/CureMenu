@@ -260,6 +260,15 @@ window.WeeklyPlanManager = {
         this.hideLoading();
         window.currentPlanText = JSON.stringify(plan);
 
+        // Restore a previously computed budget/shopping report for this exact plan
+        // from the backend source-of-truth (survives F5 / logout-login). Guarded and
+        // non-blocking; only fills the empty #budgetResult when a matching report
+        // exists for this account + target + plan.
+        try {
+            const budgetTarget = document.getElementById('planTarget')?.value || 'kendim';
+            window.SmartGrocery?.restoreBudgetResult?.(budgetTarget);
+        } catch (_e) { /* budget restore is best-effort */ }
+
         // Bind the regenerate button that was just created dynamically!
         const regenBtn = document.getElementById('regeneratePlanBtn');
         if (regenBtn) {

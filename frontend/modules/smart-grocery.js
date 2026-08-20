@@ -1,11 +1,50 @@
 (function() {
 let smartGroceryEventsBound = false;
 
+async function planFingerprint(text) {
+    // Same fingerprint the backend uses (SHA-256 of the plan text, first 16 hex),
+    // so a persisted budget report is matched to the exact weekly plan it was
+    // built from. Falls back to '' (backend then skips the stale check).
+    try {
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text || ''));
+        return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+    } catch (e) {
+        return '';
+    }
+}
+
+function renderBudgetResult(container, rapor, targetLabel) {
+    if (!container) return;
+    const currentYear = new Date().getFullYear();
+    const formatted = formatMarkdownSafe(rapor);
+    const label = targetLabel || 'Seçili hedef kişi';
+    container.innerHTML = `
+    <div class="bg-surface-container-low rounded-lg p-6 border border-secondary/20 shadow-inner">
+        <div class="mb-5 rounded-lg bg-primary-container/30 p-4 text-on-surface">
+            <h3 class="font-display text-2xl font-bold">Plan Alışverişi ve Bütçesi</h3>
+            <p class="mt-1 text-sm">${escapeHtml(label)} için bu haftalık planın gerekli ürünleri ve ${currentYear} Türkiye geneli tahmini fiyatlara göre yaklaşık bütçesi.</p>
+        </div>
+        <div class="mb-5 rounded-lg border border-warning/20 bg-warning-container p-4 text-sm text-on-surface-variant">Fiyatlar canlı market fiyatı değildir; Türkiye geneli tahmini aralık olarak değerlendirilmelidir.</div>
+        <div class="prose prose-sm max-w-none font-body-md text-on-surface
+                prose-table:w-full prose-table:border-collapse prose-table:border prose-table:border-outline-variant/30
+                prose-th:bg-surface-container-high prose-th:p-2 prose-th:text-left prose-th:font-label-md prose-th:border prose-th:border-outline-variant/30
+                prose-td:p-2 prose-td:border prose-td:border-outline-variant/30 prose-tr:even:bg-surface-container-lowest prose-tr:odd:bg-surface/50">
+            ${formatted}
+        </div>
+    </div>`;
+}
+
+function currentBudgetTargetLabel() {
+    const targetSelect = document.getElementById('planTarget');
+    return targetSelect?.selectedOptions?.[0]?.textContent?.trim() || 'Seçili hedef kişi';
+}
+
 async function calculateBudget() {
     if (!window.currentPlanText) return;
     const user = getUser();
     const resultDiv = document.getElementById('budgetResult');
     const currentYear = new Date().getFullYear();
+    const target = document.getElementById('planTarget')?.value || 'kendim';
 
     resultDiv.innerHTML = `<div class="text-center py-8"><div class="loading-dots flex gap-2 justify-center mb-4"><span class="w-3 h-3 rounded-full bg-secondary inline-block"></span><span class="w-3 h-3 rounded-full bg-secondary inline-block"></span><span class="w-3 h-3 rounded-full bg-secondary inline-block"></span></div><p class="text-on-surface-variant font-body-md" id="budgetLoadingText">${currentYear} Türkiye geneli tahmini hazırlanıyor...<br/>Fiyatlar canlı market verisi değildir.</p></div>`;
 
@@ -14,34 +53,36 @@ async function calculateBudget() {
     try {
         const { res, data } = await safeFetchJson(API + '/api/shopping-list', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ plan_metni: window.currentPlanText, location_info: locationStr })
+            body: JSON.stringify({ plan_metni: window.currentPlanText, location_info: locationStr, kimin_icin: target })
         });
 
         if (data && data.success) {
             window.CureMenuAnalytics?.track?.('grocery_list_created', { feature: 'grocery', metadata: { result: 'success' } });
-            const formatted = formatMarkdownSafe(data.rapor);
-            const targetSelect = document.getElementById('planTarget');
-            const targetLabel = targetSelect?.selectedOptions?.[0]?.textContent?.trim() || 'Seçili hedef kişi';
-            resultDiv.innerHTML = `
-            <div class="bg-surface-container-low rounded-lg p-6 border border-secondary/20 shadow-inner">
-                <div class="mb-5 rounded-lg bg-primary-container/30 p-4 text-on-surface">
-                    <h3 class="font-display text-2xl font-bold">Plan Alışverişi ve Bütçesi</h3>
-                    <p class="mt-1 text-sm">${escapeHtml(targetLabel)} için bu haftalık planın gerekli ürünleri ve ${currentYear} Türkiye geneli tahmini fiyatlara göre yaklaşık bütçesi.</p>
-                </div>
-                <div class="mb-5 rounded-lg border border-warning/20 bg-warning-container p-4 text-sm text-on-surface-variant">Fiyatlar canlı market fiyatı değildir; Türkiye geneli tahmini aralık olarak değerlendirilmelidir.</div>
-                <div class="prose prose-sm max-w-none font-body-md text-on-surface
-                        prose-table:w-full prose-table:border-collapse prose-table:border prose-table:border-outline-variant/30
-                        prose-th:bg-surface-container-high prose-th:p-2 prose-th:text-left prose-th:font-label-md prose-th:border prose-th:border-outline-variant/30
-                        prose-td:p-2 prose-td:border prose-td:border-outline-variant/30 prose-tr:even:bg-surface-container-lowest prose-tr:odd:bg-surface/50">
-                    ${formatted}
-                </div>
-            </div>`;
+            renderBudgetResult(resultDiv, data.rapor, currentBudgetTargetLabel());
         } else {
             renderTextState(resultDiv, apiHataMesaji(data, 'Rapor oluşturulamadı.'), 'text-center py-4 text-error');
         }
     } catch (e) {
         renderTextState(resultDiv, baglantiHatasi(e), 'text-center py-4 text-error');
     }
+}
+
+async function restoreBudgetResult(target) {
+    // Backend source-of-truth restore for the budget/shopping report: survives
+    // F5 / logout-login for the same account + target + weekly plan. A report
+    // built from a different plan is reported stale and NOT shown.
+    const resultDiv = document.getElementById('budgetResult');
+    if (!resultDiv || !window.currentPlanText) return;
+    const kimin_icin = target || document.getElementById('planTarget')?.value || 'kendim';
+    try {
+        const planRef = await planFingerprint(window.currentPlanText);
+        const url = API + '/api/shopping-list/saved?kimin_icin=' + encodeURIComponent(kimin_icin)
+            + (planRef ? '&plan_ref=' + planRef : '');
+        const { res, data } = await safeFetchJson(url);
+        if (res.ok && data?.saved?.rapor) {
+            renderBudgetResult(resultDiv, data.saved.rapor, currentBudgetTargetLabel());
+        }
+    } catch (e) { /* no persisted report; leave the area empty */ }
 }
 
 function ensureSmartGroceryModal() {
@@ -321,6 +362,8 @@ async function sendFeedback(yemekAdi) {
         groceryStatusLabel,
         groceryPriceRange,
         renderSmartGrocery,
+        renderBudgetResult,
+        restoreBudgetResult,
         sendFeedback
     };
 

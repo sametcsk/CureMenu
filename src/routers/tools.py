@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.concurrency import run_in_threadpool
 import asyncio
 import base64
+import hashlib
 import sqlite3
 import json
 import re
@@ -43,6 +44,14 @@ from pydantic import BaseModel, Field
 class ShoppingListRequest(BaseModel):
     plan_metni: str = Field(..., min_length=1, max_length=50_000)
     location_info: str | None = Field(default=None, max_length=500)
+    kimin_icin: str = Field(default="kendim", min_length=1, max_length=128)
+
+
+def _shopping_plan_ref(weekly_plan: str) -> str:
+    """Stable fingerprint of the weekly plan a budget report was built from, so a
+    saved report is not shown against a different plan. Matches the client SHA-256
+    (first 16 hex) and the smart-grocery plan_ref semantics."""
+    return hashlib.sha256((weekly_plan or "").encode("utf-8")).hexdigest()[:16]
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -751,13 +760,56 @@ async def weekly_plan_saved(
 
 @router.post("/api/shopping-list")
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
-async def shopping_list(request: Request, req: ShoppingListRequest, telefon: str = Depends(get_current_user)):
+async def shopping_list(request: Request, req: ShoppingListRequest, telefon: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
     try:
         rapor = await run_in_threadpool(alisveris_ve_butce_hesapla, req.plan_metni, req.location_info)
+        # Backend source-of-truth: the budget/shopping report survives F5 and
+        # logout/login for the same account + resolved target + weekly plan.
+        # ref_id is the plan fingerprint, so a different (new) plan is treated as
+        # stale rather than shown against the wrong plan. Scoped by account +
+        # target_key, so another account/target never sees this report.
+        try:
+            snapshot = resolve_profile_snapshot(telefon, req.kimin_icin, db=db)
+            artifact_kaydet(
+                telefon, snapshot.target_key, "budget_report",
+                json.dumps({"rapor": rapor}, ensure_ascii=False),
+                ref_id=_shopping_plan_ref(req.plan_metni),
+                conn=db,
+            )
+        except Exception as persist_error:
+            log_failure(logger, "budget_report_persist", persist_error, component="tools")
         return {"success": True, "rapor": rapor}
     except Exception as e:
         log_failure(logger, "shopping_list", e, component="tools")
         return JSONResponse(status_code=503, content={"success": False, "detail": "Alışveriş listesi şu anda oluşturulamadı. Lütfen birazdan tekrar deneyin."})
+
+
+@router.get("/api/shopping-list/saved")
+async def shopping_list_saved(
+    kimin_icin: str = "kendim",
+    plan_ref: str = "",
+    telefon: str = Depends(get_current_user),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Restore the persisted budget/shopping report for the resolved target.
+
+    Mirrors the weekly-plan / smart-grocery source-of-truth restore: when the
+    caller passes the current plan's `plan_ref`, a report built from a different
+    plan is reported as stale instead of shown."""
+    try:
+        snapshot = resolve_profile_snapshot(telefon, kimin_icin, db=db)
+    except HTTPException:
+        return {"success": True, "saved": None}
+    saved = artifact_getir(telefon, snapshot.target_key, "budget_report", conn=db)
+    if not saved:
+        return {"success": True, "saved": None}
+    if plan_ref and saved.get("ref_id") and saved["ref_id"] != plan_ref:
+        return {"success": True, "saved": None, "stale": True}
+    try:
+        payload = json.loads(saved["data_json"])
+    except (TypeError, ValueError):
+        payload = None
+    return {"success": True, "saved": payload, "updated_at": saved["updated_at"], "plan_ref": saved.get("ref_id")}
 
 @router.post("/api/scan-menu")
 @limiter.limit("6/minute", key_func=authenticated_user_or_ip)
